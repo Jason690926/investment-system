@@ -16,24 +16,55 @@ def save_watchlist(watchlist):
     with open(WATCHLIST_FILE, 'w', encoding='utf-8') as f:
         json.dump(watchlist, f, ensure_ascii=False, indent=2)
 
+def _check_symbol(symbol):
+    """快速判斷股票代號是否有效，最多等 5 秒"""
+    import yfinance as yf
+    try:
+        hist = yf.Ticker(symbol).history(period='5d', timeout=5)
+        return len(hist) > 0
+    except:
+        return False
+
+def resolve_symbol(raw):
+    """
+    自動補上 .TW 或 .TWO 後綴。
+    策略：同時發出兩個請求，哪個先有資料就用哪個。
+    """
+    import yfinance as yf
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    # 已有後綴，直接回傳
+    if raw.upper().endswith('.TW') or raw.upper().endswith('.TWO'):
+        return raw
+
+    candidates = [raw + '.TW', raw + '.TWO']
+
+    with ThreadPoolExecutor(max_workers=2) as ex:
+        futures = {ex.submit(_check_symbol, s): s for s in candidates}
+        for f in as_completed(futures):
+            symbol = futures[f]
+            if f.result():
+                return symbol
+
+    # 都沒資料，預設 .TW
+    return raw + '.TW'
+
 def add_stock(symbol, name='', cost=None, shares=None, buy_date=None):
     from modules.stock_names import enrich_name
-    import yfinance as yf
+
     watchlist = load_watchlist()
-    # 自動判斷上市/上櫃
-    if not symbol.endswith('.TW') and not symbol.endswith('.TWO'):
-        hist_tw = yf.Ticker(symbol + '.TW').history(period='5d')
-        if len(hist_tw) > 0:
-            symbol = symbol + '.TW'
-        else:
-            hist_two = yf.Ticker(symbol + '.TWO').history(period='5d')
-            symbol = symbol + '.TWO' if len(hist_two) > 0 else symbol + '.TW'
+
+    # 自動判斷上市/上櫃（同時查詢，速度快）
+    symbol = resolve_symbol(symbol.strip())
+
     # 檢查是否已存在
     for s in watchlist:
         if s['symbol'] == symbol:
             return False, f'{symbol} 已在追蹤清單中'
+
     # 自動取得中文名稱
     final_name = enrich_name(symbol, name)
+
     entry = {
         'symbol': symbol,
         'name': final_name,

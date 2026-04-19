@@ -321,6 +321,9 @@ function updateWatchlist() {
 function addStock() {
   const symbol = document.getElementById('f-symbol').value.trim();
   if (!symbol) { showMsg('請輸入股票代號', false); return; }
+  const btn = document.querySelector('button[onclick="addStock()"]');
+  btn.disabled = true;
+  btn.textContent = '查詢中...';
   const data = {
     symbol: symbol,
     name: document.getElementById('f-name').value.trim() || symbol,
@@ -330,6 +333,8 @@ function addStock() {
   };
   fetch('/api/watchlist/add', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)})
     .then(r=>r.json()).then(d=>{
+      btn.disabled = false;
+      btn.textContent = '新增追蹤';
       showMsg(d.message, d.success);
       if (d.success) {
         document.getElementById('f-symbol').value = '';
@@ -339,6 +344,10 @@ function addStock() {
         document.getElementById('f-date').value = '';
         updateWatchlist();
       }
+    }).catch(() => {
+      btn.disabled = false;
+      btn.textContent = '新增追蹤';
+      showMsg('新增失敗，請稍後再試', false);
     });
 }
 
