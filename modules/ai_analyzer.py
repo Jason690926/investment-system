@@ -193,7 +193,7 @@ def analyze_watchlist_parallel(watchlist, watchlist_stocks, watch_tech, news,
         tech = watch_tech[name]
         hist = watchlist_stocks[name].get('history')
         patterns = detect_patterns(hist) if hist is not None else []
-        stock_news = [n for n in news if name in n.get('title', '')]
+        stock_news = [n for n in news if str(name) in str(n.get('title', ''))]
         if is_weekly:
             ai_advice = analyze_weekly_watchlist(name, symbol, tech, patterns, stock_news, week_range, item.get('cost'))
         else:
