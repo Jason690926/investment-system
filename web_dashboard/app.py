@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify, Response
 import threading, os, sys, json, queue, time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
- 
+
 from modules.data_fetcher import (get_global_markets, get_commodities,
                                    get_financial_news, get_taiwan_stocks,
                                    get_macro_assets, get_watchlist_stocks)
@@ -15,12 +15,12 @@ from modules.pdf_generator import generate_daily_report
 from modules.email_sender import send_report
 from modules.watchlist import get_watchlist, add_stock, remove_stock
 import config, yfinance as yf
- 
+
 app = Flask(__name__)
- 
+
 # 每個 session 用一個 queue 來傳遞進度
 progress_queues = {}
- 
+
 DASHBOARD = '''<!DOCTYPE html>
 <html lang="zh-TW">
 <head>
@@ -45,7 +45,7 @@ body{font-family:"Microsoft JhengHei",sans-serif;background:#f0f2f5;color:#333}
 .btn-red{background:#c62828}.btn-red:hover{background:#b71c1c}
 .btn-gray{background:#757575}.btn-gray:hover{background:#616161}
 .btn:disabled{opacity:0.5;cursor:not-allowed}
- 
+
 /* 進度條區塊 */
 .progress-wrap{background:white;border-radius:8px;padding:20px;border:1px solid #e0e0e0;margin-bottom:16px;display:none}
 .progress-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
@@ -68,7 +68,7 @@ body{font-family:"Microsoft JhengHei",sans-serif;background:#f0f2f5;color:#333}
 .step-item.active .step-spinner{display:inline-block}
 .step-item.active .step-dot{display:none}
 @keyframes spin{to{transform:rotate(360deg)}}
- 
+
 .form-row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px}
 .form-group{display:flex;flex-direction:column;gap:4px}
 .form-group label{font-size:12px;color:#666}
@@ -92,9 +92,9 @@ body{font-family:"Microsoft JhengHei",sans-serif;background:#f0f2f5;color:#333}
   <span class="badge">系統運行中</span>
 </div>
 <div class="container">
- 
+
   <div id="msg" class="msg"></div>
- 
+
   <!-- 進度條區塊 -->
   <div id="progress-wrap" class="progress-wrap">
     <div class="progress-header">
@@ -106,7 +106,7 @@ body{font-family:"Microsoft JhengHei",sans-serif;background:#f0f2f5;color:#333}
     </div>
     <div class="step-list" id="step-list"></div>
   </div>
- 
+
   <div class="btn-grid">
     <div class="btn-card">
       <h4>每日晨報</h4>
@@ -119,7 +119,7 @@ body{font-family:"Microsoft JhengHei",sans-serif;background:#f0f2f5;color:#333}
       <button class="btn btn-teal" id="btn-weekly" onclick="generate('weekly')">立即產生並寄送</button>
     </div>
   </div>
- 
+
   <div class="section">
     <h3>持股追蹤管理</h3>
     <div class="form-row">
@@ -148,18 +148,18 @@ body{font-family:"Microsoft JhengHei",sans-serif;background:#f0f2f5;color:#333}
         <button class="btn btn-blue" onclick="addStock()">新增追蹤</button>
       </div>
     </div>
- 
+
     <table class="watchlist-table">
       <thead><tr><th>股票</th><th>代號</th><th>現值</th><th>漲跌</th><th>成本</th><th>持股數</th><th>損益</th><th>操作</th></tr></thead>
       <tbody id="watchlist-body"><tr><td colspan="8" style="text-align:center;color:#888;padding:16px">載入中...</td></tr></tbody>
     </table>
   </div>
- 
+
   <div class="section">
     <h3>最近產生紀錄</h3>
     <div id="report-list"><div style="color:#888;font-size:13px">載入中...</div></div>
   </div>
- 
+
 </div>
 <script>
 const STEPS = {
@@ -190,10 +190,10 @@ const STEPS = {
     { key: 'send_email',      label: '寄送 Email' },
   ]
 };
- 
+
 let currentType = null;
 let eventSource = null;
- 
+
 function showMsg(text, ok) {
   const el = document.getElementById('msg');
   el.textContent = text;
@@ -201,7 +201,7 @@ function showMsg(text, ok) {
   el.style.display = 'block';
   setTimeout(() => el.style.display = 'none', 5000);
 }
- 
+
 function renderSteps(type) {
   const steps = STEPS[type];
   document.getElementById('step-list').innerHTML = steps.map(s =>
@@ -212,34 +212,34 @@ function renderSteps(type) {
     </div>`
   ).join('');
 }
- 
+
 function setStep(key, state) {
   const el = document.getElementById('step-' + key);
   if (!el) return;
   el.className = 'step-item ' + state;
 }
- 
+
 function setProgress(pct, title) {
   document.getElementById('pbar').style.width = pct + '%';
   document.getElementById('progress-pct').textContent = pct + '%';
   if (title) document.getElementById('progress-title').textContent = title;
 }
- 
+
 function generate(type) {
   if (currentType) return;
   currentType = type;
- 
+
   // 禁用按鈕
   document.getElementById('btn-daily').disabled = true;
   document.getElementById('btn-weekly').disabled = true;
- 
+
   // 顯示進度區塊
   const wrap = document.getElementById('progress-wrap');
   wrap.style.display = 'block';
   document.getElementById('pbar').className = 'progress-fill';
   renderSteps(type);
   setProgress(5, '正在啟動...');
- 
+
   // 先呼叫 POST 啟動任務
   fetch('/api/generate/' + type, {method:'POST'})
     .then(r => r.json())
@@ -249,7 +249,7 @@ function generate(type) {
       eventSource = new EventSource('/api/progress/' + jobId);
       eventSource.onmessage = function(e) {
         const data = JSON.parse(e.data);
- 
+
         if (data.type === 'step_start') {
           setStep(data.key, 'active');
           setProgress(data.pct, data.label + '...');
@@ -288,7 +288,7 @@ function generate(type) {
       };
     });
 }
- 
+
 function updateWatchlist() {
   fetch('/api/watchlist').then(r=>r.json()).then(d=>{
     const tb = document.getElementById('watchlist-body');
@@ -317,7 +317,7 @@ function updateWatchlist() {
     }).join('');
   });
 }
- 
+
 function addStock() {
   const symbol = document.getElementById('f-symbol').value.trim();
   if (!symbol) { showMsg('請輸入股票代號', false); return; }
@@ -341,7 +341,7 @@ function addStock() {
       }
     });
 }
- 
+
 function removeStock(symbol) {
   if (!confirm('確定要刪除 ' + symbol + ' 嗎？')) return;
   fetch('/api/watchlist/remove', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({symbol})})
@@ -350,7 +350,7 @@ function removeStock(symbol) {
       if (d.success) updateWatchlist();
     });
 }
- 
+
 function updateReports() {
   fetch('/api/reports').then(r=>r.json()).then(d=>{
     const el = document.getElementById('report-list');
@@ -366,16 +366,16 @@ function updateReports() {
     ).join('');
   });
 }
- 
+
 updateWatchlist();
 updateReports();
 </script>
 </body></html>'''
- 
+
 @app.route('/')
 def index():
     return DASHBOARD
- 
+
 # ── SSE 進度推送 ──────────────────────────────────────────
 @app.route('/api/progress/<job_id>')
 def progress_stream(job_id):
@@ -395,18 +395,18 @@ def progress_stream(job_id):
         progress_queues.pop(job_id, None)
     return Response(stream(), mimetype='text/event-stream',
                     headers={'Cache-Control':'no-cache','X-Accel-Buffering':'no'})
- 
+
 def push(q, msg):
     """推送進度訊息到 queue"""
     q.put(msg)
- 
+
 STEP_PCT = {
     'fetch_global': 10, 'fetch_taiwan': 18, 'fetch_news': 25,
     'fetch_watchlist': 32, 'technical': 42, 'ai_global': 52,
     'ai_taiwan': 62, 'ai_watchlist': 74, 'ai_sector': 82,
     'generate_pdf': 90, 'send_email': 97
 }
- 
+
 # ── API 路由 ──────────────────────────────────────────────
 @app.route('/api/watchlist')
 def api_watchlist():
@@ -432,7 +432,7 @@ def api_watchlist():
             'shares': item.get('shares')
         })
     return jsonify({'stocks': stocks})
- 
+
 @app.route('/api/watchlist/add', methods=['POST'])
 def api_add():
     data = request.json
@@ -441,13 +441,13 @@ def api_add():
         data.get('cost'), data.get('shares'), data.get('buy_date')
     )
     return jsonify({'success': success, 'message': message})
- 
+
 @app.route('/api/watchlist/remove', methods=['POST'])
 def api_remove():
     symbol = request.json.get('symbol')
     success, message = remove_stock(symbol)
     return jsonify({'success': success, 'message': message})
- 
+
 @app.route('/api/reports')
 def api_reports():
     reports = []
@@ -460,14 +460,14 @@ def api_reports():
                 t = datetime.datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M')
                 reports.append({'name': f, 'time': t})
     return jsonify({'reports': reports})
- 
+
 @app.route('/api/generate/<report_type>', methods=['POST'])
 def generate_report(report_type):
     import uuid
     job_id = str(uuid.uuid4())[:8]
     q = queue.Queue()
     progress_queues[job_id] = q
- 
+
     def run():
         try:
             from modules.report_scheduler import get_report_type, get_week_range
@@ -475,44 +475,46 @@ def generate_report(report_type):
                                               analyze_macro_assets, analyze_watchlist_stock,
                                               get_sector_recommendations,
                                               analyze_weekly_global, analyze_weekly_taiwan,
-                                              analyze_weekly_watchlist)
+                                              analyze_weekly_watchlist,
+                                              analyze_watchlist_parallel)
             from modules.pdf_generator import generate_daily_report, generate_weekly_report
             from modules.email_sender import send_report, send_weekly_report
- 
+            from concurrent.futures import ThreadPoolExecutor
+
             def step(key, label=None):
                 if not label:
                     label = key
                 push(q, {'type':'step_start','key':key,'label':label,'pct':max(0,STEP_PCT.get(key,0)-5)})
- 
+
             def done_step(key, label=None):
                 if not label:
                     label = key
                 push(q, {'type':'step_done','key':key,'label':label,'pct':STEP_PCT.get(key,0)})
- 
+
             actual_type = get_report_type(force=None)
             from modules.report_scheduler import get_week_range
             monday, friday = get_week_range()
             week_range = f'{monday.strftime("%Y/%m/%d")} ~ {friday.strftime("%Y/%m/%d")}'
- 
+
             step('fetch_global', '抓取全球市場資料')
             global_markets = get_global_markets()
             commodities = get_commodities()
             done_step('fetch_global', '抓取全球市場資料')
- 
+
             step('fetch_taiwan', '抓取台股資料')
             taiwan_stocks = get_taiwan_stocks()
             done_step('fetch_taiwan', '抓取台股資料')
- 
+
             step('fetch_news', '抓取財經新聞')
             news = get_financial_news()
             macro_data = get_macro_assets()
             done_step('fetch_news', '抓取財經新聞')
- 
+
             step('fetch_watchlist', '抓取持股追蹤資料')
             watchlist = get_watchlist()
             watchlist_stocks = get_watchlist_stocks(watchlist) if watchlist else {}
             done_step('fetch_watchlist', '抓取持股追蹤資料')
- 
+
             step('technical', '進行技術分析')
             technical_results = analyze_all_stocks(taiwan_stocks)
             livermore_signals = analyze_all_signals(technical_results)
@@ -521,45 +523,46 @@ def generate_report(report_type):
                     technical_results[name]['patterns'] = detect_patterns(data['history'])
             macro_analysis = analyze_macro_assets(macro_data)
             done_step('technical', '進行技術分析')
- 
+
             step('ai_global', 'AI 分析全球市場')
             if actual_type == 'weekly':
                 global_analysis = analyze_weekly_global(global_markets, commodities, news, macro_data, week_range)
             else:
                 global_analysis = analyze_global_market(global_markets, commodities, news)
             done_step('ai_global', 'AI 分析全球市場')
- 
+
+            # ── AI 分析台股 & 持股追蹤同時平行進行 ──────────────
             step('ai_taiwan', 'AI 分析台股')
-            if actual_type == 'weekly':
-                taiwan_analysis = analyze_weekly_taiwan(global_analysis, technical_results, livermore_signals, week_range)
-            else:
-                taiwan_analysis = analyze_taiwan_market(global_analysis, technical_results, livermore_signals)
+            step('ai_watchlist', 'AI 分析持股追蹤（平行）')
+
+            watch_tech = analyze_all_stocks(watchlist_stocks) if watchlist else {}
+
+            def _run_taiwan():
+                if actual_type == 'weekly':
+                    return analyze_weekly_taiwan(global_analysis, technical_results, livermore_signals, week_range)
+                return analyze_taiwan_market(global_analysis, technical_results, livermore_signals)
+
+            def _run_watchlist():
+                if not watchlist:
+                    return []
+                return analyze_watchlist_parallel(
+                    watchlist, watchlist_stocks, watch_tech, news,
+                    week_range=week_range, is_weekly=(actual_type == 'weekly')
+                )
+
+            with ThreadPoolExecutor(max_workers=2) as ex:
+                f_taiwan    = ex.submit(_run_taiwan)
+                f_watchlist = ex.submit(_run_watchlist)
+                taiwan_analysis    = f_taiwan.result()
+                watchlist_analysis = f_watchlist.result()
+
             done_step('ai_taiwan', 'AI 分析台股')
- 
-            step('ai_watchlist', 'AI 分析持股追蹤')
-            watchlist_analysis = []
-            if watchlist:
-                watch_tech = analyze_all_stocks(watchlist_stocks)
-                for item in watchlist:
-                    name = item['name']
-                    symbol = item['symbol']
-                    if name in watch_tech:
-                        tech = watch_tech[name]
-                        hist = watchlist_stocks[name].get('history')
-                        patterns = detect_patterns(hist) if hist is not None else []
-                        stock_news = [n for n in news if name in n.get('title', '')]
-                        if actual_type == 'weekly':
-                            ai_advice = analyze_weekly_watchlist(name, symbol, tech, patterns, stock_news, week_range, item.get('cost'))
-                        else:
-                            ai_advice = analyze_watchlist_stock(name, symbol, tech, patterns, stock_news, item.get('cost'))
-                        tech['cost'] = item.get('cost')
-                        watchlist_analysis.append({'name': name, 'symbol': symbol, 'technical': tech, 'patterns': patterns, 'ai_advice': ai_advice})
             done_step('ai_watchlist', 'AI 分析持股追蹤')
- 
+
             step('ai_sector', 'AI 推薦產業標的')
             sector_recommendations = get_sector_recommendations(global_markets, technical_results, macro_data)
             done_step('ai_sector', 'AI 推薦產業標的')
- 
+
             step('generate_pdf', '產生報表')
             if actual_type == 'daily':
                 report_path = generate_daily_report(
@@ -579,31 +582,26 @@ def generate_report(report_type):
                     week_range
                 )
             done_step('generate_pdf', '產生報表')
- 
+
             step('send_email', '寄送 Email')
             if actual_type == 'daily':
                 send_report(report_path)
             else:
                 send_weekly_report(report_path)
             done_step('send_email', '寄送 Email')
- 
+
             type_label = '日報' if actual_type == 'daily' else '週報'
             push(q, {'type':'done','message':f'✅ {type_label}已產生並寄送成功！'})
- 
+
         except Exception as e:
             import traceback
             traceback.print_exc()
             push(q, {'type':'error','message':str(e)})
- 
+
     threading.Thread(target=run, daemon=True).start()
     return jsonify({'job_id': job_id})
- 
+
 if __name__ == '__main__':
     print('投資建議系統啟動中...')
     print('請開啟瀏覽器前往 http://localhost:5000')
     app.run(debug=False, host='0.0.0.0', port=5000)
- 
-
-
-
-

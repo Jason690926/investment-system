@@ -1,5 +1,6 @@
 import anthropic
 import config
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 client = anthropic.Anthropic(api_key=config.CLAUDE_API_KEY)
 
@@ -155,6 +156,40 @@ MA5：{technical_data.get('MA5')} MA20：{technical_data.get('MA20')} MA60：{te
 重要提醒：以上為模擬分析，不構成實際投資建議。
 """
     return _generate(prompt)
+
+# ── 平行分析所有持股（核心優化）────────────────────────────
+def analyze_watchlist_parallel(watchlist, watchlist_stocks, watch_tech, news,
+                                week_range=None, is_weekly=False):
+    """同時對所有持股發出 AI 分析請求，速度提升數倍"""
+    from modules.candlestick import detect_patterns
+
+    def _analyze_one(item):
+        name = item['name']
+        symbol = item['symbol']
+        if name not in watch_tech:
+            return None
+        tech = watch_tech[name]
+        hist = watchlist_stocks[name].get('history')
+        patterns = detect_patterns(hist) if hist is not None else []
+        stock_news = [n for n in news if name in n.get('title', '')]
+        if is_weekly:
+            ai_advice = analyze_weekly_watchlist(name, symbol, tech, patterns, stock_news, week_range, item.get('cost'))
+        else:
+            ai_advice = analyze_watchlist_stock(name, symbol, tech, patterns, stock_news, item.get('cost'))
+        tech['cost'] = item.get('cost')
+        return {'name': name, 'symbol': symbol, 'technical': tech, 'patterns': patterns, 'ai_advice': ai_advice}
+
+    results = []
+    with ThreadPoolExecutor(max_workers=min(len(watchlist), 5)) as ex:
+        futures = {ex.submit(_analyze_one, item): item['name'] for item in watchlist}
+        for f in as_completed(futures):
+            r = f.result()
+            if r:
+                results.append(r)
+    # 依原始順序排列
+    order = {item['name']: i for i, item in enumerate(watchlist)}
+    results.sort(key=lambda x: order.get(x['name'], 99))
+    return results
 
 def get_sector_recommendations(global_markets, technical_results, macro_data):
     markets_text = '\n'.join([
