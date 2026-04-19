@@ -522,6 +522,23 @@ def generate_report(report_type):
                 if 'history' in data:
                     technical_results[name]['patterns'] = detect_patterns(data['history'])
             macro_analysis = analyze_macro_assets(macro_data)
+
+            # 抓取大盤（台灣加權）技術數據，確保 AI 使用真實數字
+            twii_data = None
+            try:
+                import yfinance as yf
+                twii_hist = yf.Ticker('^TWII').history(period='90d')
+                if len(twii_hist) >= 60:
+                    from modules.technical import analyze_stock
+                    twii_stock_data = {
+                        'price': round(twii_hist['Close'].iloc[-1], 2),
+                        'change': round(((twii_hist['Close'].iloc[-1] - twii_hist['Close'].iloc[-2]) / twii_hist['Close'].iloc[-2]) * 100, 2),
+                        'volume': int(twii_hist['Volume'].iloc[-1]),
+                        'history': twii_hist
+                    }
+                    twii_data = analyze_stock(twii_stock_data)
+            except Exception as e:
+                print(f'大盤技術分析失敗: {e}')
             done_step('technical', '進行技術分析')
 
             step('ai_global', 'AI 分析全球市場')
@@ -539,8 +556,8 @@ def generate_report(report_type):
 
             def _run_taiwan():
                 if actual_type == 'weekly':
-                    return analyze_weekly_taiwan(global_analysis, technical_results, livermore_signals, week_range)
-                return analyze_taiwan_market(global_analysis, technical_results, livermore_signals)
+                    return analyze_weekly_taiwan(global_analysis, technical_results, livermore_signals, week_range, twii_data)
+                return analyze_taiwan_market(global_analysis, technical_results, livermore_signals, twii_data)
 
             def _run_watchlist():
                 if not watchlist:

@@ -47,7 +47,7 @@ def analyze_global_market(global_markets, commodities, news):
 """
     return _generate(prompt)
 
-def analyze_taiwan_market(global_analysis, technical_results, livermore_signals):
+def analyze_taiwan_market(global_analysis, technical_results, livermore_signals, twii_data=None):
     tech_text = '\n'.join([
         f"{name}: 趨勢={data.get('trend')} RSI={data.get('RSI')} MA5={data.get('MA5')} MA20={data.get('MA20')}"
         for name, data in technical_results.items()
@@ -56,13 +56,35 @@ def analyze_taiwan_market(global_analysis, technical_results, livermore_signals)
         f"{name}: {sig['recommendation']} (分數:{sig['score']}) 停損:{sig.get('stop_loss')} 目標:{sig.get('target')}"
         for name, sig in livermore_signals['all'].items()
     ])
+
+    if twii_data:
+        twii_text = f"""【台灣加權指數（^TWII）— 程式計算真實數據，必須使用這些數字】
+現價：{twii_data.get('price')} 點
+今日漲跌：{twii_data.get('change')}%
+趨勢：{twii_data.get('trend')}
+MA5：{twii_data.get('MA5')} 點
+MA20：{twii_data.get('MA20')} 點
+MA60：{twii_data.get('MA60')} 點
+RSI：{twii_data.get('RSI')}
+近20日支撐：{twii_data.get('support')} 點
+近20日壓力：{twii_data.get('resistance')} 點"""
+    else:
+        twii_text = "【台灣加權指數】資料暫無，請勿自行推算任何指數點位。"
+
     prompt = f"""
-你是一位專業的台股分析師，熟悉李佛摩投資法則。請根據以下資料分析台灣股市。
+你是一位專業的台股分析師，熟悉李佛摩投資法則。請根據以下【真實數據】分析台灣股市。
+
+⚠️ 嚴格規定：
+- 大盤加權指數的所有點位數字，只能使用下方「台灣加權指數」區塊中提供的數字
+- 嚴禁自行推算、估計或捏造任何指數點位
+- 若資料不足，請直接說「資料不足」，不可填入未經提供的數字
+
+{twii_text}
 
 【全球市場分析摘要】
 {global_analysis[:800]}
 
-【台股技術面資料】
+【台股個股技術面資料】
 {tech_text}
 
 【李佛摩法則訊號】
@@ -70,7 +92,7 @@ def analyze_taiwan_market(global_analysis, technical_results, livermore_signals)
 
 請提供：
 1. 全球情勢對台股今日影響評估
-2. 台股整體技術面分析
+2. 台股加權指數技術面分析（只用上方提供的真實數字，不可自行推算）
 3. 短期投資建議（1-5天）：列出2-3檔最值得關注標的，說明理由
 4. 中期投資建議（1-3個月）：列出2-3檔潛力標的，說明理由
 5. 今日操作策略建議
@@ -86,7 +108,7 @@ def analyze_taiwan_market(global_analysis, technical_results, livermore_signals)
 現價：<span class="close-price">XXX元</span>
 股票代號後附中文名稱，例如：2330台積電
 
-重要規定：支撐壓力位請給具體數字，每檔標的都要有目標價和停損價。
+重要規定：大盤支撐壓力只能使用上方提供的真實數字，每檔標的都要有目標價和停損價。
 重要提醒：以上為模擬分析，不構成實際投資建議。
 """
     return _generate(prompt)
@@ -271,7 +293,7 @@ def analyze_weekly_global(global_markets, commodities, news, macro_data, week_ra
 """
     return _generate(prompt)
 
-def analyze_weekly_taiwan(global_weekly_analysis, technical_results, livermore_signals, week_range):
+def analyze_weekly_taiwan(global_weekly_analysis, technical_results, livermore_signals, week_range, twii_data=None):
     tech_text = '\n'.join([
         f"{name}: 趨勢={data.get('trend')} RSI={data.get('RSI')} MA5={data.get('MA5')} MA20={data.get('MA20')}"
         for name, data in technical_results.items()
@@ -280,13 +302,34 @@ def analyze_weekly_taiwan(global_weekly_analysis, technical_results, livermore_s
         f"{name}: {sig['recommendation']} 分數:{sig['score']}"
         for name, sig in livermore_signals['all'].items()
     ])
+    if twii_data:
+        twii_text = f"""【台灣加權指數（^TWII）— 程式計算真實數據，必須使用這些數字】
+本週收盤：{twii_data.get('price')} 點
+本週漲跌：{twii_data.get('change')}%
+趨勢：{twii_data.get('trend')}
+MA5：{twii_data.get('MA5')} 點
+MA20：{twii_data.get('MA20')} 點
+MA60：{twii_data.get('MA60')} 點
+RSI：{twii_data.get('RSI')}
+近20日支撐：{twii_data.get('support')} 點
+近20日壓力：{twii_data.get('resistance')} 點"""
+    else:
+        twii_text = "【台灣加權指數】資料暫無，請勿自行推算任何指數點位。"
+
     prompt = f"""
-你是一位專業的台股週報分析師，熟悉李佛摩投資法則與技術分析。
+你是一位專業的台股週報分析師，熟悉李佛摩投資法則與技術分析。請根據以下【真實數據】分析台灣股市。
+
+⚠️ 嚴格規定：
+- 大盤加權指數的所有點位數字，只能使用下方「台灣加權指數」區塊中提供的數字
+- 嚴禁自行推算、估計或捏造任何指數點位
+- 若資料不足，請直接說「資料不足」，不可填入未經提供的數字
+
+{twii_text}
 
 【全球市場本週概況】
 {global_weekly_analysis[:600]}
 
-【台股本週技術面】
+【台股本週個股技術面】
 {tech_text}
 
 【李佛摩法則訊號】
@@ -295,9 +338,9 @@ def analyze_weekly_taiwan(global_weekly_analysis, technical_results, livermore_s
 【分析週期】{week_range}
 
 請提供：
-1. 台股本週走勢回顧（3點）
+1. 台股本週走勢回顧（3點，使用上方真實數字）
 2. 全球情勢對下週台股的影響評估
-3. 下週台股技術面展望（支撐/壓力位置）
+3. 下週台股技術面展望（支撐/壓力只用上方提供的真實數字）
 4. 下週短期操作建議：推薦2-3檔標的及理由
 5. 下週中期布局建議：推薦2-3檔標的及理由
 6. 下週需要特別注意的風險與事件
@@ -312,7 +355,7 @@ def analyze_weekly_taiwan(global_weekly_analysis, technical_results, livermore_s
 現價：<span class="close-price">XXX元</span>
 股票代號後附中文名稱，例如：2330台積電
 
-重要規定：支撐壓力位請給具體數字，每檔標的都要有目標價和停損價。
+重要規定：大盤支撐壓力只能使用上方提供的真實數字，每檔標的都要有目標價和停損價。
 重要提醒：以上為模擬分析，不構成實際投資建議。
 """
     return _generate(prompt)
