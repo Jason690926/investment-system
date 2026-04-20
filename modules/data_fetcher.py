@@ -5,10 +5,17 @@ from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import config
 
-# ── 單檔抓取（供平行化使用）────────────────────────────────
-def _fetch_ticker(name, symbol, period='2d'):
+# ── 單檔抓取（強制最新資料）────────────────────────────────
+def _fetch_ticker(name, symbol, days=10):
+    """用日期區間抓取，避免 yfinance 快取回傳舊資料"""
     try:
-        hist = yf.Ticker(symbol).history(period=period)
+        end = datetime.now()
+        start = end - timedelta(days=days)
+        hist = yf.Ticker(symbol).history(
+            start=start.strftime('%Y-%m-%d'),
+            end=end.strftime('%Y-%m-%d'),
+            auto_adjust=True
+        )
         if len(hist) >= 2:
             prev = hist['Close'].iloc[-2]
             curr = hist['Close'].iloc[-1]
@@ -23,18 +30,36 @@ def _fetch_ticker(name, symbol, period='2d'):
     return name, {'price': 0, 'change': 0, 'symbol': symbol}
 
 def _fetch_taiwan_ticker(name, symbol):
+    """台股：用日期區間強制抓最新資料，並檢查資料新鮮度"""
     try:
-        hist = yf.Ticker(symbol).history(period='60d')
-        if len(hist) > 0:
+        end = datetime.now()
+        start = end - timedelta(days=90)
+        hist = yf.Ticker(symbol).history(
+            start=start.strftime('%Y-%m-%d'),
+            end=end.strftime('%Y-%m-%d'),
+            auto_adjust=True
+        )
+        if len(hist) >= 2:
             curr = hist['Close'].iloc[-1]
             prev = hist['Close'].iloc[-2]
             change = ((curr - prev) / prev) * 100
+
+            # 記錄最後更新日期
+            last_date = hist.index[-1]
+            if hasattr(last_date, 'date'):
+                last_date = last_date.date()
+            today = datetime.now().date()
+            days_diff = (today - last_date).days
+            if days_diff > 5:
+                print(f'⚠️ {name}({symbol}) 資料可能過舊，最後更新：{last_date}（{days_diff}天前）')
+
             return name, {
                 'symbol': symbol,
                 'price': round(curr, 2),
                 'change': round(change, 2),
                 'volume': int(hist['Volume'].iloc[-1]),
-                'history': hist
+                'history': hist,
+                'last_date': str(last_date)
             }
     except:
         pass
@@ -88,7 +113,7 @@ def get_macro_assets():
     }
     result = {}
     with ThreadPoolExecutor(max_workers=5) as ex:
-        futures = {ex.submit(_fetch_ticker, n, s, '5d'): n for n, s in symbols.items()}
+        futures = {ex.submit(_fetch_ticker, n, s): n for n, s in symbols.items()}
         for f in as_completed(futures):
             name, data = f.result()
             result[name] = data
