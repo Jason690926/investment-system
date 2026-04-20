@@ -73,7 +73,7 @@ RSI：{twii_data.get('RSI')}
         twii_text = "【台灣加權指數】資料暫無，請勿自行推算任何指數點位。"
 
     prompt = f"""
-你是一位專業的台股分析師，熟悉李佛摩投資法則。請根據以下【真實數據】分析台灣股市。
+你是一位專業的台股分析師，熟悉李佛摩投資法則。現在是台股收盤後，請根據今日收盤後的【真實數據】分析台灣股市，所有建議方向為明日（下一個交易日）的操作。
 
 ⚠️ 嚴格規定（所有數字必須來自下方提供的真實數據）：
 - 大盤支撐、壓力、點位：只能使用「台灣加權指數」區塊的數字
@@ -139,47 +139,65 @@ def analyze_macro_assets(macro_data):
     return _generate(prompt)
 
 def analyze_watchlist_stock(name, symbol, technical_data, patterns, news_list, cost=None):
+    from datetime import datetime
+    today = datetime.now().strftime('%Y/%m/%d')
     pattern_descs = '\n'.join([f"- {p['name']}：{p['desc']}" for p in patterns]) if patterns else '無明顯型態'
     news_text = '\n'.join([f"- {n['title']}" for n in news_list[:5]]) if news_list else '暫無相關新聞'
     cost_info = f'持股成本：{cost}元' if cost else '（未設定成本）'
-    prompt = f"""
-你是一位專業的台股分析師。請針對以下個股給出詳細分析與建議。
-
-【股票資訊】
-股票：{name}（{symbol}）
-{cost_info}
-現價：{technical_data.get('price')}
-今日漲跌：{technical_data.get('change')}%
-趨勢：{technical_data.get('trend')}
-RSI：{technical_data.get('RSI')}
-MA5：{technical_data.get('MA5')} MA20：{technical_data.get('MA20')} MA60：{technical_data.get('MA60')}
-支撐一：{technical_data.get('support')} 支撐二：{technical_data.get('support2')}
-壓力一：{technical_data.get('resistance2')} 壓力二：{technical_data.get('resistance')}
-
-【K線型態】
-{pattern_descs}
-
-【近期相關新聞】
-{news_text}
-
-每檔股票分析必須包含以下結構：
-一、今日走勢簡評（2-3點）
-二、K線型態解讀
-三、短期操作建議
-四、價位資訊（給出具體數字）：
-   - <span class="support-level">支撐一：XXX元</span>
-   - <span class="support-level">支撐二：XXX元</span>
-   - <span class="resistance-level">壓力一：XXX元</span>
-   - <span class="resistance-level">壓力二：XXX元</span>
-   - <span class="close-price">進場：XXX~XXX元</span>
-   - <span class="target-price">目標一：XXX元</span>
-   - <span class="target-price">目標二：XXX元</span>
-   - <span class="stop-loss">停損：XXX元</span>
-五、特別注意事項
-
-重要規定：所有價位必須是具體數字，不可用百分比。
-重要提醒：以上為模擬分析，不構成實際投資建議。
-"""
+    pnl_info = ''
+    if cost and technical_data.get('price'):
+        try:
+            pnl = ((float(technical_data.get('price')) - float(cost)) / float(cost)) * 100
+            pnl_info = f'目前損益：{pnl:+.2f}%'
+        except:
+            pass
+    s1 = technical_data.get('support', '--')
+    s2 = technical_data.get('support2', '--')
+    r1 = technical_data.get('resistance2', '--')
+    r2 = technical_data.get('resistance', '--')
+    el = technical_data.get('entry_low', '--')
+    eh = technical_data.get('entry_high', '--')
+    t1 = technical_data.get('target1', '--')
+    t2 = technical_data.get('target2', '--')
+    sl = technical_data.get('stop_loss_price', '--')
+    prompt = (
+        f"你是一位專業的台股分析師。現在是 {today} 台股收盤後，請根據今日收盤數據，給出明日（下一個交易日）的操作建議。\n\n"
+        f"注意事項：\n"
+        f"- 以下數據為今日（{today}）收盤後的最終數字\n"
+        f"- 你的分析與建議方向是「明日開盤如何操作」\n"
+        f"- 所有價位必須使用下方提供的真實數字，嚴禁捏造或自行推算\n\n"
+        f"【今日收盤數據（所有價位必須來自此處）】\n"
+        f"股票：{name}（{symbol}）\n"
+        f"{cost_info}\n"
+        f"{pnl_info}\n"
+        f"今日收盤價：{technical_data.get('price')} 元\n"
+        f"今日漲跌：{technical_data.get('change')}%\n"
+        f"趨勢：{technical_data.get('trend')}\n"
+        f"RSI(14)：{technical_data.get('RSI')}\n"
+        f"MA5：{technical_data.get('MA5')} MA20：{technical_data.get('MA20')} MA60：{technical_data.get('MA60')}\n"
+        f"近20日支撐一：{s1} 元 / 支撐二：{s2} 元\n"
+        f"近20日壓力一：{r1} 元 / 壓力二：{r2} 元\n"
+        f"建議進場區間：{el}~{eh} 元\n"
+        f"目標一：{t1} 元 / 目標二：{t2} 元\n"
+        f"建議停損：{sl} 元\n\n"
+        f"【今日K線型態】\n{pattern_descs}\n\n"
+        f"【近期相關新聞】\n{news_text}\n\n"
+        f"請提供明日操作建議，格式如下：\n"
+        f"一、今日收盤走勢解讀（2-3點，說明今天發生了什麼）\n"
+        f"二、K線型態對明日的啟示\n"
+        f"三、明日操作策略（明確說明「明日開盤如果...則...」）\n"
+        f"四、明日關鍵價位（直接使用上方提供的數字，不可修改）：\n"
+        f'   - <span class="support-level">支撐一：{s1} 元</span>\n'
+        f'   - <span class="support-level">支撐二：{s2} 元</span>\n'
+        f'   - <span class="resistance-level">壓力一：{r1} 元</span>\n'
+        f'   - <span class="resistance-level">壓力二：{r2} 元</span>\n'
+        f'   - <span class="close-price">明日進場：{el}~{eh} 元</span>\n'
+        f'   - <span class="target-price">目標一：{t1} 元</span>\n'
+        f'   - <span class="target-price">目標二：{t2} 元</span>\n'
+        f'   - <span class="stop-loss">停損：{sl} 元</span>\n'
+        f"五、特別注意事項（明日需觀察的訊號）\n\n"
+        f"重要提醒：以上為模擬分析，不構成實際投資建議。"
+    )
     return _generate(prompt)
 
 # ── 平行分析所有持股（核心優化）────────────────────────────
