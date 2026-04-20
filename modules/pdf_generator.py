@@ -159,8 +159,11 @@ def generate_daily_report(global_markets, commodities, news,
                            technical_results, livermore_signals,
                            macro_data, macro_analysis,
                            watchlist_analysis, sector_recommendations):
-    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M')
-    date_str = datetime.now().strftime('%Y%m%d')
+    from datetime import timezone, timedelta
+    TW = timezone(timedelta(hours=8))
+    now_tw = datetime.now(TW)
+    timestamp = now_tw.strftime('%Y-%m-%d %H:%M（台灣時間）')
+    date_str = now_tw.strftime('%Y%m%d')
 
     markets_html = ''.join(
         f'<tr><td>{n}</td><td class="close-price">{d["price"]:,}</td><td class="{"up" if d["change"]>0 else "down"}">{("+" if d["change"]>0 else "")}{d["change"]}%</td></tr>'
@@ -225,8 +228,11 @@ def generate_weekly_report(global_markets, commodities, news,
                             macro_data, macro_analysis,
                             watchlist_analysis, sector_recommendations,
                             week_range):
-    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M')
-    date_str = datetime.now().strftime('%Y%m%d')
+    from datetime import timezone, timedelta
+    TW = timezone(timedelta(hours=8))
+    now_tw = datetime.now(TW)
+    timestamp = now_tw.strftime('%Y-%m-%d %H:%M（台灣時間）')
+    date_str = now_tw.strftime('%Y%m%d')
 
     markets_html = ''.join(
         f'<tr><td>{n}</td><td class="close-price">{d["price"]:,}</td><td class="{"up" if d["change"]>0 else "down"}">{("+" if d["change"]>0 else "")}{d["change"]}%</td></tr>'

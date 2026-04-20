@@ -149,8 +149,9 @@ def analyze_macro_assets(macro_data):
     return _generate(prompt)
 
 def analyze_watchlist_stock(name, symbol, technical_data, patterns, news_list, cost=None):
-    from datetime import datetime
-    today = datetime.now().strftime('%Y/%m/%d')
+    from datetime import datetime, timezone, timedelta
+    TW = timezone(timedelta(hours=8))
+    today = datetime.now(TW).strftime('%Y/%m/%d')
     pattern_descs = '\n'.join([f"- {p['name']}：{p['desc']}" for p in patterns]) if patterns else '無明顯型態'
     news_text = '\n'.join([f"- {n['title']}" for n in news_list[:5]]) if news_list else '暫無相關新聞'
     cost_info = f'持股成本：{cost}元' if cost else '（未設定成本）'
@@ -413,7 +414,8 @@ RSI：{twii_data.get('RSI')}
     return _generate(prompt)
 
 def analyze_weekly_watchlist(name, symbol, technical_data, patterns, news_list, week_range, cost=None):
-    from datetime import datetime
+    from datetime import datetime, timezone, timedelta
+    TW = timezone(timedelta(hours=8))
     pattern_descs = '\n'.join([f"- {p['name']}：{p['desc']}" for p in patterns]) if patterns else '無明顯型態'
     news_text = '\n'.join([f"- {n['title']}" for n in news_list[:5]]) if news_list else '暫無相關新聞'
     cost_info = f'持股成本：{cost}元' if cost else '（未設定成本）'
