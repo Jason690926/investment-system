@@ -200,7 +200,7 @@ def generate_daily_report(global_markets, commodities, news,
 <div class="section"><h2>持股追蹤（依產業分組）</h2>
   {watchlist_html}
 </div>
-<div class="section"><h2>AI 推薦標的（依產業）</h2>
+<div class="section"><h2>產業投資方向建議</h2>
   <div class="analysis-text">{_md(sector_recommendations)}</div>
 </div>
 <div class="section"><h2>李佛摩法則訊號總覽</h2>
@@ -266,7 +266,7 @@ def generate_weekly_report(global_markets, commodities, news,
 <div class="section"><h2>持股追蹤（依產業分組）— 下週操作建議</h2>
   {watchlist_html}
 </div>
-<div class="section"><h2>下週 AI 推薦標的（依產業）</h2>
+<div class="section"><h2>下週產業投資方向建議</h2>
   <div class="analysis-text">{_md(sector_recommendations)}</div>
 </div>
 <div class="section"><h2>李佛摩法則訊號總覽</h2>

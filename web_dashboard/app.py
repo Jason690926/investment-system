@@ -172,7 +172,7 @@ const STEPS = {
     { key: 'ai_global',       label: 'AI 分析全球市場' },
     { key: 'ai_taiwan',       label: 'AI 分析台股' },
     { key: 'ai_watchlist',    label: 'AI 分析持股追蹤' },
-    { key: 'ai_sector',       label: 'AI 推薦產業標的' },
+    { key: 'ai_sector',       label: 'AI 分析產業投資方向' },
     { key: 'generate_pdf',    label: '產生 PDF 報表' },
     { key: 'send_email',      label: '寄送 Email' },
   ],
@@ -577,9 +577,9 @@ def generate_report(report_type):
                 watchlist_analysis = []
             done_step('ai_watchlist', 'AI 分析持股追蹤')
 
-            step('ai_sector', 'AI 推薦產業標的')
+            step('ai_sector', 'AI 分析產業投資方向')
             sector_recommendations = get_sector_recommendations(global_markets, technical_results, macro_data, watchlist_analysis)
-            done_step('ai_sector', 'AI 推薦產業標的')
+            done_step('ai_sector', 'AI 分析產業投資方向')
 
             step('generate_pdf', '產生報表')
             if actual_type == 'daily':

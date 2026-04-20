@@ -256,114 +256,63 @@ def analyze_watchlist_parallel(watchlist, watchlist_stocks, watch_tech, news,
     results.sort(key=lambda x: order.get(x['name'], 99))
     return results
 
-def _verify_stock_price(symbol):
-    """用 yfinance 驗證股票真實現價，回傳 (price, change) 或 None"""
-    import yfinance as yf
-    from datetime import datetime, timedelta
-    try:
-        end = datetime.now()
-        start = end - timedelta(days=10)
-        hist = yf.Ticker(symbol).history(
-            start=start.strftime('%Y-%m-%d'),
-            end=end.strftime('%Y-%m-%d'),
-            auto_adjust=True
-        )
-        if len(hist) >= 2:
-            price = round(hist['Close'].iloc[-1], 2)
-            prev  = hist['Close'].iloc[-2]
-            change = round(((price - prev) / prev) * 100, 2)
-            return price, change
-    except:
-        pass
-    return None
-
-def _enrich_sector_with_real_prices(ai_text):
-    """從 AI 推薦文字中找出股票代號，查詢真實股價後補充到文字中"""
-    import re, yfinance as yf
-    from datetime import datetime, timedelta
-
-    # 找出所有股票代號（格式：XXXX.TW 或 XXXX.TWO）
-    symbols = re.findall(r'\b(\d{4,5}\.TW[O]?)\b', ai_text)
-    symbols = list(set(symbols))
-
-    if not symbols:
-        return ai_text + '\n\n⚠️ 注意：以上為 AI 分析建議，價位僅供參考，請自行查詢最新股價後再做決策。'
-
-    # 批次查詢真實股價
-    price_info = {}
-    for symbol in symbols:
-        result = _verify_stock_price(symbol)
-        if result:
-            price, change = result
-            sign = '+' if change >= 0 else ''
-            price_info[symbol] = f'現價 NT${price:,}（{sign}{change}%）'
-
-    # 在文字末尾加上即時股價驗證表
-    if price_info:
-        price_table = '\n\n<div style="background:#fff3e0;border:1px solid #ffe0b2;border-radius:6px;padding:12px;margin-top:12px">'
-        price_table += '<div style="font-weight:600;color:#e65100;margin-bottom:8px">📊 系統即時驗證股價（{} 查詢）</div>'.format(
-            datetime.now().strftime('%Y/%m/%d %H:%M')
-        )
-        for symbol, info in price_info.items():
-            price_table += f'<div style="font-size:13px;margin:4px 0">• {symbol}：{info}</div>'
-        price_table += '<div style="font-size:11px;color:#888;margin-top:8px">⚠️ AI 建議的進場/目標/停損價位為估算參考，請以上方即時股價為準自行計算。</div>'
-        price_table += '</div>'
-        return ai_text + price_table
-    else:
-        return ai_text + '\n\n⚠️ 注意：以上為 AI 分析建議，請自行查詢最新股價後再做決策。'
-
-
 def get_sector_recommendations(global_markets, technical_results, macro_data, watchlist_analysis=None):
+    """推薦投資產業方向（不推薦個股，只給大方向）"""
     markets_text = '\n'.join([
         f"{name}: {data['price']} ({'+' if data['change']>0 else ''}{data['change']}%)"
         for name, data in global_markets.items()
-    ])
-    tech_text = '\n'.join([
-        f"{name}（{data.get('symbol','')}）: 現價={data.get('price')} 趨勢={data.get('trend')} RSI={data.get('RSI')} MA5={data.get('MA5')} MA20={data.get('MA20')}"
-        for name, data in technical_results.items()
     ])
     macro_text = '\n'.join([
         f"{name}: {data['price']} ({'+' if data['change']>0 else ''}{data['change']}%)"
         for name, data in macro_data.items()
     ])
-    prompt = f"""
-你是一位專業的台股選股分析師。請根據目前大盤趨勢，自由推薦最值得關注的台股標的。
+    # 追蹤清單的產業分布
+    if watchlist_analysis:
+        from modules.stock_names import get_sector
+        sector_summary = {}
+        for item in watchlist_analysis:
+            sector = item.get('sector') or get_sector(item.get('symbol',''), item.get('name',''))
+            trend = item['technical'].get('trend', '--')
+            rsi = item['technical'].get('RSI', '--')
+            if sector not in sector_summary:
+                sector_summary[sector] = []
+            sector_summary[sector].append(f"{item['name']}（趨勢:{trend} RSI:{rsi}）")
+        watchlist_sector_text = '\n'.join([
+            f"{sector}：{', '.join(stocks)}"
+            for sector, stocks in sector_summary.items()
+        ])
+    else:
+        watchlist_sector_text = '（無追蹤標的）'
 
-⚠️ 重要規定：
-- 推薦的股票必須是真實存在的台股上市/上櫃公司
-- 請提供正確的股票代號（上市加.TW，上櫃加.TWO）
-- 所有價位僅作為「分析師估算參考」，系統會另行驗證真實股價
-- 請務必在每檔股票說明推薦理由和目前市場環境
+    prompt = f"""
+你是一位專業的台股產業分析師。請根據目前全球市場環境，給出產業投資方向建議。
 
 【全球市場概況】
 {markets_text}
 
-【總體資產走勢】
+【總體資產走勢（美債/黃金/石油）】
 {macro_text}
 
-【目前追蹤標的技術面（供參考）】
-{tech_text}
+【目前追蹤標的的產業分布】
+{watchlist_sector_text}
 
 請提供：
-1. 目前大盤最強勢的2-3個產業（說明為何強勢）
-2. 每個產業各推薦1-2檔台股（共5檔以內）
+1. 目前全球市場環境下，最看好的 3 個台股產業（說明原因）
+2. 需要迴避的 1-2 個產業（說明風險）
+3. 追蹤清單中哪些產業與當前市場趨勢最吻合（參考上方追蹤清單）
 
-每檔推薦標的格式（嚴格遵守）：
-【股票名稱】（代號如：2330.TW 或 6104.TWO）
-- 推薦理由（2-3點）
-- 產業背景與當前催化劑
-- 技術面觀察
+格式要求：
+- 只給產業方向，不要推薦個股
+- 每個產業說明 2-3 個看好/看空的理由
+- 用繁體中文，條列式呈現
 
-短期標題：<span class="short-term-title">▶ 短期推薦</span>
-中期標題：<span class="mid-term-title">▶ 中期布局</span>
+短期看好：<span class="short-term-title">▶ 短期看好產業</span>
+中期布局：<span class="mid-term-title">▶ 中期布局產業</span>
+需要迴避：<span class="stop-loss">⚠️ 近期迴避產業</span>
 
-注意：不要在回覆中自行填入具體價位數字，系統會自動用即時股價補充。
 重要提醒：以上為模擬分析，不構成實際投資建議。
 """
-    raw_result = _generate(prompt)
-
-    # 系統自動驗證並補充真實股價
-    return _enrich_sector_with_real_prices(raw_result)
+    return _generate(prompt)
 
 def analyze_weekly_global(global_markets, commodities, news, macro_data, week_range):
     markets_text = '\n'.join([
