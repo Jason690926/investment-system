@@ -48,8 +48,9 @@ def analyze_global_market(global_markets, commodities, news):
     return _generate(prompt)
 
 def analyze_taiwan_market(global_analysis, technical_results, livermore_signals, twii_data=None):
+    # 帶入完整真實個股價格
     tech_text = '\n'.join([
-        f"{name}: 趨勢={data.get('trend')} RSI={data.get('RSI')} MA5={data.get('MA5')} MA20={data.get('MA20')}"
+        f"{name}（{data.get('symbol','')}）: 現價={data.get('price')} 趨勢={data.get('trend')} RSI={data.get('RSI')} MA5={data.get('MA5')} MA20={data.get('MA20')} 支撐={data.get('support')} 壓力={data.get('resistance')} 進場={data.get('entry_low')}~{data.get('entry_high')} 目標一={data.get('target1')} 目標二={data.get('target2')} 停損={data.get('stop_loss_price')}"
         for name, data in technical_results.items()
     ])
     signal_text = '\n'.join([
@@ -74,17 +75,19 @@ RSI：{twii_data.get('RSI')}
     prompt = f"""
 你是一位專業的台股分析師，熟悉李佛摩投資法則。請根據以下【真實數據】分析台灣股市。
 
-⚠️ 嚴格規定：
-- 大盤加權指數的所有點位數字，只能使用下方「台灣加權指數」區塊中提供的數字
-- 嚴禁自行推算、估計或捏造任何指數點位
-- 若資料不足，請直接說「資料不足」，不可填入未經提供的數字
+⚠️ 嚴格規定（所有數字必須來自下方提供的真實數據）：
+- 大盤支撐、壓力、點位：只能使用「台灣加權指數」區塊的數字
+- 個股現價、進場、目標、停損：只能使用「台股個股技術面資料」中對應股票的數字
+- 嚴禁自行推算、估計或捏造任何價位或點位
+- 推薦標的只能從下方清單中選取，不可推薦清單以外的股票
+- 若資料不足，請直接說「資料不足」
 
 {twii_text}
 
 【全球市場分析摘要】
 {global_analysis[:800]}
 
-【台股個股技術面資料】
+【台股個股技術面資料（所有個股價位必須從此取用）】
 {tech_text}
 
 【李佛摩法則訊號】
@@ -92,23 +95,23 @@ RSI：{twii_data.get('RSI')}
 
 請提供：
 1. 全球情勢對台股今日影響評估
-2. 台股加權指數技術面分析（只用上方提供的真實數字，不可自行推算）
-3. 短期投資建議（1-5天）：列出2-3檔最值得關注標的，說明理由
-4. 中期投資建議（1-3個月）：列出2-3檔潛力標的，說明理由
+2. 台股加權指數技術面分析（只用上方提供的真實數字）
+3. 短期投資建議（1-5天）：從清單中列出2-3檔，價位直接使用上方數字
+4. 中期投資建議（1-3個月）：從清單中列出2-3檔，價位直接使用上方數字
 5. 今日操作策略建議
 6. 需要注意的風險
 
 請用繁體中文，套用以下HTML格式：
 短期標題：<span class="short-term-title">▶ 短期建議（1-5天）</span>
 中期標題：<span class="mid-term-title">▶ 中期建議（1-3個月）</span>
-目標價：<span class="target-price">目標價：XXX元</span>
-停損價：<span class="stop-loss">停損：XXX元</span>
+目標價：<span class="target-price">目標價：XXX元（來自真實數據）</span>
+停損價：<span class="stop-loss">停損：XXX元（來自真實數據）</span>
 支撐：<span class="support-level">支撐：XXXX點</span>
 壓力：<span class="resistance-level">壓力：XXXX點</span>
 現價：<span class="close-price">XXX元</span>
 股票代號後附中文名稱，例如：2330台積電
 
-重要規定：大盤支撐壓力只能使用上方提供的真實數字，每檔標的都要有目標價和停損價。
+重要規定：所有價位必須直接使用上方提供的真實數字，嚴禁自行推算。
 重要提醒：以上為模擬分析，不構成實際投資建議。
 """
     return _generate(prompt)
@@ -218,8 +221,9 @@ def get_sector_recommendations(global_markets, technical_results, macro_data):
         f"{name}: {data['price']} ({'+' if data['change']>0 else ''}{data['change']}%)"
         for name, data in global_markets.items()
     ])
+    # 帶入完整真實股價資料
     tech_text = '\n'.join([
-        f"{name}: 趨勢={data.get('trend')} RSI={data.get('RSI')}"
+        f"{name}（{data.get('symbol','')}）: 現價={data.get('price')} 趨勢={data.get('trend')} RSI={data.get('RSI')} MA5={data.get('MA5')} MA20={data.get('MA20')} 支撐={data.get('support')} 壓力={data.get('resistance')} 進場區間={data.get('entry_low')}~{data.get('entry_high')} 目標一={data.get('target1')} 目標二={data.get('target2')} 停損={data.get('stop_loss_price')}"
         for name, data in technical_results.items()
     ])
     macro_text = '\n'.join([
@@ -229,31 +233,41 @@ def get_sector_recommendations(global_markets, technical_results, macro_data):
     prompt = f"""
 你是一位專業的台股選股分析師。請根據目前大盤趨勢推薦適合投資的標的。
 
+⚠️ 價位嚴格規定（違反即為錯誤）：
+- 所有推薦標的的進場價、目標價、停損價，必須直接使用下方「追蹤標的技術面」提供的數字
+- 進場區間 = entry_low ~ entry_high（直接使用，不可自行修改）
+- 目標一 = target1（直接使用）
+- 目標二 = target2（直接使用）
+- 停損 = stop_loss_price（直接使用）
+- 嚴禁自行推算或捏造任何價位數字
+- 只能從下方清單中推薦已有真實數據的股票，不可推薦清單以外的股票
+
 【全球市場概況】
 {markets_text}
 
 【總體資產走勢】
 {macro_text}
 
-【目前追蹤標的技術面】
+【追蹤標的技術面（所有價位必須從此取用）】
 {tech_text}
 
 請提供：
 1. 目前大盤最強勢的2-3個產業（說明為何強勢）
-2. 每個產業推薦1-2檔台股標的（共5檔以內）
+2. 從上方清單中，每個產業推薦1-2檔標的（共5檔以內），價位直接使用上方提供的數字
 
 每檔推薦標的格式：
 股票名稱（代號）
-- 推薦理由（2-3點）
-- <span class="close-price">進場：XXX~XXX元</span>
-- <span class="target-price">目標一：XXX元</span>
-- <span class="target-price">目標二：XXX元</span>
-- <span class="stop-loss">停損：XXX元</span>
+- 推薦理由（2-3點，說明為何從清單中選此檔）
+- <span class="close-price">現價：XXX元（取自上方數據）</span>
+- <span class="close-price">進場：XXX~XXX元（取自 entry_low~entry_high）</span>
+- <span class="target-price">目標一：XXX元（取自 target1）</span>
+- <span class="target-price">目標二：XXX元（取自 target2）</span>
+- <span class="stop-loss">停損：XXX元（取自 stop_loss_price）</span>
 
 短期標題：<span class="short-term-title">▶ 短期推薦</span>
 中期標題：<span class="mid-term-title">▶ 中期布局</span>
 
-重要規定：所有價位必須是具體數字，不可用百分比。
+重要規定：所有價位必須直接使用上方提供的真實數字，嚴禁自行推算。
 重要提醒：以上為模擬分析，不構成實際投資建議。
 """
     return _generate(prompt)
@@ -295,7 +309,7 @@ def analyze_weekly_global(global_markets, commodities, news, macro_data, week_ra
 
 def analyze_weekly_taiwan(global_weekly_analysis, technical_results, livermore_signals, week_range, twii_data=None):
     tech_text = '\n'.join([
-        f"{name}: 趨勢={data.get('trend')} RSI={data.get('RSI')} MA5={data.get('MA5')} MA20={data.get('MA20')}"
+        f"{name}（{data.get('symbol','')}）: 現價={data.get('price')} 趨勢={data.get('trend')} RSI={data.get('RSI')} MA5={data.get('MA5')} MA20={data.get('MA20')} 支撐={data.get('support')} 壓力={data.get('resistance')} 進場={data.get('entry_low')}~{data.get('entry_high')} 目標一={data.get('target1')} 目標二={data.get('target2')} 停損={data.get('stop_loss_price')}"
         for name, data in technical_results.items()
     ])
     signal_text = '\n'.join([
@@ -319,17 +333,19 @@ RSI：{twii_data.get('RSI')}
     prompt = f"""
 你是一位專業的台股週報分析師，熟悉李佛摩投資法則與技術分析。請根據以下【真實數據】分析台灣股市。
 
-⚠️ 嚴格規定：
-- 大盤加權指數的所有點位數字，只能使用下方「台灣加權指數」區塊中提供的數字
-- 嚴禁自行推算、估計或捏造任何指數點位
-- 若資料不足，請直接說「資料不足」，不可填入未經提供的數字
+⚠️ 嚴格規定（所有數字必須來自下方提供的真實數據）：
+- 大盤支撐、壓力、點位：只能使用「台灣加權指數」區塊的數字
+- 個股現價、進場、目標、停損：只能使用「台股個股技術面」中對應股票的數字
+- 嚴禁自行推算、估計或捏造任何價位或點位
+- 推薦標的只能從下方清單中選取，不可推薦清單以外的股票
+- 若資料不足，請直接說「資料不足」
 
 {twii_text}
 
 【全球市場本週概況】
 {global_weekly_analysis[:600]}
 
-【台股本週個股技術面】
+【台股本週個股技術面（所有個股價位必須從此取用）】
 {tech_text}
 
 【李佛摩法則訊號】
@@ -341,21 +357,21 @@ RSI：{twii_data.get('RSI')}
 1. 台股本週走勢回顧（3點，使用上方真實數字）
 2. 全球情勢對下週台股的影響評估
 3. 下週台股技術面展望（支撐/壓力只用上方提供的真實數字）
-4. 下週短期操作建議：推薦2-3檔標的及理由
-5. 下週中期布局建議：推薦2-3檔標的及理由
+4. 下週短期操作建議：從清單中推薦2-3檔，價位直接使用上方數字
+5. 下週中期布局建議：從清單中推薦2-3檔，價位直接使用上方數字
 6. 下週需要特別注意的風險與事件
 
 請用繁體中文，套用以下HTML格式：
 短期標題：<span class="short-term-title">▶ 下週短期建議（1-5天）</span>
 中期標題：<span class="mid-term-title">▶ 下週中期建議（1-3個月）</span>
-目標價：<span class="target-price">目標價：XXX元</span>
-停損價：<span class="stop-loss">停損：XXX元</span>
+目標價：<span class="target-price">目標價：XXX元（來自真實數據）</span>
+停損價：<span class="stop-loss">停損：XXX元（來自真實數據）</span>
 支撐：<span class="support-level">支撐：XXXX點</span>
 壓力：<span class="resistance-level">壓力：XXXX點</span>
 現價：<span class="close-price">XXX元</span>
 股票代號後附中文名稱，例如：2330台積電
 
-重要規定：大盤支撐壓力只能使用上方提供的真實數字，每檔標的都要有目標價和停損價。
+重要規定：所有價位必須直接使用上方提供的真實數字，嚴禁自行推算。
 重要提醒：以上為模擬分析，不構成實際投資建議。
 """
     return _generate(prompt)
