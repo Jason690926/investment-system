@@ -172,11 +172,7 @@ def analyze_watchlist_stock(name, symbol, technical_data, patterns, news_list, c
     t2 = technical_data.get('target2', '--')
     sl = technical_data.get('stop_loss_price', '--')
     prompt = (
-        f"你是一位專業的台股分析師。現在是 {today} 台股收盤後，請根據今日收盤數據，給出明日（下一個交易日）的操作建議。\n\n"
-        f"注意事項：\n"
-        f"- 以下數據為今日（{today}）收盤後的最終數字\n"
-        f"- 你的分析與建議方向是「明日開盤如何操作」\n"
-        f"- 所有價位必須使用下方提供的真實數字，嚴禁捏造或自行推算\n\n"
+        f"台股分析師。{today} 收盤後數據，給明日操作建議。所有價位只能用下方數字，嚴禁捏造。\n\n"
         f"【今日收盤數據（所有價位必須來自此處）】\n"
         f"股票：{name}（{symbol}）\n"
         f"{cost_info}\n"
@@ -193,11 +189,10 @@ def analyze_watchlist_stock(name, symbol, technical_data, patterns, news_list, c
         f"建議停損：{sl} 元\n\n"
         f"【今日K線型態】\n{pattern_descs}\n\n"
         f"【近期相關新聞】\n{news_text}\n\n"
-        f"請提供明日操作建議，格式如下：\n"
-        f"一、今日收盤走勢解讀（2-3點，說明今天發生了什麼）\n"
-        f"二、K線型態對明日的啟示\n"
-        f"三、明日操作策略（明確說明「明日開盤如果...則...」）\n"
-        f"四、明日關鍵價位（直接使用上方提供的數字，不可修改）：\n"
+        f"請提供明日操作建議（精簡版）：\n"
+        f"一、今日走勢 + K線型態解讀（3點以內）\n"
+        f"二、明日操作策略（如果...則...）\n"
+        f"三、明日關鍵價位（直接使用下方數字，不可修改）：\n"
         f'   - <span class="support-level">支撐一：{s1} 元</span>\n'
         f'   - <span class="support-level">支撐二：{s2} 元</span>\n'
         f'   - <span class="resistance-level">壓力一：{r1} 元</span>\n'
@@ -206,10 +201,10 @@ def analyze_watchlist_stock(name, symbol, technical_data, patterns, news_list, c
         f'   - <span class="target-price">目標一：{t1} 元</span>\n'
         f'   - <span class="target-price">目標二：{t2} 元</span>\n'
         f'   - <span class="stop-loss">停損：{sl} 元</span>\n'
-        f"五、特別注意事項（明日需觀察的訊號）\n\n"
+        f"四、明日注意訊號（1-2點）\n\n"
         f"重要提醒：以上為模擬分析，不構成實際投資建議。"
     )
-    return _generate(prompt)
+    return _generate(prompt, max_tokens=1200)
 
 # ── 平行分析所有持股（核心優化）────────────────────────────
 def analyze_watchlist_parallel(watchlist, watchlist_stocks, watch_tech, news,
@@ -238,8 +233,8 @@ def analyze_watchlist_parallel(watchlist, watchlist_stocks, watch_tech, news,
 
     import time
     results = []
-    # 分批執行，每批 3 支，避免超過 API rate limit
-    batch_size = 3
+    # 分批執行，每批 5 支，避免超過 API rate limit
+    batch_size = 5
     for i in range(0, len(watchlist), batch_size):
         batch = watchlist[i:i+batch_size]
         with ThreadPoolExecutor(max_workers=batch_size) as ex:
@@ -248,9 +243,9 @@ def analyze_watchlist_parallel(watchlist, watchlist_stocks, watch_tech, news,
                 r = f.result()
                 if r:
                     results.append(r)
-        # 批次間等待 3 秒，避免超過 rate limit
+        # 批次間等待 2 秒，避免超過 rate limit
         if i + batch_size < len(watchlist):
-            time.sleep(3)
+            time.sleep(2)
     # 依原始順序排列
     order = {item['name']: i for i, item in enumerate(watchlist)}
     results.sort(key=lambda x: order.get(x['name'], 99))
@@ -458,11 +453,10 @@ def analyze_weekly_watchlist(name, symbol, technical_data, patterns, news_list, 
         f"建議停損：{sl} 元\n\n"
         f"【本週K線型態】\n{pattern_descs}\n\n"
         f"【本週相關新聞】\n{news_text}\n\n"
-        f"請提供下週操作建議，格式如下：\n"
-        f"一、本週走勢解讀（2-3點）\n"
-        f"二、K線型態對下週的啟示\n"
-        f"三、下週操作策略（明確說明「下週如果...則...」）\n"
-        f"四、下週關鍵價位（直接使用上方提供的數字，不可修改）：\n"
+        f"請提供下週操作建議（精簡版）：\n"
+        f"一、本週走勢 + K線型態解讀（3點以內）\n"
+        f"二、下週操作策略（下週如果...則...）\n"
+        f"三、下週關鍵價位（直接使用上方數字，不可修改）：\n"
         f'   - <span class="support-level">支撐一：{s1} 元</span>\n'
         f'   - <span class="support-level">支撐二：{s2} 元</span>\n'
         f'   - <span class="resistance-level">壓力一：{r1} 元</span>\n'
@@ -471,7 +465,7 @@ def analyze_weekly_watchlist(name, symbol, technical_data, patterns, news_list, 
         f'   - <span class="target-price">目標一：{t1} 元</span>\n'
         f'   - <span class="target-price">目標二：{t2} 元</span>\n'
         f'   - <span class="stop-loss">停損：{sl} 元</span>\n'
-        f"五、特別注意事項（下週需觀察的訊號）\n\n"
+        f"四、下週注意訊號（1-2點）\n\n"
         f"重要提醒：以上為模擬分析，不構成實際投資建議。"
     )
-    return _generate(prompt)
+    return _generate(prompt, max_tokens=1200)
