@@ -557,36 +557,28 @@ def generate_report(report_type):
                 global_analysis = analyze_global_market(global_markets, commodities, news)
             done_step('ai_global', 'AI 分析全球市場')
 
-            # ── AI 分析台股 & 持股追蹤同時平行進行 ──────────────
+            # ── AI 分析台股（先跑完，避免與持股分析搶 rate limit）──
             step('ai_taiwan', 'AI 分析台股')
-            step('ai_watchlist', 'AI 分析持股追蹤（平行）')
+            if actual_type == 'weekly':
+                taiwan_analysis = analyze_weekly_taiwan(global_analysis, technical_results, livermore_signals, week_range, twii_data)
+            else:
+                taiwan_analysis = analyze_taiwan_market(global_analysis, technical_results, livermore_signals, twii_data)
+            done_step('ai_taiwan', 'AI 分析台股')
 
+            # ── AI 分析持股追蹤（分批執行）────────────────────────
+            step('ai_watchlist', 'AI 分析持股追蹤')
             watch_tech = analyze_all_stocks(watchlist_stocks) if watchlist else {}
-
-            def _run_taiwan():
-                if actual_type == 'weekly':
-                    return analyze_weekly_taiwan(global_analysis, technical_results, livermore_signals, week_range, twii_data)
-                return analyze_taiwan_market(global_analysis, technical_results, livermore_signals, twii_data)
-
-            def _run_watchlist():
-                if not watchlist:
-                    return []
-                return analyze_watchlist_parallel(
+            if watchlist:
+                watchlist_analysis = analyze_watchlist_parallel(
                     watchlist, watchlist_stocks, watch_tech, news,
                     week_range=week_range, is_weekly=(actual_type == 'weekly')
                 )
-
-            with ThreadPoolExecutor(max_workers=2) as ex:
-                f_taiwan    = ex.submit(_run_taiwan)
-                f_watchlist = ex.submit(_run_watchlist)
-                taiwan_analysis    = f_taiwan.result()
-                watchlist_analysis = f_watchlist.result()
-
-            done_step('ai_taiwan', 'AI 分析台股')
+            else:
+                watchlist_analysis = []
             done_step('ai_watchlist', 'AI 分析持股追蹤')
 
             step('ai_sector', 'AI 推薦產業標的')
-            sector_recommendations = get_sector_recommendations(global_markets, technical_results, macro_data)
+            sector_recommendations = get_sector_recommendations(global_markets, technical_results, macro_data, watchlist_analysis)
             done_step('ai_sector', 'AI 推薦產業標的')
 
             step('generate_pdf', '產生報表')

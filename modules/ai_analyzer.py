@@ -4,17 +4,27 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 client = anthropic.Anthropic(api_key=config.CLAUDE_API_KEY)
 
-def _generate(prompt, max_tokens=2000):
-    try:
-        message = client.messages.create(
-            model="claude-sonnet-4-5",
-            max_tokens=max_tokens,
-            timeout=60,  # 每個 AI 請求最多等 60 秒
-            messages=[{"role": "user", "content": prompt}]
-        )
-        return message.content[0].text
-    except Exception as e:
-        return f"AI分析失敗: {e}"
+def _generate(prompt, max_tokens=2000, retries=1):
+    """呼叫 Claude API，失敗時自動重試一次"""
+    import time
+    for attempt in range(retries + 1):
+        try:
+            message = client.messages.create(
+                model="claude-sonnet-4-5",
+                max_tokens=max_tokens,
+                timeout=90,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            return message.content[0].text
+        except Exception as e:
+            err = str(e)
+            if attempt < retries:
+                # rate limit 等久一點再重試
+                wait = 15 if 'rate_limit' in err or '429' in err else 5
+                print(f'AI 請求失敗（第{attempt+1}次），{wait}秒後重試: {err[:100]}')
+                time.sleep(wait)
+            else:
+                return f"AI分析失敗: {err}"
 
 def analyze_global_market(global_markets, commodities, news):
     markets_text = '\n'.join([
@@ -238,9 +248,9 @@ def analyze_watchlist_parallel(watchlist, watchlist_stocks, watch_tech, news,
                 r = f.result()
                 if r:
                     results.append(r)
-        # 批次間等待 5 秒，避免超過 rate limit
+        # 批次間等待 3 秒，避免超過 rate limit
         if i + batch_size < len(watchlist):
-            time.sleep(5)
+            time.sleep(3)
     # 依原始順序排列
     order = {item['name']: i for i, item in enumerate(watchlist)}
     results.sort(key=lambda x: order.get(x['name'], 99))
