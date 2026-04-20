@@ -4,11 +4,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 client = anthropic.Anthropic(api_key=config.CLAUDE_API_KEY)
 
-def _generate(prompt):
+def _generate(prompt, max_tokens=2000):
     try:
         message = client.messages.create(
             model="claude-sonnet-4-5",
-            max_tokens=2000,
+            max_tokens=max_tokens,
+            timeout=60,  # 每個 AI 請求最多等 60 秒
             messages=[{"role": "user", "content": prompt}]
         )
         return message.content[0].text
@@ -205,6 +206,7 @@ def analyze_watchlist_parallel(watchlist, watchlist_stocks, watch_tech, news,
                                 week_range=None, is_weekly=False):
     """同時對所有持股發出 AI 分析請求，速度提升數倍"""
     from modules.candlestick import detect_patterns
+    from modules.stock_names import get_sector
 
     def _analyze_one(item):
         name = item['name']
@@ -215,12 +217,14 @@ def analyze_watchlist_parallel(watchlist, watchlist_stocks, watch_tech, news,
         hist = watchlist_stocks[name].get('history')
         patterns = detect_patterns(hist) if hist is not None else []
         stock_news = [n for n in news if str(name) in str(n.get('title', ''))]
+        # 自動取得產業分類
+        sector = get_sector(symbol, name)
         if is_weekly:
             ai_advice = analyze_weekly_watchlist(name, symbol, tech, patterns, stock_news, week_range, item.get('cost'))
         else:
             ai_advice = analyze_watchlist_stock(name, symbol, tech, patterns, stock_news, item.get('cost'))
         tech['cost'] = item.get('cost')
-        return {'name': name, 'symbol': symbol, 'technical': tech, 'patterns': patterns, 'ai_advice': ai_advice}
+        return {'name': name, 'symbol': symbol, 'technical': tech, 'patterns': patterns, 'ai_advice': ai_advice, 'sector': sector}
 
     results = []
     with ThreadPoolExecutor(max_workers=min(len(watchlist), 5)) as ex:

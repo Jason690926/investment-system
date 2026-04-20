@@ -1,5 +1,6 @@
 import yfinance as yf
 
+# ── 股票名稱對照表 ────────────────────────────────────────
 STOCK_NAMES = {
     '2330': '台積電', '2303': '聯電', '2454': '聯發科',
     '2379': '瑞昱', '3034': '聯詠', '2408': '南亞科',
@@ -31,15 +32,126 @@ STOCK_NAMES = {
     '2727': '王品', '1210': '大成', '1229': '聯華',
     '9910': '豐泰', '1476': '儒鴻', '1477': '聚陽',
     '5904': '寶雅', '2646': '星宇航空',
-'2610': '華航',
-'2618': '長榮航',
-'5765': '台灣虎航', '2920': '德記',
+    '5765': '台灣虎航', '2920': '德記',
     '2383': '台光電', '4958': '臻鼎-KY', '2351': '順德',
+    '6533': '晶心科', '6770': '力積電', '2409': '友達',
+    '4979': '華星光', '3481': '群創', '6741': '91APP',
+    '3702': '大聯大',
 }
+
+# ── 產業分類對照表 ────────────────────────────────────────
+SECTOR_MAP = {
+    # 半導體
+    '2330': '半導體', '2303': '半導體', '2454': '半導體',
+    '2379': '半導體', '3034': '半導體', '2408': '半導體',
+    '3711': '半導體', '3443': '半導體', '2344': '半導體',
+    '3529': '半導體', '5274': '半導體', '4919': '半導體',
+    '6415': '半導體', '2337': '半導體', '6533': '半導體',
+    '6104': '半導體', '6770': '半導體', '2449': '半導體',
+    '3008': '半導體',
+    # 電子零組件
+    '2327': '電子零組件', '6271': '電子零組件', '2360': '電子零組件',
+    '3714': '電子零組件', '2383': '電子零組件', '4958': '電子零組件',
+    '2351': '電子零組件',
+    # 電腦及週邊
+    '2317': '電腦及週邊', '2382': '廣達', '2357': '電腦及週邊',
+    '2353': '電腦及週邊', '4938': '電腦及週邊', '2301': '電腦及週邊',
+    '2474': '電腦及週邊', '2356': '電腦及週邊', '3231': '電腦及週邊',
+    '2324': '電腦及週邊', '2352': '電腦及週邊', '2376': '電腦及週邊',
+    '2498': '電腦及週邊',
+    # 光電面板
+    '2409': '光電面板', '3481': '光電面板',
+    # 光通訊
+    '4979': '光通訊',
+    # 電子通路
+    '3702': '電子通路',
+    # 電商軟體
+    '6741': '電商軟體',
+    # 電機機械
+    '2308': '電機機械', '1504': '電機機械', '2395': '電機機械',
+    # PCB
+    '3037': 'PCB', '6669': 'PCB',
+    # 電信
+    '3045': '電信', '4904': '電信', '2412': '電信',
+    # 金融銀行
+    '2881': '金融銀行', '2882': '金融銀行', '2886': '金融銀行',
+    '2891': '金融銀行', '2884': '金融銀行', '2892': '金融銀行',
+    '5880': '金融銀行', '2885': '金融銀行', '2890': '金融銀行',
+    '2887': '金融銀行', '2883': '金融銀行', '2880': '金融銀行',
+    '2823': '金融銀行', '2888': '金融銀行',
+    # 石化塑料
+    '1301': '石化塑料', '1303': '石化塑料', '6505': '石化塑料',
+    '1326': '石化塑料',
+    # 鋼鐵金屬
+    '2002': '鋼鐵金屬', '1605': '鋼鐵金屬',
+    # 航運
+    '2609': '航運', '2615': '航運', '2603': '航運',
+    '2605': '航運', '2606': '航運',
+    # 航空
+    '2618': '航空', '2610': '航空', '2646': '航空', '5765': '航空',
+    # 生技醫療
+    '1789': '生技醫療', '6446': '生技醫療', '1762': '生技醫療',
+    '4174': '生技醫療',
+    # 食品零售
+    '2912': '食品零售', '1210': '食品零售', '1229': '食品零售',
+    '1216': '食品零售',
+    # 觀光餐飲
+    '2711': '觀光餐飲', '2727': '觀光餐飲',
+    # 紡織
+    '9910': '紡織', '1476': '紡織', '1477': '紡織', '1402': '紡織',
+    # 建材水泥
+    '1101': '建材水泥', '1102': '建材水泥',
+    # 汽車
+    '2207': '汽車', '2105': '汽車',
+}
+
+# ── 用 yfinance 自動查詢產業 ──────────────────────────────
+def get_sector_from_yfinance(symbol):
+    """從 yfinance 查詢股票產業，台股通常回傳英文需轉換"""
+    SECTOR_TRANSLATE = {
+        'Technology': '科技', 'Financial Services': '金融銀行',
+        'Healthcare': '生技醫療', 'Industrials': '工業',
+        'Consumer Cyclical': '消費循環', 'Consumer Defensive': '民生消費',
+        'Basic Materials': '原物料', 'Communication Services': '通訊服務',
+        'Energy': '能源', 'Real Estate': '房地產',
+        'Utilities': '公用事業', 'Electronic Technology': '電子科技',
+        'Finance': '金融銀行', 'Health Technology': '生技醫療',
+        'Consumer Non-Durables': '民生消費', 'Producer Manufacturing': '製造業',
+        'Transportation': '運輸', 'Retail Trade': '零售',
+        'Commercial Services': '商業服務', 'Distribution Services': '通路',
+    }
+    try:
+        info = yf.Ticker(symbol).info
+        sector = info.get('sector', '') or info.get('industry', '')
+        return SECTOR_TRANSLATE.get(sector, sector) if sector else None
+    except:
+        return None
+
+def get_sector(symbol, name=''):
+    """取得股票產業分類，優先使用本地對照表，其次 yfinance"""
+    base = symbol.replace('.TW', '').replace('.TWO', '')
+    # 優先本地對照表
+    if base in SECTOR_MAP:
+        return SECTOR_MAP[base]
+    # 其次 yfinance
+    sector = get_sector_from_yfinance(symbol)
+    if sector:
+        return sector
+    # 最後根據代號範圍推測
+    try:
+        code = int(base)
+        if 1000 <= code <= 1999: return '傳統產業'
+        if 2000 <= code <= 2999: return '電子'
+        if 3000 <= code <= 3999: return '電子'
+        if 4000 <= code <= 4999: return '電子'
+        if 5000 <= code <= 5999: return '其他'
+        if 6000 <= code <= 6999: return '電子'
+    except:
+        pass
+    return '其他'
 
 def get_chinese_name(symbol):
     base = symbol.replace('.TW', '').replace('.TWO', '')
-    # 第一優先：yfinance（有中文才用）
     try:
         ticker = yf.Ticker(symbol)
         info = ticker.info
@@ -48,14 +160,12 @@ def get_chinese_name(symbol):
             return long_name.strip()
     except:
         pass
-    # 第二優先：對照表
     if base in STOCK_NAMES:
         return STOCK_NAMES[base]
     return base
 
 def enrich_name(symbol, fallback_name=''):
     base = symbol.replace('.TW', '').replace('.TWO', '')
-    # 第一優先：yfinance（有中文才用）
     try:
         ticker = yf.Ticker(symbol)
         info = ticker.info
@@ -64,10 +174,8 @@ def enrich_name(symbol, fallback_name=''):
             return long_name.strip()
     except:
         pass
-    # 第二優先：對照表
     if base in STOCK_NAMES:
         return STOCK_NAMES[base]
-    # 第三優先：傳入名稱
     if fallback_name and fallback_name not in (symbol, base, ''):
         return fallback_name
     return base
