@@ -1,27 +1,31 @@
 import yfinance as yf
 import requests
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import config
 
-# ── 單檔抓取（強制最新資料）────────────────────────────────
+TW = timezone(timedelta(hours=8))
+
 def _fetch_ticker(name, symbol, days=10):
-    """用日期區間抓取，避免 yfinance 快取回傳舊資料"""
+    """用 yf.download() 強制抓最新資料，避免任何快取問題"""
     try:
-        end = datetime.now()
+        end = datetime.now(TW)
         start = end - timedelta(days=days)
-        ticker = yf.Ticker(symbol)
-        ticker._history = None  # 清除快取
-        hist = ticker.history(
+        hist = yf.download(
+            symbol,
             start=start.strftime('%Y-%m-%d'),
-            end=end.strftime('%Y-%m-%d'),
+            end=(end + timedelta(days=1)).strftime('%Y-%m-%d'),
             auto_adjust=True,
-            actions=False
+            progress=False,
+            show_errors=False
         )
+        # 處理 MultiIndex 欄位
+        if hasattr(hist.columns, 'levels'):
+            hist.columns = hist.columns.droplevel(1)
         if len(hist) >= 2:
-            prev = hist['Close'].iloc[-2]
-            curr = hist['Close'].iloc[-1]
+            prev = float(hist['Close'].iloc[-2])
+            curr = float(hist['Close'].iloc[-1])
             change = ((curr - prev) / prev) * 100
             return name, {
                 'price': round(curr, 2),
@@ -33,31 +37,33 @@ def _fetch_ticker(name, symbol, days=10):
     return name, {'price': 0, 'change': 0, 'symbol': symbol}
 
 def _fetch_taiwan_ticker(name, symbol):
-    """台股：用日期區間強制抓最新資料，並檢查資料新鮮度"""
+    """台股：用 yf.download() 強制抓最新120天資料"""
     try:
-        end = datetime.now()
-        start = end - timedelta(days=120)  # 加長到 120 天，確保有足夠資料算 MA60
-        ticker = yf.Ticker(symbol)
-        ticker._history = None  # 清除快取
-        hist = ticker.history(
+        end = datetime.now(TW)
+        start = end - timedelta(days=120)
+        hist = yf.download(
+            symbol,
             start=start.strftime('%Y-%m-%d'),
-            end=end.strftime('%Y-%m-%d'),
+            end=(end + timedelta(days=1)).strftime('%Y-%m-%d'),
             auto_adjust=True,
-            actions=False
+            progress=False,
+            show_errors=False
         )
+        # 處理 MultiIndex 欄位
+        if hasattr(hist.columns, 'levels'):
+            hist.columns = hist.columns.droplevel(1)
         if len(hist) >= 2:
-            curr = hist['Close'].iloc[-1]
-            prev = hist['Close'].iloc[-2]
+            curr = float(hist['Close'].iloc[-1])
+            prev = float(hist['Close'].iloc[-2])
             change = ((curr - prev) / prev) * 100
 
-            # 記錄最後更新日期
             last_date = hist.index[-1]
             if hasattr(last_date, 'date'):
                 last_date = last_date.date()
-            today = datetime.now().date()
-            days_diff = (today - last_date).days
-            if days_diff > 5:
-                print(f'⚠️ {name}({symbol}) 資料可能過舊，最後更新：{last_date}（{days_diff}天前）')
+            today_tw = datetime.now(TW).date()
+            days_diff = (today_tw - last_date).days
+            if days_diff > 3:
+                print(f'⚠️ {name}({symbol}) 資料可能過舊：{last_date}（{days_diff}天前）')
 
             return name, {
                 'symbol': symbol,
@@ -67,11 +73,10 @@ def _fetch_taiwan_ticker(name, symbol):
                 'history': hist,
                 'last_date': str(last_date)
             }
-    except:
-        pass
+    except Exception as e:
+        print(f'抓取失敗 {name}({symbol}): {e}')
     return name, None
 
-# ── 全球市場（平行）──────────────────────────────────────
 def get_global_markets():
     symbols = {
         '美國道瓊': '^DJI',
@@ -92,7 +97,6 @@ def get_global_markets():
             result[name] = data
     return result
 
-# ── 大宗商品（平行）──────────────────────────────────────
 def get_commodities():
     symbols = {
         '黃金': 'GC=F',
@@ -108,7 +112,6 @@ def get_commodities():
             result[name] = data
     return result
 
-# ── 總體資產（平行）──────────────────────────────────────
 def get_macro_assets():
     symbols = {
         '美國10年期公債殖利率': '^TNX',
@@ -125,7 +128,6 @@ def get_macro_assets():
             result[name] = data
     return result
 
-# ── 台股（平行）──────────────────────────────────────────
 def get_taiwan_stocks(symbols=None):
     if symbols is None:
         symbols = {
@@ -147,7 +149,6 @@ def get_taiwan_stocks(symbols=None):
                 result[name] = data
     return result
 
-# ── 財經新聞 ──────────────────────────────────────────────
 def get_financial_news():
     url = "https://newsapi.org/v2/everything"
     params = {
@@ -171,7 +172,6 @@ def get_financial_news():
         print(f"新聞抓取失敗: {e}")
     return []
 
-# ── 持股追蹤（平行）──────────────────────────────────────
 def get_watchlist_stocks(watchlist):
     symbols = {item['name']: item['symbol'] for item in watchlist}
     result = get_taiwan_stocks(symbols)
@@ -183,7 +183,6 @@ def get_watchlist_stocks(watchlist):
             result[name]['buy_date'] = item.get('buy_date')
     return result
 
-# ── 一次抓全部（平行）────────────────────────────────────
 def get_all_data():
     print("平行抓取所有資料中...")
     with ThreadPoolExecutor(max_workers=4) as ex:
@@ -200,5 +199,5 @@ def get_all_data():
         'commodities': commodities,
         'taiwan_stocks': taiwan_stocks,
         'news': news,
-        'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M')
+        'timestamp': datetime.now(TW).strftime('%Y-%m-%d %H:%M')
     }
