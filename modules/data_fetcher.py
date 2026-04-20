@@ -11,10 +11,13 @@ def _fetch_ticker(name, symbol, days=10):
     try:
         end = datetime.now()
         start = end - timedelta(days=days)
-        hist = yf.Ticker(symbol).history(
+        ticker = yf.Ticker(symbol)
+        ticker._history = None  # 清除快取
+        hist = ticker.history(
             start=start.strftime('%Y-%m-%d'),
             end=end.strftime('%Y-%m-%d'),
-            auto_adjust=True
+            auto_adjust=True,
+            actions=False
         )
         if len(hist) >= 2:
             prev = hist['Close'].iloc[-2]
@@ -33,11 +36,14 @@ def _fetch_taiwan_ticker(name, symbol):
     """台股：用日期區間強制抓最新資料，並檢查資料新鮮度"""
     try:
         end = datetime.now()
-        start = end - timedelta(days=90)
-        hist = yf.Ticker(symbol).history(
+        start = end - timedelta(days=120)  # 加長到 120 天，確保有足夠資料算 MA60
+        ticker = yf.Ticker(symbol)
+        ticker._history = None  # 清除快取
+        hist = ticker.history(
             start=start.strftime('%Y-%m-%d'),
             end=end.strftime('%Y-%m-%d'),
-            auto_adjust=True
+            auto_adjust=True,
+            actions=False
         )
         if len(hist) >= 2:
             curr = hist['Close'].iloc[-1]

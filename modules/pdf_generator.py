@@ -171,7 +171,7 @@ def generate_daily_report(global_markets, commodities, news,
         for n, d in macro_data.items()
     )
     watchlist_html = _render_watchlist_html(watchlist_analysis, 'daily')
-    signals_html = _build_signals_html(livermore_signals, watchlist_analysis, include_entry=False)
+    signals_html = _build_signals_html(livermore_signals, watchlist_analysis, include_entry=True)
 
     html = f'''<!DOCTYPE html>
 <html lang="zh-TW"><head><meta charset="UTF-8"><link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet"><style>{DAILY_CSS}</style></head>
@@ -179,6 +179,7 @@ def generate_daily_report(global_markets, commodities, news,
 <div class="header">
   <h1>投資建議每日晨報</h1>
   <p>{timestamp} ｜ 資料來源：即時市場數據 + Claude AI 分析</p>
+  <p style="font-size:11px;opacity:0.7;margin-top:4px">⚠️ 股價資料來自 yfinance，顯示最近一個交易日收盤價（台股收盤後約1小時更新）</p>
 </div>
 <div class="two-col">
   <div class="section"><h2>全球股市</h2>
@@ -204,7 +205,7 @@ def generate_daily_report(global_markets, commodities, news,
   <div class="analysis-text">{_md(sector_recommendations)}</div>
 </div>
 <div class="section"><h2>李佛摩法則訊號總覽</h2>
-  <table><tr><th>股票</th><th>建議</th><th>分數</th><th>動作</th><th>通過條件</th></tr>
+  <table><tr><th>股票</th><th>建議</th><th>分數</th><th>動作</th><th>進場區間</th><th>目標價</th><th>停損價</th><th>通過條件</th></tr>
   {signals_html}</table>
 </div>
 <div class="disclaimer">免責聲明：本報表為自動化系統產生，所有分析與建議僅供學習參考，不構成實際投資建議。投資有風險，請自行評估後謹慎決策。</div>
@@ -245,6 +246,7 @@ def generate_weekly_report(global_markets, commodities, news,
   <h1>投資建議週報</h1>
   <p>{timestamp} ｜ 資料來源：即時市場數據 + Claude AI 分析</p>
   <div class="week-badge">{week_range}</div>
+  <p style="font-size:11px;opacity:0.7;margin-top:4px">⚠️ 股價資料來自 yfinance，顯示最近一個交易日收盤價（台股收盤後約1小時更新）</p>
 </div>
 <div class="two-col">
   <div class="section"><h2>本週全球股市</h2>
