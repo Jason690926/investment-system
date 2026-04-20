@@ -419,47 +419,59 @@ RSI：{twii_data.get('RSI')}
     return _generate(prompt)
 
 def analyze_weekly_watchlist(name, symbol, technical_data, patterns, news_list, week_range, cost=None):
+    from datetime import datetime
     pattern_descs = '\n'.join([f"- {p['name']}：{p['desc']}" for p in patterns]) if patterns else '無明顯型態'
     news_text = '\n'.join([f"- {n['title']}" for n in news_list[:5]]) if news_list else '暫無相關新聞'
     cost_info = f'持股成本：{cost}元' if cost else '（未設定成本）'
-    prompt = f"""
-你是一位專業的台股分析師。請針對以下個股提供本週回顧與下週建議。
-
-【股票資訊】
-股票：{name}（{symbol}）
-{cost_info}
-現價：{technical_data.get('price')}
-本週漲跌：{technical_data.get('change')}%
-趨勢：{technical_data.get('trend')}
-RSI：{technical_data.get('RSI')}
-MA5：{technical_data.get('MA5')} MA20：{technical_data.get('MA20')}
-支撐一：{technical_data.get('support')} 支撐二：{technical_data.get('support2')}
-壓力一：{technical_data.get('resistance2')} 壓力二：{technical_data.get('resistance')}
-
-【本週K線型態】
-{pattern_descs}
-
-【本週相關新聞】
-{news_text}
-
-【分析週期】{week_range}
-
-每檔股票分析必須包含以下結構：
-一、本週走勢簡評（2-3點）
-二、K線型態對下週的啟示
-三、下週操作建議
-四、價位資訊（給出具體數字）：
-   - <span class="support-level">支撐一：XXX元</span>
-   - <span class="support-level">支撐二：XXX元</span>
-   - <span class="resistance-level">壓力一：XXX元</span>
-   - <span class="resistance-level">壓力二：XXX元</span>
-   - <span class="close-price">進場：XXX~XXX元</span>
-   - <span class="target-price">目標一：XXX元</span>
-   - <span class="target-price">目標二：XXX元</span>
-   - <span class="stop-loss">停損：XXX元</span>
-五、特別注意事項
-
-重要規定：所有價位必須是具體數字，不可用百分比。
-重要提醒：以上為模擬分析，不構成實際投資建議。
-"""
+    pnl_info = ''
+    if cost and technical_data.get('price'):
+        try:
+            pnl = ((float(technical_data.get('price')) - float(cost)) / float(cost)) * 100
+            pnl_info = f'本週損益：{pnl:+.2f}%'
+        except:
+            pass
+    s1 = technical_data.get('support', '--')
+    s2 = technical_data.get('support2', '--')
+    r1 = technical_data.get('resistance2', '--')
+    r2 = technical_data.get('resistance', '--')
+    el = technical_data.get('entry_low', '--')
+    eh = technical_data.get('entry_high', '--')
+    t1 = technical_data.get('target1', '--')
+    t2 = technical_data.get('target2', '--')
+    sl = technical_data.get('stop_loss_price', '--')
+    prompt = (
+        f"你是一位專業的台股分析師。分析週期為 {week_range}，請根據本週收盤數據給出下週操作建議。\n\n"
+        f"⚠️ 嚴格規定：所有價位必須使用下方提供的真實數字，嚴禁捏造或自行推算\n\n"
+        f"【本週收盤數據（所有價位必須來自此處）】\n"
+        f"股票：{name}（{symbol}）\n"
+        f"{cost_info}\n"
+        f"{pnl_info}\n"
+        f"本週收盤價：{technical_data.get('price')} 元\n"
+        f"本週漲跌：{technical_data.get('change')}%\n"
+        f"趨勢：{technical_data.get('trend')}\n"
+        f"RSI(14)：{technical_data.get('RSI')}\n"
+        f"MA5：{technical_data.get('MA5')} MA20：{technical_data.get('MA20')} MA60：{technical_data.get('MA60')}\n"
+        f"近20日支撐一：{s1} 元 / 支撐二：{s2} 元\n"
+        f"近20日壓力一：{r1} 元 / 壓力二：{r2} 元\n"
+        f"建議進場區間：{el}~{eh} 元\n"
+        f"目標一：{t1} 元 / 目標二：{t2} 元\n"
+        f"建議停損：{sl} 元\n\n"
+        f"【本週K線型態】\n{pattern_descs}\n\n"
+        f"【本週相關新聞】\n{news_text}\n\n"
+        f"請提供下週操作建議，格式如下：\n"
+        f"一、本週走勢解讀（2-3點）\n"
+        f"二、K線型態對下週的啟示\n"
+        f"三、下週操作策略（明確說明「下週如果...則...」）\n"
+        f"四、下週關鍵價位（直接使用上方提供的數字，不可修改）：\n"
+        f'   - <span class="support-level">支撐一：{s1} 元</span>\n'
+        f'   - <span class="support-level">支撐二：{s2} 元</span>\n'
+        f'   - <span class="resistance-level">壓力一：{r1} 元</span>\n'
+        f'   - <span class="resistance-level">壓力二：{r2} 元</span>\n'
+        f'   - <span class="close-price">下週進場：{el}~{eh} 元</span>\n'
+        f'   - <span class="target-price">目標一：{t1} 元</span>\n'
+        f'   - <span class="target-price">目標二：{t2} 元</span>\n'
+        f'   - <span class="stop-loss">停損：{sl} 元</span>\n'
+        f"五、特別注意事項（下週需觀察的訊號）\n\n"
+        f"重要提醒：以上為模擬分析，不構成實際投資建議。"
+    )
     return _generate(prompt)
