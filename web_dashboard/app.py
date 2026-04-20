@@ -505,23 +505,33 @@ def generate_report(report_type):
             monday, friday = get_week_range()
             week_range = f'{monday.strftime("%Y/%m/%d")} ~ {friday.strftime("%Y/%m/%d")}'
 
+            # ── 所有資料來源同時平行抓取 ─────────────────────
             step('fetch_global', '抓取全球市場資料')
-            global_markets = get_global_markets()
-            commodities = get_commodities()
-            done_step('fetch_global', '抓取全球市場資料')
-
             step('fetch_taiwan', '抓取台股資料')
-            taiwan_stocks = get_taiwan_stocks()
-            done_step('fetch_taiwan', '抓取台股資料')
-
             step('fetch_news', '抓取財經新聞')
-            news = get_financial_news()
-            macro_data = get_macro_assets()
+
+            with ThreadPoolExecutor(max_workers=5) as ex:
+                f_global    = ex.submit(get_global_markets)
+                f_commodity = ex.submit(get_commodities)
+                f_taiwan    = ex.submit(get_taiwan_stocks)
+                f_news      = ex.submit(get_financial_news)
+                f_macro     = ex.submit(get_macro_assets)
+                global_markets = f_global.result()
+                commodities    = f_commodity.result()
+                taiwan_stocks  = f_taiwan.result()
+                news           = f_news.result()
+                macro_data     = f_macro.result()
+
+            done_step('fetch_global', '抓取全球市場資料')
+            done_step('fetch_taiwan', '抓取台股資料')
             done_step('fetch_news', '抓取財經新聞')
 
             step('fetch_watchlist', '抓取持股追蹤資料')
             watchlist = get_watchlist()
-            watchlist_stocks = get_watchlist_stocks(watchlist) if watchlist else {}
+            # 持股抓取與全局技術分析同時進行
+            with ThreadPoolExecutor(max_workers=2) as ex:
+                f_watchlist_stocks = ex.submit(get_watchlist_stocks, watchlist) if watchlist else None
+                watchlist_stocks = f_watchlist_stocks.result() if f_watchlist_stocks else {}
             done_step('fetch_watchlist', '抓取持股追蹤資料')
 
             step('technical', '進行技術分析')
