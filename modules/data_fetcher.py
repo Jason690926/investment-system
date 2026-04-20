@@ -8,21 +8,17 @@ import config
 TW = timezone(timedelta(hours=8))
 
 def _fetch_ticker(name, symbol, days=10):
-    """用 yf.download() 強制抓最新資料，避免任何快取問題"""
+    """強制抓最新資料"""
     try:
         end = datetime.now(TW)
         start = end - timedelta(days=days)
-        hist = yf.download(
-            symbol,
+        # 建立新的 Ticker 物件，避免快取
+        ticker = yf.Ticker(symbol)
+        hist = ticker.history(
             start=start.strftime('%Y-%m-%d'),
             end=(end + timedelta(days=1)).strftime('%Y-%m-%d'),
-            auto_adjust=True,
-            progress=False,
-            show_errors=False
+            auto_adjust=True
         )
-        # 處理 MultiIndex 欄位
-        if hasattr(hist.columns, 'levels'):
-            hist.columns = hist.columns.droplevel(1)
         if len(hist) >= 2:
             prev = float(hist['Close'].iloc[-2])
             curr = float(hist['Close'].iloc[-1])
@@ -37,21 +33,16 @@ def _fetch_ticker(name, symbol, days=10):
     return name, {'price': 0, 'change': 0, 'symbol': symbol}
 
 def _fetch_taiwan_ticker(name, symbol):
-    """台股：用 yf.download() 強制抓最新120天資料"""
+    """台股：強制抓最新120天資料"""
     try:
         end = datetime.now(TW)
         start = end - timedelta(days=120)
-        hist = yf.download(
-            symbol,
+        ticker = yf.Ticker(symbol)
+        hist = ticker.history(
             start=start.strftime('%Y-%m-%d'),
             end=(end + timedelta(days=1)).strftime('%Y-%m-%d'),
-            auto_adjust=True,
-            progress=False,
-            show_errors=False
+            auto_adjust=True
         )
-        # 處理 MultiIndex 欄位
-        if hasattr(hist.columns, 'levels'):
-            hist.columns = hist.columns.droplevel(1)
         if len(hist) >= 2:
             curr = float(hist['Close'].iloc[-1])
             prev = float(hist['Close'].iloc[-2])
