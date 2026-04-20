@@ -226,26 +226,90 @@ def analyze_watchlist_parallel(watchlist, watchlist_stocks, watch_tech, news,
         tech['cost'] = item.get('cost')
         return {'name': name, 'symbol': symbol, 'technical': tech, 'patterns': patterns, 'ai_advice': ai_advice, 'sector': sector}
 
+    import time
     results = []
-    with ThreadPoolExecutor(max_workers=min(len(watchlist), 5)) as ex:
-        futures = {ex.submit(_analyze_one, item): item['name'] for item in watchlist}
-        for f in as_completed(futures):
-            r = f.result()
-            if r:
-                results.append(r)
+    # 分批執行，每批 3 支，避免超過 API rate limit
+    batch_size = 3
+    for i in range(0, len(watchlist), batch_size):
+        batch = watchlist[i:i+batch_size]
+        with ThreadPoolExecutor(max_workers=batch_size) as ex:
+            futures = {ex.submit(_analyze_one, item): item['name'] for item in batch}
+            for f in as_completed(futures):
+                r = f.result()
+                if r:
+                    results.append(r)
+        # 批次間等待 5 秒，避免超過 rate limit
+        if i + batch_size < len(watchlist):
+            time.sleep(5)
     # 依原始順序排列
     order = {item['name']: i for i, item in enumerate(watchlist)}
     results.sort(key=lambda x: order.get(x['name'], 99))
     return results
 
-def get_sector_recommendations(global_markets, technical_results, macro_data):
+def _verify_stock_price(symbol):
+    """用 yfinance 驗證股票真實現價，回傳 (price, change) 或 None"""
+    import yfinance as yf
+    from datetime import datetime, timedelta
+    try:
+        end = datetime.now()
+        start = end - timedelta(days=10)
+        hist = yf.Ticker(symbol).history(
+            start=start.strftime('%Y-%m-%d'),
+            end=end.strftime('%Y-%m-%d'),
+            auto_adjust=True
+        )
+        if len(hist) >= 2:
+            price = round(hist['Close'].iloc[-1], 2)
+            prev  = hist['Close'].iloc[-2]
+            change = round(((price - prev) / prev) * 100, 2)
+            return price, change
+    except:
+        pass
+    return None
+
+def _enrich_sector_with_real_prices(ai_text):
+    """從 AI 推薦文字中找出股票代號，查詢真實股價後補充到文字中"""
+    import re, yfinance as yf
+    from datetime import datetime, timedelta
+
+    # 找出所有股票代號（格式：XXXX.TW 或 XXXX.TWO）
+    symbols = re.findall(r'\b(\d{4,5}\.TW[O]?)\b', ai_text)
+    symbols = list(set(symbols))
+
+    if not symbols:
+        return ai_text + '\n\n⚠️ 注意：以上為 AI 分析建議，價位僅供參考，請自行查詢最新股價後再做決策。'
+
+    # 批次查詢真實股價
+    price_info = {}
+    for symbol in symbols:
+        result = _verify_stock_price(symbol)
+        if result:
+            price, change = result
+            sign = '+' if change >= 0 else ''
+            price_info[symbol] = f'現價 NT${price:,}（{sign}{change}%）'
+
+    # 在文字末尾加上即時股價驗證表
+    if price_info:
+        price_table = '\n\n<div style="background:#fff3e0;border:1px solid #ffe0b2;border-radius:6px;padding:12px;margin-top:12px">'
+        price_table += '<div style="font-weight:600;color:#e65100;margin-bottom:8px">📊 系統即時驗證股價（{} 查詢）</div>'.format(
+            datetime.now().strftime('%Y/%m/%d %H:%M')
+        )
+        for symbol, info in price_info.items():
+            price_table += f'<div style="font-size:13px;margin:4px 0">• {symbol}：{info}</div>'
+        price_table += '<div style="font-size:11px;color:#888;margin-top:8px">⚠️ AI 建議的進場/目標/停損價位為估算參考，請以上方即時股價為準自行計算。</div>'
+        price_table += '</div>'
+        return ai_text + price_table
+    else:
+        return ai_text + '\n\n⚠️ 注意：以上為 AI 分析建議，請自行查詢最新股價後再做決策。'
+
+
+def get_sector_recommendations(global_markets, technical_results, macro_data, watchlist_analysis=None):
     markets_text = '\n'.join([
         f"{name}: {data['price']} ({'+' if data['change']>0 else ''}{data['change']}%)"
         for name, data in global_markets.items()
     ])
-    # 帶入完整真實股價資料
     tech_text = '\n'.join([
-        f"{name}（{data.get('symbol','')}）: 現價={data.get('price')} 趨勢={data.get('trend')} RSI={data.get('RSI')} MA5={data.get('MA5')} MA20={data.get('MA20')} 支撐={data.get('support')} 壓力={data.get('resistance')} 進場區間={data.get('entry_low')}~{data.get('entry_high')} 目標一={data.get('target1')} 目標二={data.get('target2')} 停損={data.get('stop_loss_price')}"
+        f"{name}（{data.get('symbol','')}）: 現價={data.get('price')} 趨勢={data.get('trend')} RSI={data.get('RSI')} MA5={data.get('MA5')} MA20={data.get('MA20')}"
         for name, data in technical_results.items()
     ])
     macro_text = '\n'.join([
@@ -253,16 +317,13 @@ def get_sector_recommendations(global_markets, technical_results, macro_data):
         for name, data in macro_data.items()
     ])
     prompt = f"""
-你是一位專業的台股選股分析師。請根據目前大盤趨勢推薦適合投資的標的。
+你是一位專業的台股選股分析師。請根據目前大盤趨勢，自由推薦最值得關注的台股標的。
 
-⚠️ 價位嚴格規定（違反即為錯誤）：
-- 所有推薦標的的進場價、目標價、停損價，必須直接使用下方「追蹤標的技術面」提供的數字
-- 進場區間 = entry_low ~ entry_high（直接使用，不可自行修改）
-- 目標一 = target1（直接使用）
-- 目標二 = target2（直接使用）
-- 停損 = stop_loss_price（直接使用）
-- 嚴禁自行推算或捏造任何價位數字
-- 只能從下方清單中推薦已有真實數據的股票，不可推薦清單以外的股票
+⚠️ 重要規定：
+- 推薦的股票必須是真實存在的台股上市/上櫃公司
+- 請提供正確的股票代號（上市加.TW，上櫃加.TWO）
+- 所有價位僅作為「分析師估算參考」，系統會另行驗證真實股價
+- 請務必在每檔股票說明推薦理由和目前市場環境
 
 【全球市場概況】
 {markets_text}
@@ -270,29 +331,29 @@ def get_sector_recommendations(global_markets, technical_results, macro_data):
 【總體資產走勢】
 {macro_text}
 
-【追蹤標的技術面（所有價位必須從此取用）】
+【目前追蹤標的技術面（供參考）】
 {tech_text}
 
 請提供：
 1. 目前大盤最強勢的2-3個產業（說明為何強勢）
-2. 從上方清單中，每個產業推薦1-2檔標的（共5檔以內），價位直接使用上方提供的數字
+2. 每個產業各推薦1-2檔台股（共5檔以內）
 
-每檔推薦標的格式：
-股票名稱（代號）
-- 推薦理由（2-3點，說明為何從清單中選此檔）
-- <span class="close-price">現價：XXX元（取自上方數據）</span>
-- <span class="close-price">進場：XXX~XXX元（取自 entry_low~entry_high）</span>
-- <span class="target-price">目標一：XXX元（取自 target1）</span>
-- <span class="target-price">目標二：XXX元（取自 target2）</span>
-- <span class="stop-loss">停損：XXX元（取自 stop_loss_price）</span>
+每檔推薦標的格式（嚴格遵守）：
+【股票名稱】（代號如：2330.TW 或 6104.TWO）
+- 推薦理由（2-3點）
+- 產業背景與當前催化劑
+- 技術面觀察
 
 短期標題：<span class="short-term-title">▶ 短期推薦</span>
 中期標題：<span class="mid-term-title">▶ 中期布局</span>
 
-重要規定：所有價位必須直接使用上方提供的真實數字，嚴禁自行推算。
+注意：不要在回覆中自行填入具體價位數字，系統會自動用即時股價補充。
 重要提醒：以上為模擬分析，不構成實際投資建議。
 """
-    return _generate(prompt)
+    raw_result = _generate(prompt)
+
+    # 系統自動驗證並補充真實股價
+    return _enrich_sector_with_real_prices(raw_result)
 
 def analyze_weekly_global(global_markets, commodities, news, macro_data, week_range):
     markets_text = '\n'.join([
