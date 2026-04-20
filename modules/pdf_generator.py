@@ -114,7 +114,7 @@ def _build_signals_html(livermore_signals, watchlist_analysis, include_entry=Fal
 
 
 DAILY_CSS = '''
-body{font-family:"Microsoft JhengHei",Arial,sans-serif;margin:0;padding:20px;color:#333;font-size:14px;background:#f5f5f5}
+body{font-family:"Noto Sans TC","Microsoft JhengHei",Arial,sans-serif;margin:0;padding:20px;color:#333;font-size:14px;background:#f5f5f5}
 .header{background:#1a237e;color:white;padding:24px;border-radius:8px;margin-bottom:20px}
 .header h1{margin:0 0 6px 0;font-size:22px}
 .header p{margin:0;opacity:.85;font-size:13px}
@@ -174,7 +174,7 @@ def generate_daily_report(global_markets, commodities, news,
     signals_html = _build_signals_html(livermore_signals, watchlist_analysis, include_entry=False)
 
     html = f'''<!DOCTYPE html>
-<html lang="zh-TW"><head><meta charset="UTF-8"><style>{DAILY_CSS}</style></head>
+<html lang="zh-TW"><head><meta charset="UTF-8"><link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet"><style>{DAILY_CSS}</style></head>
 <body>
 <div class="header">
   <h1>投資建議每日晨報</h1>
@@ -239,7 +239,7 @@ def generate_weekly_report(global_markets, commodities, news,
     signals_html = _build_signals_html(livermore_signals, watchlist_analysis, include_entry=True)
 
     html = f'''<!DOCTYPE html>
-<html lang="zh-TW"><head><meta charset="UTF-8"><style>{WEEKLY_CSS}</style></head>
+<html lang="zh-TW"><head><meta charset="UTF-8"><link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet"><style>{WEEKLY_CSS}</style></head>
 <body>
 <div class="header">
   <h1>投資建議週報</h1>
