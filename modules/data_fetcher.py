@@ -103,6 +103,43 @@ def get_commodities():
             result[name] = data
     return result
 
+def _fetch_macro_ticker(name, symbol):
+    """抓取宏觀資產資料，包含今日、7日、14日、30日、60日漲跌幅"""
+    try:
+        end = datetime.now(TW)
+        start = end - timedelta(days=90)  # 抓90天確保60日有資料
+        ticker = yf.Ticker(symbol)
+        hist = ticker.history(
+            start=start.strftime('%Y-%m-%d'),
+            end=(end + timedelta(days=1)).strftime('%Y-%m-%d'),
+            auto_adjust=True
+        )
+        if len(hist) < 2:
+            return name, {'price': 0, 'change': 0, 'symbol': symbol}
+
+        curr = float(hist['Close'].iloc[-1])
+        prev = float(hist['Close'].iloc[-2])
+        change_1d = round(((curr - prev) / prev) * 100, 2)
+
+        def pct_change(days):
+            if len(hist) >= days:
+                past = float(hist['Close'].iloc[-days])
+                return round(((curr - past) / past) * 100, 2)
+            return None
+
+        return name, {
+            'price': round(curr, 3),
+            'change': change_1d,
+            'change_7d': pct_change(7),
+            'change_14d': pct_change(14),
+            'change_30d': pct_change(30),
+            'change_60d': pct_change(60),
+            'symbol': symbol
+        }
+    except:
+        pass
+    return name, {'price': 0, 'change': 0, 'symbol': symbol}
+
 def get_macro_assets():
     symbols = {
         '美國10年期公債殖利率': '^TNX',
@@ -113,7 +150,7 @@ def get_macro_assets():
     }
     result = {}
     with ThreadPoolExecutor(max_workers=5) as ex:
-        futures = {ex.submit(_fetch_ticker, n, s): n for n, s in symbols.items()}
+        futures = {ex.submit(_fetch_macro_ticker, n, s): n for n, s in symbols.items()}
         for f in as_completed(futures):
             name, data = f.result()
             result[name] = data

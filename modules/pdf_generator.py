@@ -169,8 +169,19 @@ def generate_daily_report(global_markets, commodities, news,
         f'<tr><td>{n}</td><td class="close-price">{d["price"]:,}</td><td class="{"up" if d["change"]>0 else "down"}">{("+" if d["change"]>0 else "")}{d["change"]}%</td></tr>'
         for n, d in global_markets.items()
     )
+    def _fmt_chg(v):
+        if v is None: return '<td style="color:#999">N/A</td>'
+        cls = 'up' if v > 0 else 'down'
+        return f'<td class="{cls}">{("+" if v>0 else "")}{v}%</td>'
+
     macro_html = ''.join(
-        f'<tr><td>{n}</td><td class="close-price">{d["price"]}</td><td class="{"up" if d["change"]>0 else "down"}">{("+" if d["change"]>0 else "")}{d["change"]}%</td></tr>'
+        f'<tr><td>{n}</td><td class="close-price">{d["price"]}</td>'
+        f'{_fmt_chg(d.get("change"))}'
+        f'{_fmt_chg(d.get("change_7d"))}'
+        f'{_fmt_chg(d.get("change_14d"))}'
+        f'{_fmt_chg(d.get("change_30d"))}'
+        f'{_fmt_chg(d.get("change_60d"))}'
+        f'</tr>'
         for n, d in macro_data.items()
     )
     watchlist_html = _render_watchlist_html(watchlist_analysis, 'daily')
@@ -189,7 +200,7 @@ def generate_daily_report(global_markets, commodities, news,
     <table><tr><th>市場</th><th>收盤價</th><th>漲跌</th></tr>{markets_html}</table>
   </div>
   <div class="section"><h2>美債／黃金／石油</h2>
-    <table><tr><th>資產</th><th>價格</th><th>漲跌</th></tr>{macro_html}</table>
+    <table><tr><th>資產</th><th>價格</th><th>今日</th><th>7日</th><th>14日</th><th>30日</th><th>60日</th></tr>{macro_html}</table>
   </div>
 </div>
 <div class="section"><h2>美債／黃金／石油 白話解析</h2>
@@ -238,8 +249,19 @@ def generate_weekly_report(global_markets, commodities, news,
         f'<tr><td>{n}</td><td class="close-price">{d["price"]:,}</td><td class="{"up" if d["change"]>0 else "down"}">{("+" if d["change"]>0 else "")}{d["change"]}%</td></tr>'
         for n, d in global_markets.items()
     )
+    def _fmt_chg(v):
+        if v is None: return '<td style="color:#999">N/A</td>'
+        cls = 'up' if v > 0 else 'down'
+        return f'<td class="{cls}">{("+" if v>0 else "")}{v}%</td>'
+
     macro_html = ''.join(
-        f'<tr><td>{n}</td><td class="close-price">{d["price"]}</td><td class="{"up" if d["change"]>0 else "down"}">{("+" if d["change"]>0 else "")}{d["change"]}%</td></tr>'
+        f'<tr><td>{n}</td><td class="close-price">{d["price"]}</td>'
+        f'{_fmt_chg(d.get("change"))}'
+        f'{_fmt_chg(d.get("change_7d"))}'
+        f'{_fmt_chg(d.get("change_14d"))}'
+        f'{_fmt_chg(d.get("change_30d"))}'
+        f'{_fmt_chg(d.get("change_60d"))}'
+        f'</tr>'
         for n, d in macro_data.items()
     )
     watchlist_html = _render_watchlist_html(watchlist_analysis, 'weekly')
