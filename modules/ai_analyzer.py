@@ -81,14 +81,19 @@ def analyze_taiwan_market(global_analysis, technical_results, livermore_signals,
         for name, sig in livermore_signals['all'].items()
     ])
 
+    def fmt(v):
+        if v is None: return 'N/A'
+        return f"{'+' if v>0 else ''}{v}%"
+
     if twii_data:
         twii_text = f"""【台灣加權指數（^TWII）— 程式計算真實數據，必須使用這些數字】
 現價：{twii_data.get('price')} 點
-今日漲跌：{twii_data.get('change')}%
+今日漲跌：{fmt(twii_data.get('change'))}
+7日漲跌：{fmt(twii_data.get('change_7d'))}
+30日漲跌：{fmt(twii_data.get('change_30d'))}
+60日漲跌：{fmt(twii_data.get('change_60d'))}
 趨勢：{twii_data.get('trend')}
-MA5：{twii_data.get('MA5')} 點
-MA20：{twii_data.get('MA20')} 點
-MA60：{twii_data.get('MA60')} 點
+MA5：{twii_data.get('MA5')} 點 | MA20：{twii_data.get('MA20')} 點 | MA60：{twii_data.get('MA60')} 點
 RSI：{twii_data.get('RSI')}
 近20日支撐：{twii_data.get('support')} 點
 近20日壓力：{twii_data.get('resistance')} 點"""
@@ -97,6 +102,10 @@ RSI：{twii_data.get('RSI')}
 
     prompt = f"""
 你是一位專業的台股分析師，熟悉李佛摩投資法則。現在是台股收盤後，請根據今日收盤後的【真實數據】分析台灣股市，所有建議方向為明日（下一個交易日）的操作。
+
+⚠️ 大格局分析原則：
+- 大盤今日漲跌須結合7日、30日、60日走勢脈絡解讀
+- 不因單日小幅波動誇大判斷，例如60日漲15%後今日跌1%屬正常回檔
 
 ⚠️ 嚴格規定（所有數字必須來自下方提供的真實數據）：
 - 大盤支撐、壓力、點位：只能使用「台灣加權指數」區塊的數字
@@ -160,6 +169,9 @@ def analyze_macro_assets(macro_data):
 - 例如：若30日漲幅已達+30%，今日小跌-1%只是正常回檔，不代表轉弱
 - 例如：若60日跌幅達-20%，今日再跌-2%代表跌勢持續，需特別警示
 - 不要孤立看單日數字，要說明「這個漲跌在近期走勢中算什麼程度」
+- ⚠️ 嚴禁自行描述歷史起始價格（例如「從60元漲到100元」這種說法）
+- 只能使用上方提供的「7日/14日/30日/60日漲跌幅百分比」來描述走勢
+- 若說漲跌幅，必須用上方數字，例如「近30日漲幅+XX%」，不可自行換算成絕對價格
 
 請提供：
 1. 美國公債殖利率：近期整體走勢如何？今日變化在這個背景下代表什麼？
@@ -411,14 +423,19 @@ def analyze_weekly_taiwan(global_weekly_analysis, technical_results, livermore_s
         f"{name}: {sig['recommendation']} 分數:{sig['score']}"
         for name, sig in livermore_signals['all'].items()
     ])
+    def fmt(v):
+        if v is None: return 'N/A'
+        return f"{'+' if v>0 else ''}{v}%"
+
     if twii_data:
         twii_text = f"""【台灣加權指數（^TWII）— 程式計算真實數據，必須使用這些數字】
 本週收盤：{twii_data.get('price')} 點
-本週漲跌：{twii_data.get('change')}%
+本週漲跌：{fmt(twii_data.get('change'))}
+14日漲跌：{fmt(twii_data.get('change_14d'))}
+30日漲跌：{fmt(twii_data.get('change_30d'))}
+60日漲跌：{fmt(twii_data.get('change_60d'))}
 趨勢：{twii_data.get('trend')}
-MA5：{twii_data.get('MA5')} 點
-MA20：{twii_data.get('MA20')} 點
-MA60：{twii_data.get('MA60')} 點
+MA5：{twii_data.get('MA5')} 點 | MA20：{twii_data.get('MA20')} 點 | MA60：{twii_data.get('MA60')} 點
 RSI：{twii_data.get('RSI')}
 近20日支撐：{twii_data.get('support')} 點
 近20日壓力：{twii_data.get('resistance')} 點"""
@@ -427,6 +444,10 @@ RSI：{twii_data.get('RSI')}
 
     prompt = f"""
 你是一位專業的台股週報分析師，熟悉李佛摩投資法則與技術分析。請根據以下【真實數據】分析台灣股市。
+
+⚠️ 大格局分析原則：
+- 本週漲跌須結合14日、30日、60日走勢脈絡解讀
+- 不因單週波動誇大判斷市場強弱
 
 ⚠️ 嚴格規定（所有數字必須來自下方提供的真實數據）：
 - 大盤支撐、壓力、點位：只能使用「台灣加權指數」區塊的數字
