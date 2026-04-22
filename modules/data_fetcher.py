@@ -43,39 +43,56 @@ def _fetch_ticker(name, symbol, days=90):
     return name, {'price': 0, 'change': 0, 'symbol': symbol}
 
 def _fetch_taiwan_ticker(name, symbol):
-    """台股：強制抓最新120天資料"""
-    try:
-        end = datetime.now(TW)
-        start = end - timedelta(days=120)
-        ticker = yf.Ticker(symbol)
-        hist = ticker.history(
-            start=start.strftime('%Y-%m-%d'),
-            end=(end + timedelta(days=1)).strftime('%Y-%m-%d'),
-            auto_adjust=True
-        )
-        if len(hist) >= 2:
-            curr = float(hist['Close'].iloc[-1])
-            prev = float(hist['Close'].iloc[-2])
-            change = ((curr - prev) / prev) * 100
+    """台股：強制抓最新120天資料，含多時間維度漲跌幅，有重試機制"""
+    for attempt in range(2):  # 最多重試一次
+        try:
+            end = datetime.now(TW)
+            start = end - timedelta(days=120)
+            ticker = yf.Ticker(symbol)
+            hist = ticker.history(
+                start=start.strftime('%Y-%m-%d'),
+                end=(end + timedelta(days=1)).strftime('%Y-%m-%d'),
+                auto_adjust=True
+            )
+            if len(hist) >= 2:
+                curr  = float(hist['Close'].iloc[-1])
+                prev  = float(hist['Close'].iloc[-2])
+                vol   = int(hist['Volume'].iloc[-1])
+                vol_5 = int(hist['Volume'].iloc[-5:].mean()) if len(hist) >= 5 else vol
+                change_1d = round(((curr - prev) / prev) * 100, 2)
 
-            last_date = hist.index[-1]
-            if hasattr(last_date, 'date'):
-                last_date = last_date.date()
-            today_tw = datetime.now(TW).date()
-            days_diff = (today_tw - last_date).days
-            if days_diff > 3:
-                print(f'⚠️ {name}({symbol}) 資料可能過舊：{last_date}（{days_diff}天前）')
+                def pct(n):
+                    if len(hist) >= n:
+                        p = float(hist['Close'].iloc[-n])
+                        return round(((curr - p) / p) * 100, 2)
+                    return None
 
-            return name, {
-                'symbol': symbol,
-                'price': round(curr, 2),
-                'change': round(change, 2),
-                'volume': int(hist['Volume'].iloc[-1]),
-                'history': hist,
-                'last_date': str(last_date)
-            }
-    except Exception as e:
-        print(f'抓取失敗 {name}({symbol}): {e}')
+                last_date = hist.index[-1]
+                if hasattr(last_date, 'date'):
+                    last_date = last_date.date()
+                today_tw = datetime.now(TW).date()
+                days_diff = (today_tw - last_date).days
+                if days_diff > 3:
+                    print(f'⚠️ {name}({symbol}) 資料過舊：{last_date}（{days_diff}天前）')
+
+                return name, {
+                    'symbol': symbol,
+                    'price': round(curr, 2),
+                    'change': change_1d,
+                    'change_5d': pct(5),
+                    'change_20d': pct(20),
+                    'volume': vol,
+                    'volume_5d_avg': vol_5,
+                    'history': hist,
+                    'last_date': str(last_date)
+                }
+        except Exception as e:
+            if attempt == 0:
+                import time
+                print(f'第一次抓取失敗 {name}({symbol})，重試中: {e}')
+                time.sleep(2)
+            else:
+                print(f'抓取失敗 {name}({symbol}): {e}')
     return name, None
 
 def get_global_markets():

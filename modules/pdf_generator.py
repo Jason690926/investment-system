@@ -72,6 +72,11 @@ def _render_watchlist_html(watchlist_analysis, report_type='daily'):
     <div class="stock-price"><span class="close-price">NT${curr:,}</span> <span class="{change_cls}">{sign}{change}%</span></div>
   </div>
   <div class="stock-meta">趨勢：{tech.get("trend","--")} ｜ RSI：{tech.get("RSI","--")} ｜ MA5：{tech.get("MA5","--")} ｜ MA20：{tech.get("MA20","--")}{(" ｜ " + pnl_html) if pnl_html else ""}</div>
+  <div class="stock-meta" style="color:#888">
+    1日：<span class="{"up" if (tech.get("change") or 0)>=0 else "down"}">{("+" if (tech.get("change") or 0)>=0 else "")}{tech.get("change","--")}%</span>
+    ｜ 5日：<span class="{"up" if (tech.get("change_5d") or 0)>=0 else "down"}">{("+" if (tech.get("change_5d") or 0)>=0 else "")}{tech.get("change_5d","N/A")}{"%" if tech.get("change_5d") is not None else ""}</span>
+    ｜ 20日：<span class="{"up" if (tech.get("change_20d") or 0)>=0 else "down"}">{("+" if (tech.get("change_20d") or 0)>=0 else "")}{tech.get("change_20d","N/A")}{"%" if tech.get("change_20d") is not None else ""}</span>
+  </div>
   <div class="pattern-row">{pattern_label}：{pattern_html}</div>
   <div class="price-summary">
     <span class="support-level">支撐：{tech.get("support","--")}</span>

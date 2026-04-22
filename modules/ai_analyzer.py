@@ -186,6 +186,11 @@ def analyze_watchlist_stock(name, symbol, technical_data, patterns, news_list, c
             pnl_info = f'目前損益：{pnl:+.2f}%'
         except:
             pass
+
+    def fmt(v):
+        if v is None: return 'N/A'
+        return f"{'+' if v>0 else ''}{v}%"
+
     s1 = technical_data.get('support', '--')
     s2 = technical_data.get('support2', '--')
     r1 = technical_data.get('resistance2', '--')
@@ -195,28 +200,44 @@ def analyze_watchlist_stock(name, symbol, technical_data, patterns, news_list, c
     t1 = technical_data.get('target1', '--')
     t2 = technical_data.get('target2', '--')
     sl = technical_data.get('stop_loss_price', '--')
+
+    # 多時間維度漲跌幅
+    chg_1d  = fmt(technical_data.get('change'))
+    chg_5d  = fmt(technical_data.get('change_5d'))
+    chg_20d = fmt(technical_data.get('change_20d'))
+
+    # 量能資訊
+    vol     = technical_data.get('volume', 0)
+    vol_avg = technical_data.get('volume_5d_avg', 0)
+    vol_ratio = round(vol / vol_avg, 2) if vol_avg and vol_avg > 0 else None
+    vol_desc = f"今日量={vol:,}張，5日均量={vol_avg:,}張，量比={vol_ratio}倍" if vol_ratio else "量能資料不足"
+
     prompt = (
-        f"台股分析師。{today} 收盤後數據，給明日操作建議。所有價位只能用下方數字，嚴禁捏造。\n\n"
-        f"【今日收盤數據（所有價位必須來自此處）】\n"
+        f"台股分析師。{today} 收盤後，給明日操作建議。所有價位只能用下方數字，嚴禁捏造。\n\n"
+        f"⚠️ 分析原則：今日漲跌必須結合5日、20日走勢背景解讀，不因單日波動誇大或輕描。\n\n"
+        f"【多時間維度表現（程式計算真實數據）】\n"
         f"股票：{name}（{symbol}）\n"
         f"{cost_info}\n"
         f"{pnl_info}\n"
         f"今日收盤價：{technical_data.get('price')} 元\n"
-        f"今日漲跌：{technical_data.get('change')}%\n"
+        f"今日漲跌（1日）：{chg_1d}\n"
+        f"近5日漲跌：{chg_5d}\n"
+        f"近20日漲跌：{chg_20d}\n"
+        f"今日量能：{vol_desc}\n\n"
+        f"【技術指標】\n"
         f"趨勢：{technical_data.get('trend')}\n"
         f"RSI(14)：{technical_data.get('RSI')}\n"
-        f"MA5：{technical_data.get('MA5')} MA20：{technical_data.get('MA20')} MA60：{technical_data.get('MA60')}\n"
-        f"近20日支撐一：{s1} 元 / 支撐二：{s2} 元\n"
-        f"近20日壓力一：{r1} 元 / 壓力二：{r2} 元\n"
-        f"建議進場區間：{el}~{eh} 元\n"
-        f"目標一：{t1} 元 / 目標二：{t2} 元\n"
-        f"建議停損：{sl} 元\n\n"
+        f"MA5：{technical_data.get('MA5')} ｜ MA20：{technical_data.get('MA20')} ｜ MA60：{technical_data.get('MA60')}\n"
+        f"近20日支撐一：{s1} ｜ 支撐二：{s2}\n"
+        f"近20日壓力一：{r1} ｜ 壓力二：{r2}\n"
+        f"建議進場：{el}~{eh} 元 ｜ 目標一：{t1} ｜ 目標二：{t2} ｜ 停損：{sl}\n\n"
         f"【今日K線型態】\n{pattern_descs}\n\n"
         f"【近期相關新聞】\n{news_text}\n\n"
         f"請提供明日操作建議（精簡版）：\n"
-        f"一、今日走勢 + K線型態解讀（3點以內）\n"
-        f"二、明日操作策略（如果...則...）\n"
-        f"三、明日關鍵價位（直接使用下方數字，不可修改）：\n"
+        f"一、今日走勢解讀（結合1日/5日/20日背景，今日表現算強/弱/中性？量能放大還是縮量？）\n"
+        f"二、K線型態 + 昨日收盤確認（今日型態是否與近期走勢吻合？）\n"
+        f"三、明日操作策略（如果...則...）\n"
+        f"四、明日關鍵價位（直接使用上方數字，不可修改）：\n"
         f'   - <span class="support-level">支撐一：{s1} 元</span>\n'
         f'   - <span class="support-level">支撐二：{s2} 元</span>\n'
         f'   - <span class="resistance-level">壓力一：{r1} 元</span>\n'
@@ -229,6 +250,7 @@ def analyze_watchlist_stock(name, symbol, technical_data, patterns, news_list, c
         f"重要提醒：以上為模擬分析，不構成實際投資建議。"
     )
     return _generate(prompt, max_tokens=1200)
+
 
 # ── 平行分析所有持股（核心優化）────────────────────────────
 def analyze_watchlist_parallel(watchlist, watchlist_stocks, watch_tech, news,
