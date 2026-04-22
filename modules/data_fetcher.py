@@ -7,12 +7,11 @@ import config
 
 TW = timezone(timedelta(hours=8))
 
-def _fetch_ticker(name, symbol, days=10):
-    """強制抓最新資料"""
+def _fetch_ticker(name, symbol, days=90):
+    """強制抓最新資料，包含多時間維度漲跌幅"""
     try:
         end = datetime.now(TW)
         start = end - timedelta(days=days)
-        # 建立新的 Ticker 物件，避免快取
         ticker = yf.Ticker(symbol)
         hist = ticker.history(
             start=start.strftime('%Y-%m-%d'),
@@ -20,12 +19,23 @@ def _fetch_ticker(name, symbol, days=10):
             auto_adjust=True
         )
         if len(hist) >= 2:
-            prev = float(hist['Close'].iloc[-2])
             curr = float(hist['Close'].iloc[-1])
-            change = ((curr - prev) / prev) * 100
+            prev = float(hist['Close'].iloc[-2])
+            change_1d = round(((curr - prev) / prev) * 100, 2)
+
+            def pct(n):
+                if len(hist) >= n:
+                    p = float(hist['Close'].iloc[-n])
+                    return round(((curr - p) / p) * 100, 2)
+                return None
+
             return name, {
                 'price': round(curr, 2),
-                'change': round(change, 2),
+                'change': change_1d,
+                'change_7d': pct(7),
+                'change_14d': pct(14),
+                'change_30d': pct(30),
+                'change_60d': pct(60),
                 'symbol': symbol
             }
     except:

@@ -27,32 +27,44 @@ def _generate(prompt, max_tokens=2000, retries=1):
                 return f"AI分析失敗: {err}"
 
 def analyze_global_market(global_markets, commodities, news):
+    def fmt(v):
+        if v is None: return 'N/A'
+        return f"{'+' if v>0 else ''}{v}%"
+
     markets_text = '\n'.join([
-        f"{name}: {data['price']} ({'+' if data['change']>0 else ''}{data['change']}%)"
-        for name, data in global_markets.items()
+        f"{name}: 今日={fmt(d.get('change'))} | 7日={fmt(d.get('change_7d'))} | 30日={fmt(d.get('change_30d'))} | 60日={fmt(d.get('change_60d'))} | 現價={d.get('price')}"
+        for name, d in global_markets.items()
     ])
     commodities_text = '\n'.join([
-        f"{name}: {data['price']} ({'+' if data['change']>0 else ''}{data['change']}%)"
-        for name, data in commodities.items()
+        f"{name}: 今日={fmt(d.get('change'))} | 7日={fmt(d.get('change_7d'))} | 30日={fmt(d.get('change_30d'))} | 現價={d.get('price')}"
+        for name, d in commodities.items()
     ])
     news_text = '\n'.join([f"- {a['title']} ({a['source']})" for a in news[:8]])
-    prompt = f"""
-你是一位專業的全球財經分析師，請根據以下資料提供今日市場分析。
 
-【全球股市表現】
+    prompt = f"""
+你是一位專業的全球財經分析師，請根據以下多時間維度數據提供今日市場分析。
+
+⚠️ 分析原則（非常重要）：
+- 今日漲跌必須放在7日、30日、60日的整體走勢脈絡下解讀
+- 若某市場60日已漲30%，今日小跌2%只是正常回檔，不代表轉弱
+- 若某市場60日已跌20%，今日再跌3%才是持續下跌的警訊
+- 禁止因單日小幅波動就用「恐慌」「崩跌」「急跌」等誇大詞彙
+- 要說明「今日漲跌在近期走勢中的相對意義」
+
+【全球股市（今日/7日/30日/60日漲跌幅）】
 {markets_text}
 
-【大宗商品與匯率】
+【大宗商品與匯率（今日/7日/30日漲跌幅）】
 {commodities_text}
 
 【重要財經新聞】
 {news_text}
 
 請提供：
-1. 今日全球市場重點摘要（3-5點，每點2-3句話）
-2. 主要風險與機會
+1. 今日全球市場重點摘要（結合近期走勢背景解讀，3-5點）
+2. 主要風險與機會（基於中長期趨勢判斷）
 3. 對亞太市場的影響評估
-4. 整體市場情緒判斷（偏多/中性/偏空）
+4. 整體市場情緒判斷（偏多/中性/偏空）— 基於整體走勢，非單日表現
 
 請用繁體中文回答，條列式呈現，專業但易懂。
 """
@@ -322,22 +334,32 @@ def get_sector_recommendations(global_markets, technical_results, macro_data, wa
     return _generate(prompt)
 
 def analyze_weekly_global(global_markets, commodities, news, macro_data, week_range):
+    def fmt(v):
+        if v is None: return 'N/A'
+        return f"{'+' if v>0 else ''}{v}%"
+
     markets_text = '\n'.join([
-        f"{name}: {data['price']} ({'+' if data['change']>0 else ''}{data['change']}%)"
-        for name, data in global_markets.items()
+        f"{name}: 本週={fmt(d.get('change'))} | 30日={fmt(d.get('change_30d'))} | 60日={fmt(d.get('change_60d'))} | 現價={d.get('price')}"
+        for name, d in global_markets.items()
     ])
     macro_text = '\n'.join([
-        f"{name}: {data['price']} ({'+' if data['change']>0 else ''}{data['change']}%)"
-        for name, data in macro_data.items()
+        f"{name}: 本週={fmt(d.get('change'))} | 14日={fmt(d.get('change_14d'))} | 30日={fmt(d.get('change_30d'))} | 60日={fmt(d.get('change_60d'))} | 現價={d.get('price')}"
+        for name, d in macro_data.items()
     ])
     news_text = '\n'.join([f"- {a['title']}" for a in news[:10]])
-    prompt = f"""
-你是一位專業的全球財經週報分析師。請根據以下資料提供本週市場總結與下週展望。
 
-【本週全球股市收盤狀況】
+    prompt = f"""
+你是一位專業的全球財經週報分析師。請根據以下多時間維度數據提供本週市場總結與下週展望。
+
+⚠️ 分析原則：
+- 本週漲跌須結合30日、60日走勢背景解讀
+- 基於整體趨勢判斷市場強弱，不因單週波動誇大解讀
+- 要說明「本週表現在近期走勢中屬於正常範圍還是異常」
+
+【本週全球股市（本週/30日/60日漲跌幅）】
 {markets_text}
 
-【本週美債/黃金/石油】
+【本週美債/黃金/石油（本週/14日/30日/60日漲跌幅）】
 {macro_text}
 
 【本週重要財經新聞】
@@ -346,11 +368,11 @@ def analyze_weekly_global(global_markets, commodities, news, macro_data, week_ra
 【分析週期】{week_range}
 
 請提供：
-1. 本週全球市場重點回顧（3-5點）
+1. 本週全球市場重點回顧（結合近期走勢背景，3-5點）
 2. 本週最重要的3個國際事件及其影響
-3. 美債/黃金/石油本週走勢白話解析（新手易懂）
+3. 美債/黃金/石油本週走勢白話解析（新手易懂，結合近期趨勢）
 4. 下週全球市場展望與潛在風險
-5. 整體市場情緒評估（偏多/中性/偏空）及原因
+5. 整體市場情緒評估（偏多/中性/偏空）— 基於整體走勢判斷
 
 請用繁體中文，條列式呈現，專業但易懂。
 """

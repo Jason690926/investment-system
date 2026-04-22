@@ -165,8 +165,18 @@ def generate_daily_report(global_markets, commodities, news,
     timestamp = now_tw.strftime('%Y-%m-%d %H:%M（台灣時間）')
     date_str = now_tw.strftime('%Y%m%d')
 
+    def _fmt_chg(v):
+        if v is None: return '<td style="color:#999;font-size:11px">--</td>'
+        cls = 'up' if v > 0 else 'down'
+        return f'<td class="{cls}" style="font-size:12px">{("+" if v>0 else "")}{v}%</td>'
+
     markets_html = ''.join(
-        f'<tr><td>{n}</td><td class="close-price">{d["price"]:,}</td><td class="{"up" if d["change"]>0 else "down"}">{("+" if d["change"]>0 else "")}{d["change"]}%</td></tr>'
+        f'<tr><td>{n}</td><td class="close-price">{d["price"]:,}</td>'
+        f'{_fmt_chg(d.get("change"))}'
+        f'{_fmt_chg(d.get("change_7d"))}'
+        f'{_fmt_chg(d.get("change_30d"))}'
+        f'{_fmt_chg(d.get("change_60d"))}'
+        f'</tr>'
         for n, d in global_markets.items()
     )
     def _fmt_chg(v):
@@ -197,7 +207,7 @@ def generate_daily_report(global_markets, commodities, news,
 </div>
 <div class="two-col">
   <div class="section"><h2>全球股市</h2>
-    <table><tr><th>市場</th><th>收盤價</th><th>漲跌</th></tr>{markets_html}</table>
+    <table><tr><th>市場</th><th>收盤價</th><th>今日</th><th>7日</th><th>30日</th><th>60日</th></tr>{markets_html}</table>
   </div>
   <div class="section"><h2>美債／黃金／石油</h2>
     <table><tr><th>資產</th><th>價格</th><th>今日</th><th>7日</th><th>14日</th><th>30日</th><th>60日</th></tr>{macro_html}</table>
@@ -245,8 +255,18 @@ def generate_weekly_report(global_markets, commodities, news,
     timestamp = now_tw.strftime('%Y-%m-%d %H:%M（台灣時間）')
     date_str = now_tw.strftime('%Y%m%d')
 
+    def _fmt_chg(v):
+        if v is None: return '<td style="color:#999;font-size:11px">--</td>'
+        cls = 'up' if v > 0 else 'down'
+        return f'<td class="{cls}" style="font-size:12px">{("+" if v>0 else "")}{v}%</td>'
+
     markets_html = ''.join(
-        f'<tr><td>{n}</td><td class="close-price">{d["price"]:,}</td><td class="{"up" if d["change"]>0 else "down"}">{("+" if d["change"]>0 else "")}{d["change"]}%</td></tr>'
+        f'<tr><td>{n}</td><td class="close-price">{d["price"]:,}</td>'
+        f'{_fmt_chg(d.get("change"))}'
+        f'{_fmt_chg(d.get("change_7d"))}'
+        f'{_fmt_chg(d.get("change_30d"))}'
+        f'{_fmt_chg(d.get("change_60d"))}'
+        f'</tr>'
         for n, d in global_markets.items()
     )
     def _fmt_chg(v):
@@ -278,7 +298,7 @@ def generate_weekly_report(global_markets, commodities, news,
 </div>
 <div class="two-col">
   <div class="section"><h2>本週全球股市</h2>
-    <table><tr><th>市場</th><th>收盤價</th><th>週漲跌</th></tr>{markets_html}</table>
+    <table><tr><th>市場</th><th>收盤價</th><th>本週</th><th>7日</th><th>30日</th><th>60日</th></tr>{markets_html}</table>
   </div>
   <div class="section"><h2>美債／黃金／石油</h2>
     <table><tr><th>資產</th><th>價格</th><th>週漲跌</th></tr>{macro_html}</table>
