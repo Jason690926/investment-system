@@ -191,53 +191,54 @@ def analyze_watchlist_stock(name, symbol, technical_data, patterns, news_list, c
         if v is None: return 'N/A'
         return f"{'+' if v>0 else ''}{v}%"
 
-    s1 = technical_data.get('support', '--')
-    s2 = technical_data.get('support2', '--')
-    r1 = technical_data.get('resistance2', '--')
-    r2 = technical_data.get('resistance', '--')
-    el = technical_data.get('entry_low', '--')
-    eh = technical_data.get('entry_high', '--')
-    t1 = technical_data.get('target1', '--')
-    t2 = technical_data.get('target2', '--')
-    sl = technical_data.get('stop_loss_price', '--')
+    s1  = technical_data.get('support', '--')
+    s2  = technical_data.get('support2', '--')
+    r1  = technical_data.get('resistance2', '--')
+    r2  = technical_data.get('resistance', '--')
+    el  = technical_data.get('entry_low', '--')
+    eh  = technical_data.get('entry_high', '--')
+    t1  = technical_data.get('target1', '--')
+    t2  = technical_data.get('target2', '--')
+    sl  = technical_data.get('stop_loss_price', '--')
 
-    # 多時間維度漲跌幅
     chg_1d  = fmt(technical_data.get('change'))
     chg_5d  = fmt(technical_data.get('change_5d'))
     chg_20d = fmt(technical_data.get('change_20d'))
 
-    # 量能資訊
     vol     = technical_data.get('volume', 0)
     vol_avg = technical_data.get('volume_5d_avg', 0)
     vol_ratio = round(vol / vol_avg, 2) if vol_avg and vol_avg > 0 else None
-    vol_desc = f"今日量={vol:,}張，5日均量={vol_avg:,}張，量比={vol_ratio}倍" if vol_ratio else "量能資料不足"
+    vol_desc = f"今日量={vol:,}，5日均量={vol_avg:,}，量比={vol_ratio}倍" if vol_ratio else "量能資料不足"
 
     prompt = (
-        f"台股分析師。{today} 收盤後，給明日操作建議。所有價位只能用下方數字，嚴禁捏造。\n\n"
-        f"⚠️ 分析原則：今日漲跌必須結合5日、20日走勢背景解讀，不因單日波動誇大或輕描。\n\n"
-        f"【多時間維度表現（程式計算真實數據）】\n"
+        f"你是一位專業的台股分析師。{today} 收盤後，請根據今日收盤數據給出明日（下一個交易日）的操作建議。\n\n"
+        f"⚠️ 分析原則：\n"
+        f"- 今日漲跌必須結合5日、20日走勢背景解讀，不因單日波動誇大或輕描\n"
+        f"- 所有價位只能使用下方提供的真實數字，嚴禁捏造\n\n"
+        f"【多時間維度表現（真實數據）】\n"
         f"股票：{name}（{symbol}）\n"
         f"{cost_info}\n"
         f"{pnl_info}\n"
         f"今日收盤價：{technical_data.get('price')} 元\n"
-        f"今日漲跌（1日）：{chg_1d}\n"
-        f"近5日漲跌：{chg_5d}\n"
-        f"近20日漲跌：{chg_20d}\n"
+        f"1日漲跌：{chg_1d} ｜ 5日漲跌：{chg_5d} ｜ 20日漲跌：{chg_20d}\n"
         f"今日量能：{vol_desc}\n\n"
         f"【技術指標】\n"
         f"趨勢：{technical_data.get('trend')}\n"
         f"RSI(14)：{technical_data.get('RSI')}\n"
         f"MA5：{technical_data.get('MA5')} ｜ MA20：{technical_data.get('MA20')} ｜ MA60：{technical_data.get('MA60')}\n"
-        f"近20日支撐一：{s1} ｜ 支撐二：{s2}\n"
-        f"近20日壓力一：{r1} ｜ 壓力二：{r2}\n"
-        f"建議進場：{el}~{eh} 元 ｜ 目標一：{t1} ｜ 目標二：{t2} ｜ 停損：{sl}\n\n"
+        f"近20日支撐一：{s1} 元 ｜ 支撐二：{s2} 元\n"
+        f"近20日壓力一：{r1} 元 ｜ 壓力二：{r2} 元\n"
+        f"建議進場：{el}~{eh} 元 ｜ 目標一：{t1} 元 ｜ 目標二：{t2} 元 ｜ 停損：{sl} 元\n\n"
         f"【今日K線型態】\n{pattern_descs}\n\n"
         f"【近期相關新聞】\n{news_text}\n\n"
-        f"請提供明日操作建議（精簡版）：\n"
-        f"一、今日走勢解讀（結合1日/5日/20日背景，今日表現算強/弱/中性？量能放大還是縮量？）\n"
-        f"二、K線型態 + 昨日收盤確認（今日型態是否與近期走勢吻合？）\n"
-        f"三、明日操作策略（如果...則...）\n"
-        f"四、明日關鍵價位（直接使用上方數字，不可修改）：\n"
+        f"請提供明日完整操作建議，格式如下：\n\n"
+        f"一、今日走勢 + K線型態解讀（結合1日/5日/20日背景，2-3點）\n"
+        f"   - 今日表現在近期走勢中屬於強/弱/中性？\n"
+        f"   - 量能是放大、縮量還是平量？代表什麼意義？\n"
+        f"   - K線型態對明日的啟示\n\n"
+        f"二、明日操作策略（條件式，明確說明每種情境的對應做法）\n"
+        f"   格式：如果開盤/盤中 [條件]：[建議做法，含進場價位]\n\n"
+        f"三、明日關鍵價位（直接使用上方提供的數字，不可修改）：\n"
         f'   - <span class="support-level">支撐一：{s1} 元</span>\n'
         f'   - <span class="support-level">支撐二：{s2} 元</span>\n'
         f'   - <span class="resistance-level">壓力一：{r1} 元</span>\n'
@@ -245,11 +246,12 @@ def analyze_watchlist_stock(name, symbol, technical_data, patterns, news_list, c
         f'   - <span class="close-price">明日進場：{el}~{eh} 元</span>\n'
         f'   - <span class="target-price">目標一：{t1} 元</span>\n'
         f'   - <span class="target-price">目標二：{t2} 元</span>\n'
-        f'   - <span class="stop-loss">停損：{sl} 元</span>\n'
-        f"四、明日注意訊號（1-2點）\n\n"
+        f'   - <span class="stop-loss">停損：{sl} 元</span>\n\n'
+        f"四、持倉者建議（已持有者明日如何操作：加碼/減碼/續抱/停利）\n\n"
+        f"五、特別注意事項（明日需觀察的關鍵訊號，1-2點）\n\n"
         f"重要提醒：以上為模擬分析，不構成實際投資建議。"
     )
-    return _generate(prompt, max_tokens=1200)
+    return _generate(prompt, max_tokens=1500)
 
 
 # ── 平行分析所有持股（核心優化）────────────────────────────
@@ -482,38 +484,57 @@ def analyze_weekly_watchlist(name, symbol, technical_data, patterns, news_list, 
             pnl_info = f'本週損益：{pnl:+.2f}%'
         except:
             pass
-    s1 = technical_data.get('support', '--')
-    s2 = technical_data.get('support2', '--')
-    r1 = technical_data.get('resistance2', '--')
-    r2 = technical_data.get('resistance', '--')
-    el = technical_data.get('entry_low', '--')
-    eh = technical_data.get('entry_high', '--')
-    t1 = technical_data.get('target1', '--')
-    t2 = technical_data.get('target2', '--')
-    sl = technical_data.get('stop_loss_price', '--')
+
+    def fmt(v):
+        if v is None: return 'N/A'
+        return f"{'+' if v>0 else ''}{v}%"
+
+    s1  = technical_data.get('support', '--')
+    s2  = technical_data.get('support2', '--')
+    r1  = technical_data.get('resistance2', '--')
+    r2  = technical_data.get('resistance', '--')
+    el  = technical_data.get('entry_low', '--')
+    eh  = technical_data.get('entry_high', '--')
+    t1  = technical_data.get('target1', '--')
+    t2  = technical_data.get('target2', '--')
+    sl  = technical_data.get('stop_loss_price', '--')
+
+    chg_1d  = fmt(technical_data.get('change'))
+    chg_5d  = fmt(technical_data.get('change_5d'))
+    chg_20d = fmt(technical_data.get('change_20d'))
+
+    vol     = technical_data.get('volume', 0)
+    vol_avg = technical_data.get('volume_5d_avg', 0)
+    vol_ratio = round(vol / vol_avg, 2) if vol_avg and vol_avg > 0 else None
+    vol_desc = f"本週末量={vol:,}，5日均量={vol_avg:,}，量比={vol_ratio}倍" if vol_ratio else "量能資料不足"
+
     prompt = (
-        f"你是一位專業的台股分析師。分析週期為 {week_range}，請根據本週收盤數據給出下週操作建議。\n\n"
-        f"⚠️ 嚴格規定：所有價位必須使用下方提供的真實數字，嚴禁捏造或自行推算\n\n"
-        f"【本週收盤數據（所有價位必須來自此處）】\n"
+        f"你是一位專業的台股分析師。分析週期 {week_range}，請根據本週收盤數據給出下週操作建議。\n\n"
+        f"⚠️ 嚴格規定：所有價位只能使用下方提供的真實數字，嚴禁捏造\n\n"
+        f"【多時間維度表現（真實數據）】\n"
         f"股票：{name}（{symbol}）\n"
         f"{cost_info}\n"
         f"{pnl_info}\n"
         f"本週收盤價：{technical_data.get('price')} 元\n"
-        f"本週漲跌：{technical_data.get('change')}%\n"
+        f"1日漲跌：{chg_1d} ｜ 5日漲跌：{chg_5d} ｜ 20日漲跌：{chg_20d}\n"
+        f"本週量能：{vol_desc}\n\n"
+        f"【技術指標】\n"
         f"趨勢：{technical_data.get('trend')}\n"
         f"RSI(14)：{technical_data.get('RSI')}\n"
-        f"MA5：{technical_data.get('MA5')} MA20：{technical_data.get('MA20')} MA60：{technical_data.get('MA60')}\n"
-        f"近20日支撐一：{s1} 元 / 支撐二：{s2} 元\n"
-        f"近20日壓力一：{r1} 元 / 壓力二：{r2} 元\n"
-        f"建議進場區間：{el}~{eh} 元\n"
-        f"目標一：{t1} 元 / 目標二：{t2} 元\n"
-        f"建議停損：{sl} 元\n\n"
+        f"MA5：{technical_data.get('MA5')} ｜ MA20：{technical_data.get('MA20')} ｜ MA60：{technical_data.get('MA60')}\n"
+        f"近20日支撐一：{s1} 元 ｜ 支撐二：{s2} 元\n"
+        f"近20日壓力一：{r1} 元 ｜ 壓力二：{r2} 元\n"
+        f"建議進場：{el}~{eh} 元 ｜ 目標一：{t1} 元 ｜ 目標二：{t2} 元 ｜ 停損：{sl} 元\n\n"
         f"【本週K線型態】\n{pattern_descs}\n\n"
         f"【本週相關新聞】\n{news_text}\n\n"
-        f"請提供下週操作建議（精簡版）：\n"
-        f"一、本週走勢 + K線型態解讀（3點以內）\n"
-        f"二、下週操作策略（下週如果...則...）\n"
-        f"三、下週關鍵價位（直接使用上方數字，不可修改）：\n"
+        f"請提供下週完整操作建議，格式如下：\n\n"
+        f"一、本週走勢 + K線型態解讀（結合1日/5日/20日背景，2-3點）\n"
+        f"   - 本週表現在近期走勢中屬於強/弱/中性？\n"
+        f"   - 量能是放大、縮量還是平量？代表什麼意義？\n"
+        f"   - K線型態對下週的啟示\n\n"
+        f"二、下週操作策略（條件式，明確說明每種情境的對應做法）\n"
+        f"   格式：如果開盤/盤中 [條件]：[建議做法，含進場價位]\n\n"
+        f"三、下週關鍵價位（直接使用上方提供的數字，不可修改）：\n"
         f'   - <span class="support-level">支撐一：{s1} 元</span>\n'
         f'   - <span class="support-level">支撐二：{s2} 元</span>\n'
         f'   - <span class="resistance-level">壓力一：{r1} 元</span>\n'
@@ -521,8 +542,10 @@ def analyze_weekly_watchlist(name, symbol, technical_data, patterns, news_list, 
         f'   - <span class="close-price">下週進場：{el}~{eh} 元</span>\n'
         f'   - <span class="target-price">目標一：{t1} 元</span>\n'
         f'   - <span class="target-price">目標二：{t2} 元</span>\n'
-        f'   - <span class="stop-loss">停損：{sl} 元</span>\n'
-        f"四、下週注意訊號（1-2點）\n\n"
+        f'   - <span class="stop-loss">停損：{sl} 元</span>\n\n'
+        f"四、持倉者建議（已持有者下週如何操作：加碼/減碼/續抱/停利）\n\n"
+        f"五、特別注意事項（下週需觀察的關鍵訊號，1-2點）\n\n"
         f"重要提醒：以上為模擬分析，不構成實際投資建議。"
     )
-    return _generate(prompt, max_tokens=1200)
+    return _generate(prompt, max_tokens=1500)
+
