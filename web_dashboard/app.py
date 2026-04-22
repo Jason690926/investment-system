@@ -20,6 +20,8 @@ app = Flask(__name__)
 
 # 每個 session 用一個 queue 來傳遞進度
 progress_queues = {}
+# 全域鎖：防止同時產生兩份報表
+_is_generating = False
 
 DASHBOARD = '''<!DOCTYPE html>
 <html lang="zh-TW">
@@ -242,8 +244,20 @@ function generate(type) {
 
   // 先呼叫 POST 啟動任務
   fetch('/api/generate/' + type, {method:'POST'})
-    .then(r => r.json())
+    .then(r => {
+      if (r.status === 429) {
+        // 後端正在執行中
+        currentType = null;
+        document.getElementById('btn-daily').disabled = false;
+        document.getElementById('btn-weekly').disabled = false;
+        document.getElementById('progress-wrap').style.display = 'none';
+        showMsg('⚠️ 報表正在產生中，請勿重複點擊，完成後會自動寄送 Email', false);
+        return null;
+      }
+      return r.json();
+    })
     .then(d => {
+      if (!d) return;
       const jobId = d.job_id;
       // 用 SSE 接收進度
       eventSource = new EventSource('/api/progress/' + jobId);
@@ -281,10 +295,18 @@ function generate(type) {
         }
       };
       eventSource.onerror = function() {
+        // SSE 中斷（手機切換 App 或網路不穩）
+        // 不解除鎖定，因為後台可能還在執行
+        // 顯示提示讓用戶知道
+        document.getElementById('status-msg') &&
+          (document.getElementById('status-msg').textContent = '連線中斷，報表仍在背景執行，請稍後查收 Email');
         eventSource.close();
-        currentType = null;
-        document.getElementById('btn-daily').disabled = false;
-        document.getElementById('btn-weekly').disabled = false;
+        // 30 秒後才解除鎖定，避免重複觸發
+        setTimeout(() => {
+          currentType = null;
+          document.getElementById('btn-daily').disabled = false;
+          document.getElementById('btn-weekly').disabled = false;
+        }, 30000);
       };
     });
 }
@@ -472,10 +494,14 @@ def api_reports():
 
 @app.route('/api/generate/<report_type>', methods=['POST'])
 def generate_report(report_type):
+    global _is_generating
+    if _is_generating:
+        return jsonify({'error': 'busy', 'message': '報表產生中，請稍後再試'}), 429
     import uuid
     job_id = str(uuid.uuid4())[:8]
     q = queue.Queue()
     progress_queues[job_id] = q
+    _is_generating = True
 
     def run():
         try:
@@ -625,6 +651,9 @@ def generate_report(report_type):
             import traceback
             traceback.print_exc()
             push(q, {'type':'error','message':str(e)})
+        finally:
+            global _is_generating
+            _is_generating = False
 
     threading.Thread(target=run, daemon=True).start()
     return jsonify({'job_id': job_id})
