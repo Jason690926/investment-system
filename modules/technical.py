@@ -122,14 +122,22 @@ def analyze_stock(stock_data):
     if target2 <= target1:
         target2 = round(target1 * 1.08, 2)
 
+    # 計算今日量和5日均量（提供給 AI 分析用）
+    vol_today = int(hist['Volume'].iloc[-1]) if len(hist) >= 1 else 0
+    vol_5d_avg = int(hist['Volume'].iloc[-5:].mean()) if len(hist) >= 5 else vol_today
+
     return {
         'price': curr_price,
         'change': stock_data['change'],
+        'change_5d': stock_data.get('change_5d'),
+        'change_20d': stock_data.get('change_20d'),
         'trend': trend,
         'MA5': ma.get('MA5'),
         'MA20': ma.get('MA20'),
         'MA60': ma.get('MA60'),
         'RSI': rsi,
+        'volume': vol_today,
+        'volume_5d_avg': vol_5d_avg,
         'volume_ratio': volume_ratio,
         'support': support,
         'support2': support2,
