@@ -302,3 +302,5 @@ def get_pattern_summary(patterns):
         return f'偏多訊號：{bullish[0]["name"]}', 'bullish'
     else:
         return '市場猶豫觀望', 'neutral'
+
+
