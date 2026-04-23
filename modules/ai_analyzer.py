@@ -219,10 +219,27 @@ def analyze_watchlist_stock(name, symbol, technical_data, patterns, news_list, c
     chg_5d  = fmt(technical_data.get('change_5d'))
     chg_20d = fmt(technical_data.get('change_20d'))
 
-    vol     = technical_data.get('volume', 0)
-    vol_avg = technical_data.get('volume_5d_avg', 0)
-    vol_ratio = round(vol / vol_avg, 2) if vol_avg and vol_avg > 0 else None
-    vol_desc = f"今日量={vol:,}，5日均量={vol_avg:,}，量比={vol_ratio}倍" if vol_ratio else "量能資料不足"
+    vol       = technical_data.get('volume', 0)
+    vol_yest  = technical_data.get('volume_yest', 0)
+    vol_avg   = technical_data.get('volume_5d_avg', 0)
+    vs_yest   = technical_data.get('volume_vs_yest')
+    vs_avg    = technical_data.get('volume_vs_avg')
+
+    if vs_yest and vs_avg:
+        if vs_yest >= 2.0:
+            vol_trend = f"爆量（較昨日+{round((vs_yest-1)*100)}%）"
+        elif vs_yest >= 1.3:
+            vol_trend = f"放量（較昨日+{round((vs_yest-1)*100)}%）"
+        elif vs_yest <= 0.5:
+            vol_trend = f"急縮量（較昨日-{round((1-vs_yest)*100)}%）"
+        elif vs_yest <= 0.7:
+            vol_trend = f"縮量（較昨日-{round((1-vs_yest)*100)}%）"
+        else:
+            vol_trend = "量能持平"
+        vol_desc = (f"今日量={vol:,} | 昨日量={vol_yest:,} | 5日均量={vol_avg:,} | "
+                    f"量能變化：{vol_trend}（今日/昨日={vs_yest}倍，今日/均量={vs_avg}倍）")
+    else:
+        vol_desc = "量能資料不足"
 
     prompt = (
         f"你是一位專業的台股分析師。{today} 收盤後，請根據今日收盤數據給出明日（下一個交易日）的操作建議。\n\n"
@@ -529,10 +546,27 @@ def analyze_weekly_watchlist(name, symbol, technical_data, patterns, news_list, 
     chg_5d  = fmt(technical_data.get('change_5d'))
     chg_20d = fmt(technical_data.get('change_20d'))
 
-    vol     = technical_data.get('volume', 0)
-    vol_avg = technical_data.get('volume_5d_avg', 0)
-    vol_ratio = round(vol / vol_avg, 2) if vol_avg and vol_avg > 0 else None
-    vol_desc = f"本週末量={vol:,}，5日均量={vol_avg:,}，量比={vol_ratio}倍" if vol_ratio else "量能資料不足"
+    vol       = technical_data.get('volume', 0)
+    vol_yest  = technical_data.get('volume_yest', 0)
+    vol_avg   = technical_data.get('volume_5d_avg', 0)
+    vs_yest   = technical_data.get('volume_vs_yest')
+    vs_avg    = technical_data.get('volume_vs_avg')
+
+    if vs_yest and vs_avg:
+        if vs_yest >= 2.0:
+            vol_trend = f"爆量（較前日+{round((vs_yest-1)*100)}%）"
+        elif vs_yest >= 1.3:
+            vol_trend = f"放量（較前日+{round((vs_yest-1)*100)}%）"
+        elif vs_yest <= 0.5:
+            vol_trend = f"急縮量（較前日-{round((1-vs_yest)*100)}%）"
+        elif vs_yest <= 0.7:
+            vol_trend = f"縮量（較前日-{round((1-vs_yest)*100)}%）"
+        else:
+            vol_trend = "量能持平"
+        vol_desc = (f"本週末量={vol:,} | 前日量={vol_yest:,} | 5日均量={vol_avg:,} | "
+                    f"量能變化：{vol_trend}（末日/前日={vs_yest}倍，末日/均量={vs_avg}倍）")
+    else:
+        vol_desc = "量能資料不足"
 
     prompt = (
         f"你是一位專業的台股分析師。分析週期 {week_range}，請根據本週收盤數據給出下週操作建議。\n\n"
