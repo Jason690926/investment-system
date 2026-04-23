@@ -135,9 +135,10 @@ def detect_patterns(hist):
             'strength': 'strong'
         })
 
-    # 十字星（市場猶豫）
+    # 十字星（市場猶豫）- 排除墓碑十字（上影極長的情況）
     if (not gap_up and not gap_down and
-        body_ratio < 0.1 and total > 0):
+        body_ratio < 0.1 and total > 0 and
+        upper_shadow <= total * 0.7):  # 墓碑十字: upper_shadow > total*0.7，排除
         patterns.append({
             'name': '十字星',
             'type': 'neutral',
@@ -155,8 +156,8 @@ def detect_patterns(hist):
             'strength': 'medium'
         })
 
-    # 大陰線（強勢空頭）- 非跳空才顯示
-    if (not gap_down and
+    # 大陰線（強勢空頭）- 非跳空才顯示（跳空高開後急跌也不算大陰線，是「跳空高開拉回」）
+    if (not gap_up and not gap_down and
         c[i] < o[i] and body_ratio > 0.7):
         patterns.append({
             'name': '大陰線',
@@ -302,5 +303,3 @@ def get_pattern_summary(patterns):
         return f'偏多訊號：{bullish[0]["name"]}', 'bullish'
     else:
         return '市場猶豫觀望', 'neutral'
-
-
