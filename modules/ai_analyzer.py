@@ -10,7 +10,7 @@ def _generate(prompt, max_tokens=2000, retries=1):
     for attempt in range(retries + 1):
         try:
             message = client.messages.create(
-                model="claude-sonnet-4-5",
+                model="claude-sonnet-4-6",
                 max_tokens=max_tokens,
                 timeout=90,
                 messages=[{"role": "user", "content": prompt}]
