@@ -1,5 +1,5 @@
 # ===== 測試模式（True=不呼叫AI省費用，False=正式執行）=====
-TEST_MODE = True
+TEST_MODE = False
 
 from modules.data_fetcher import (get_global_markets, get_commodities,
                                    get_financial_news, get_taiwan_stocks,
