@@ -1,3 +1,6 @@
+# ===== 測試模式（True=不呼叫AI省費用，False=正式執行）=====
+TEST_MODE = True
+
 from modules.data_fetcher import (get_global_markets, get_commodities,
                                    get_financial_news, get_taiwan_stocks,
                                    get_macro_assets, get_watchlist_stocks)
@@ -42,7 +45,10 @@ for name, data in taiwan_stocks.items():
         technical_results[name]['patterns'] = detect_patterns(data['history'])
 
 print("📈 分析美債/黃金/石油...")
-macro_analysis = analyze_macro_assets(macro_data)
+if TEST_MODE:
+    macro_analysis = "【測試模式】AI分析已跳過"
+else:
+    macro_analysis = analyze_macro_assets(macro_data)
 
 # ===== 持股追蹤分析（日報/週報共用）=====
 print("💼 分析持股追蹤標的...")
@@ -63,7 +69,9 @@ if watchlist:
             patterns = detect_patterns(hist) if hist is not None else []
             stock_news = [n for n in news if name in n.get('title', '') or
                          item['symbol'].replace('.TW', '') in n.get('title', '')]
-            if report_type == 'weekly':
+            if TEST_MODE:
+                ai_advice = "【測試模式】AI分析已跳過"
+            elif report_type == 'weekly':
                 ai_advice = analyze_weekly_watchlist(
                     name, symbol, tech, patterns, stock_news,
                     week_range, cost=item.get('cost')
@@ -81,15 +89,22 @@ if watchlist:
             })
 
 print("🏭 取得產業推薦標的...")
-sector_recommendations = get_sector_recommendations(
-    global_markets, technical_results, macro_data
-)
+if TEST_MODE:
+    sector_recommendations = "【測試模式】AI分析已跳過"
+else:
+    sector_recommendations = get_sector_recommendations(
+        global_markets, technical_results, macro_data
+    )
 
 # ===== 依類型產生報表 =====
 if report_type == 'daily':
     print("🤖 進行每日AI分析...")
-    global_analysis = analyze_global_market(global_markets, commodities, news)
-    taiwan_analysis = analyze_taiwan_market(global_analysis, technical_results, livermore_signals)
+    if TEST_MODE:
+        global_analysis = "【測試模式】AI分析已跳過"
+        taiwan_analysis = "【測試模式】AI分析已跳過"
+    else:
+        global_analysis = analyze_global_market(global_markets, commodities, news)
+        taiwan_analysis = analyze_taiwan_market(global_analysis, technical_results, livermore_signals)
 
     print("📄 產生每日報表...")
     report_path = generate_daily_report(
@@ -104,12 +119,16 @@ if report_type == 'daily':
 
 else:
     print("🤖 進行週報AI分析...")
-    global_weekly_analysis = analyze_weekly_global(
-        global_markets, commodities, news, macro_data, week_range
-    )
-    taiwan_weekly_analysis = analyze_weekly_taiwan(
-        global_weekly_analysis, technical_results, livermore_signals, week_range
-    )
+    if TEST_MODE:
+        global_weekly_analysis = "【測試模式】AI分析已跳過"
+        taiwan_weekly_analysis = "【測試模式】AI分析已跳過"
+    else:
+        global_weekly_analysis = analyze_weekly_global(
+            global_markets, commodities, news, macro_data, week_range
+        )
+        taiwan_weekly_analysis = analyze_weekly_taiwan(
+            global_weekly_analysis, technical_results, livermore_signals, week_range
+        )
 
     print("📄 產生週報...")
     report_path = generate_weekly_report(

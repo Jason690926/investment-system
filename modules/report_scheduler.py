@@ -115,13 +115,18 @@ def get_week_range():
 
 def get_report_description(report_type):
     """取得報表說明文字"""
+    now = datetime.now()
     today = date.today()
+    
     if report_type == 'weekly':
         monday, friday = get_week_range()
         return f'週報（{monday.strftime("%m/%d")} ~ {friday.strftime("%m/%d")}）'
     else:
-        yesterday = today - timedelta(days=1)
-        # 如果昨天是週末，往前找最後一個交易日
-        while yesterday.weekday() >= 5 or is_taiwan_holiday(yesterday):
-            yesterday -= timedelta(days=1)
-        return f'日報（前一交易日：{yesterday.strftime("%m/%d")} 收盤分析）'
+        # 收盤後（13:30後）顯示今天，否則顯示前一交易日
+        if now.hour > 13 or (now.hour == 13 and now.minute >= 30):
+            data_date = today
+        else:
+            data_date = today - timedelta(days=1)
+            while data_date.weekday() >= 5 or is_taiwan_holiday(data_date):
+                data_date -= timedelta(days=1)
+        return f'日報（{data_date.strftime("%m/%d")} 收盤分析）'
