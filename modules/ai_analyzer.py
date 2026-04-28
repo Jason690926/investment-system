@@ -225,6 +225,11 @@ def analyze_watchlist_stock(name, symbol, technical_data, patterns, news_list, c
     vs_yest   = technical_data.get('volume_vs_yest')
     vs_avg    = technical_data.get('volume_vs_avg')
 
+    # 威科夫分析
+    from modules.wyckoff import analyze_wyckoff
+    hist = technical_data.get('history')
+    wyckoff_data = analyze_wyckoff(hist, technical_data)
+
     if vs_yest and vs_avg:
         if vs_yest >= 2.0:
             vol_trend = f"爆量（較昨日+{round((vs_yest-1)*100)}%）"
@@ -242,7 +247,7 @@ def analyze_watchlist_stock(name, symbol, technical_data, patterns, news_list, c
         vol_desc = "量能資料不足"
 
     prompt = (
-        f"你是一位專業的台股分析師。{today} 收盤後，請根據今日收盤數據給出明日（下一個交易日）的操作建議。\n\n"
+        f"你是一位專業的台股分析師，同時精通威科夫（Wyckoff）量價分析理論。{today} 收盤後，請根據今日收盤數據給出明日操作建議。\n\n"
         f"⚠️ 分析原則：\n"
         f"- 今日漲跌必須結合5日、20日走勢背景解讀，不因單日波動誇大或輕描\n"
         f"- 所有價位只能使用下方提供的真實數字，嚴禁捏造\n"
@@ -263,14 +268,24 @@ def analyze_watchlist_stock(name, symbol, technical_data, patterns, news_list, c
         f"建議進場：{el}~{eh} 元 ｜ 目標一：{t1} 元 ｜ 目標二：{t2} 元 ｜ 停損：{sl} 元\n\n"
         f"【今日K線型態】\n{pattern_descs}\n\n"
         f"【近期相關新聞】\n{news_text}\n\n"
+        f"【威科夫量價分析（程式預判，請結合實際走勢驗證）】\n"
+        f"目前階段：{wyckoff_data['phase']}\n"
+        f"階段說明：{wyckoff_data['phase_desc']}\n"
+        f"量價關係：{wyckoff_data['effort_result']}\n"
+        f"量價說明：{wyckoff_data['effort_desc']}\n"
+        f"關鍵事件：{'; '.join([e['name'] + ' - ' + e['desc'] for e in wyckoff_data['events']]) if wyckoff_data['events'] else '今日無特殊威科夫事件'}\n\n"
         f"請提供明日完整操作建議，格式如下：\n\n"
         f"一、今日走勢 + K線型態解讀（結合1日/5日/20日背景，2-3點）\n"
         f"   - 今日表現在近期走勢中屬於強/弱/中性？\n"
         f"   - 量能是放大、縮量還是平量？代表什麼意義？\n"
         f"   - K線型態對明日的啟示\n\n"
-        f"二、明日操作策略（條件式，明確說明每種情境的對應做法）\n"
+        f"二、威科夫量價解讀（根據上方威科夫數據分析）\n"
+        f"   - 目前處於哪個威科夫階段？對操作方向的影響？\n"
+        f"   - 量價關係（努力vs結果）說明了什麼？\n"
+        f"   - 有無關鍵威科夫事件（Spring/Upthrust/SOT/SOS/SOW）？\n\n"
+        f"三、明日操作策略（條件式，明確說明每種情境的對應做法）\n"
         f"   格式：如果開盤/盤中 [條件]：[建議做法，含進場價位]\n\n"
-        f"三、明日關鍵價位（直接使用上方提供的數字，不可修改）：\n"
+        f"四、明日關鍵價位（直接使用上方提供的數字，不可修改）：\n"
         f'   - <span class="support-level">支撐一：{s1} 元</span>\n'
         f'   - <span class="support-level">支撐二：{s2} 元</span>\n'
         f'   - <span class="resistance-level">壓力一：{r1} 元</span>\n'
@@ -279,11 +294,16 @@ def analyze_watchlist_stock(name, symbol, technical_data, patterns, news_list, c
         f'   - <span class="target-price">目標一：{t1} 元</span>\n'
         f'   - <span class="target-price">目標二：{t2} 元</span>\n'
         f'   - <span class="stop-loss">停損：{sl} 元</span>\n\n'
-        f"四、持倉者建議（已持有者明日如何操作：加碼/減碼/續抱/停利）\n\n"
-        f"五、特別注意事項（明日需觀察的關鍵訊號，1-2點）\n\n"
+        f"五、持倉者建議（已持有者明日如何操作：加碼/減碼/續抱/停利）\n\n"
+        f"六、今日剛購入建議（假設今日才剛買進此股，給出專屬指引）：\n"
+        f"   - 停損設在哪裡？理由是什麼？\n"
+        f"   - 短期（1-3天）如何應對？\n"
+        f"   - 哪些情況應立即停損出場？\n"
+        f"   - 哪些情況可以考慮加碼？\n\n"
+        f"七、特別注意事項（明日需觀察的關鍵訊號，1-2點）\n\n"
         f"重要提醒：以上為模擬分析，不構成實際投資建議。"
     )
-    return _generate(prompt, max_tokens=1500)
+    return _generate(prompt, max_tokens=2000)
 
 
 # ── 平行分析所有持股（核心優化）────────────────────────────
@@ -552,6 +572,11 @@ def analyze_weekly_watchlist(name, symbol, technical_data, patterns, news_list, 
     vs_yest   = technical_data.get('volume_vs_yest')
     vs_avg    = technical_data.get('volume_vs_avg')
 
+    # 威科夫分析
+    from modules.wyckoff import analyze_wyckoff
+    hist = technical_data.get('history')
+    wyckoff_data = analyze_wyckoff(hist, technical_data)
+
     if vs_yest and vs_avg:
         if vs_yest >= 2.0:
             vol_trend = f"爆量（較前日+{round((vs_yest-1)*100)}%）"
@@ -588,14 +613,24 @@ def analyze_weekly_watchlist(name, symbol, technical_data, patterns, news_list, 
         f"建議進場：{el}~{eh} 元 ｜ 目標一：{t1} 元 ｜ 目標二：{t2} 元 ｜ 停損：{sl} 元\n\n"
         f"【本週K線型態】\n{pattern_descs}\n\n"
         f"【本週相關新聞】\n{news_text}\n\n"
+        f"【威科夫量價分析（程式預判，請結合實際走勢驗證）】\n"
+        f"目前階段：{wyckoff_data['phase']}\n"
+        f"階段說明：{wyckoff_data['phase_desc']}\n"
+        f"量價關係：{wyckoff_data['effort_result']}\n"
+        f"量價說明：{wyckoff_data['effort_desc']}\n"
+        f"關鍵事件：{'; '.join([e['name'] + ' - ' + e['desc'] for e in wyckoff_data['events']]) if wyckoff_data['events'] else '本週無特殊威科夫事件'}\n\n"
         f"請提供下週完整操作建議，格式如下：\n\n"
         f"一、本週走勢 + K線型態解讀（結合1日/5日/20日背景，2-3點）\n"
         f"   - 本週表現在近期走勢中屬於強/弱/中性？\n"
         f"   - 量能是放大、縮量還是平量？代表什麼意義？\n"
         f"   - K線型態對下週的啟示\n\n"
-        f"二、下週操作策略（條件式，明確說明每種情境的對應做法）\n"
+        f"二、威科夫量價解讀\n"
+        f"   - 本週威科夫階段判斷及對下週方向的影響\n"
+        f"   - 量價關係（努力vs結果）的意義\n"
+        f"   - 有無關鍵威科夫事件？\n\n"
+        f"三、下週操作策略（條件式）\n"
         f"   格式：如果開盤/盤中 [條件]：[建議做法，含進場價位]\n\n"
-        f"三、下週關鍵價位（直接使用上方提供的數字，不可修改）：\n"
+        f"四、下週關鍵價位（直接使用上方提供的數字，不可修改）：\n"
         f'   - <span class="support-level">支撐一：{s1} 元</span>\n'
         f'   - <span class="support-level">支撐二：{s2} 元</span>\n'
         f'   - <span class="resistance-level">壓力一：{r1} 元</span>\n'
@@ -604,9 +639,14 @@ def analyze_weekly_watchlist(name, symbol, technical_data, patterns, news_list, 
         f'   - <span class="target-price">目標一：{t1} 元</span>\n'
         f'   - <span class="target-price">目標二：{t2} 元</span>\n'
         f'   - <span class="stop-loss">停損：{sl} 元</span>\n\n'
-        f"四、持倉者建議（已持有者下週如何操作：加碼/減碼/續抱/停利）\n\n"
-        f"五、特別注意事項（下週需觀察的關鍵訊號，1-2點）\n\n"
+        f"五、持倉者建議（已持有者下週如何操作：加碼/減碼/續抱/停利）\n\n"
+        f"六、今日剛購入建議（假設本週才剛買進此股，給出專屬指引）：\n"
+        f"   - 停損設在哪裡？理由是什麼？\n"
+        f"   - 下週（1-5天）如何應對？\n"
+        f"   - 哪些情況應立即停損出場？\n"
+        f"   - 哪些情況可以考慮加碼？\n\n"
+        f"七、特別注意事項（下週需觀察的關鍵訊號，1-2點）\n\n"
         f"重要提醒：以上為模擬分析，不構成實際投資建議。"
     )
-    return _generate(prompt, max_tokens=1500)
+    return _generate(prompt, max_tokens=2000)
 
