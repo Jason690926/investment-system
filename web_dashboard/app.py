@@ -447,16 +447,20 @@ def api_watchlist():
     def get_price(item):
         symbol = item['symbol']
         try:
-            ticker = yf.Ticker(symbol, session=curl_session) if curl_session else yf.Ticker(symbol)
-            hist = ticker.history(period='5d', auto_adjust=False)
-            hist = hist.dropna(subset=['Close'])
-            if len(hist) >= 2:
-                price = round(float(hist['Close'].iloc[-1]), 2)
-                prev = float(hist['Close'].iloc[-2])
+            r = _req.get(
+                f'https://query1.finance.yahoo.com/v8/finance/chart/{symbol}',
+                headers={'User-Agent': 'Mozilla/5.0'},
+                params={'interval': '1d', 'range': '5d'},
+                timeout=10
+            )
+            data = r.json()
+            closes = data['chart']['result'][0]['indicators']['quote'][0]['close']
+            closes = [c for c in closes if c is not None]
+            if len(closes) >= 2:
+                price = round(closes[-1], 2)
+                prev = closes[-2]
                 change = round(((price - prev) / prev) * 100, 2)
                 return price, change
-            else:
-                print(f'[watchlist] {symbol} 取得 {len(hist)} 筆，不足2筆')
         except Exception as e:
             print(f'[watchlist] {symbol} 失敗: {e}')
         return None, 0
