@@ -24,7 +24,7 @@ def _fetch_ticker(name, symbol, days=90):
         hist = ticker.history(
             start=start.strftime('%Y-%m-%d'),
             end=(end + timedelta(days=1)).strftime('%Y-%m-%d'),
-            auto_adjust=True
+            auto_adjust=False
         )
         if len(hist) >= 2:
             curr = float(hist['Close'].iloc[-1])
@@ -59,7 +59,7 @@ def _fetch_taiwan_ticker(name, symbol):
             hist = ticker.history(
                 start=start.strftime('%Y-%m-%d'),
                 end=(end + timedelta(days=1)).strftime('%Y-%m-%d'),
-                auto_adjust=True
+                auto_adjust=False
             )
             if len(hist) >= 2:
                 curr  = float(hist['Close'].iloc[-1])
@@ -110,7 +110,7 @@ def _fetch_macro_ticker(name, symbol):
         hist = ticker.history(
             start=start.strftime('%Y-%m-%d'),
             end=(end + timedelta(days=1)).strftime('%Y-%m-%d'),
-            auto_adjust=True
+            auto_adjust=False
         )
         if len(hist) < 2:
             return name, {'price': 0, 'change': 0, 'symbol': symbol}

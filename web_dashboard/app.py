@@ -448,7 +448,8 @@ def api_watchlist():
         symbol = item['symbol']
         try:
             ticker = yf.Ticker(symbol, session=curl_session) if curl_session else yf.Ticker(symbol)
-            hist = ticker.history(period='2d')
+            hist = ticker.history(period='5d', auto_adjust=False)
+            hist = hist.dropna(subset=['Close'])
             if len(hist) >= 2:
                 price = round(float(hist['Close'].iloc[-1]), 2)
                 prev = float(hist['Close'].iloc[-2])
