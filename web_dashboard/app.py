@@ -491,6 +491,17 @@ def api_remove():
     success, message = remove_stock(symbol)
     return jsonify({'success': success, 'message': message})
 
+
+@app.route('/api/test_twse')
+def test_twse():
+    import requests as _req
+    try:
+        r = _req.get('https://mis.twse.com.tw/stock/api/getStockInfo.jsp',
+            params={'ex_ch': 'tse_2330.tw', 'json': '1', 'delay': '0'}, timeout=5)
+        d = r.json()
+        return jsonify({'ok': True, 'data': d.get('msgArray', [{}])[0]})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)})
 @app.route('/api/reports')
 def api_reports():
     reports = []
