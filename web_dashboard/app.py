@@ -15,8 +15,6 @@ from modules.pdf_generator import generate_daily_report
 from modules.email_sender import send_report
 from modules.watchlist import get_watchlist, add_stock, remove_stock
 import config, yfinance as yf
-from curl_cffi import requests as curl_requests
-_curl_session = curl_requests.Session(impersonate="chrome110")
 
 app = Flask(__name__)
 
@@ -443,27 +441,38 @@ STEP_PCT = {
 # ── API 路由 ──────────────────────────────────────────────
 @app.route('/api/watchlist')
 def api_watchlist():
+    import requests as _req
     watchlist = get_watchlist()
-    stocks = []
-    for item in watchlist:
+    # 一次查詢所有股票
+    def get_price(item):
+        symbol = item['symbol']
+        raw = symbol.replace('.TW','').replace('.TWO','')
+        ex = 'otc' if '.TWO' in symbol else 'tse'
+        ch = f'{ex}_{raw}.tw'
         try:
-            ticker = yf.Ticker(item['symbol'], session=_curl_session)
-            hist = ticker.history(period='2d')
-            price, change = None, 0
-            if len(hist) >= 2:
-                price = round(hist['Close'].iloc[-1], 2)
-                prev = hist['Close'].iloc[-2]
-                change = round(((price - prev) / prev) * 100, 2)
+            r = _req.get('https://mis.twse.com.tw/stock/api/getStockInfo.jsp',
+                params={'ex_ch': ch, 'json': '1', 'delay': '0'}, timeout=5)
+            d = r.json()['msgArray'][0]
+            curr = float(d.get('z') or d.get('y') or 0)
+            prev = float(d.get('y') or curr)
+            change = round(((curr - prev) / prev) * 100, 2) if prev else 0
+            return round(curr, 2), change
         except:
-            price, change = None, 0
-        stocks.append({
-            'symbol': item['symbol'],
-            'name': item['name'],
-            'price': price,
-            'change': change,
-            'cost': item.get('cost'),
-            'shares': item.get('shares')
-        })
+            return None, 0
+    from concurrent.futures import ThreadPoolExecutor
+    stocks = []
+    with ThreadPoolExecutor(max_workers=10) as ex:
+        futures = {ex.submit(get_price, item): item for item in watchlist}
+        for f, item in futures.items():
+            price, change = f.result()
+            stocks.append({
+                'symbol': item['symbol'],
+                'name': item['name'],
+                'price': price,
+                'change': change,
+                'cost': item.get('cost'),
+                'shares': item.get('shares')
+            })
     return jsonify({'stocks': stocks})
 
 @app.route('/api/watchlist/add', methods=['POST'])
@@ -573,7 +582,7 @@ def generate_report(report_type):
             # 抓取大盤（台灣加權）技術數據，確保 AI 使用真實數字
             twii_data = None
             try:
-                twii_hist = yf.Ticker('^TWII', session=_curl_session).history(period='90d')
+                twii_hist = yf.Ticker('^TWII', session=curl_session).history(period='90d')
                 if len(twii_hist) >= 60:
                     from modules.technical import analyze_stock
                     twii_stock_data = {
