@@ -53,14 +53,25 @@ def _fetch_ticker(name, symbol, days=90):
 def _fetch_taiwan_ticker(name, symbol):
     for attempt in range(2):
         try:
-            end = datetime.now(TW)
-            start = end - timedelta(days=120)
-            ticker = yf.Ticker(symbol, session=curl_session) if curl_session else yf.Ticker(symbol)
-            hist = ticker.history(
-                start=start.strftime('%Y-%m-%d'),
-                end=(end + timedelta(days=1)).strftime('%Y-%m-%d'),
-                auto_adjust=False
+            import requests as _req2
+            r = _req2.get(
+                f'https://query1.finance.yahoo.com/v8/finance/chart/{symbol}',
+                headers={'User-Agent': 'Mozilla/5.0'},
+                params={'interval': '1d', 'range': '6mo'},
+                timeout=15
             )
+            data = r.json()['chart']['result'][0]
+            import pandas as _pd2
+            timestamps = data['timestamp']
+            quotes = data['indicators']['quote'][0]
+            hist = _pd2.DataFrame({
+                'Open': quotes['open'], 'High': quotes['high'],
+                'Low': quotes['low'], 'Close': quotes['close'],
+                'Volume': quotes['volume'],
+            }, index=_pd2.to_datetime([datetime.fromtimestamp(t) for t in timestamps]))
+            hist.index.name = 'Date'
+            hist = hist.dropna(subset=['Close'])
+            if True:
             if len(hist) >= 2:
                 curr  = float(hist['Close'].iloc[-1])
                 prev  = float(hist['Close'].iloc[-2])
