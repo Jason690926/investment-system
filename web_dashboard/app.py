@@ -450,17 +450,14 @@ def api_watchlist():
             r = _req.get(
                 f'https://query1.finance.yahoo.com/v8/finance/chart/{symbol}',
                 headers={'User-Agent': 'Mozilla/5.0'},
-                params={'interval': '1d', 'range': '5d'},
+                params={'interval': '1d', 'range': '2d'},
                 timeout=10
             )
-            data = r.json()
-            closes = data['chart']['result'][0]['indicators']['quote'][0]['close']
-            closes = [c for c in closes if c is not None]
-            if len(closes) >= 2:
-                price = round(closes[-1], 2)
-                prev = closes[-2]
-                change = round(((price - prev) / prev) * 100, 2)
-                return price, change
+            meta = r.json()['chart']['result'][0]['meta']
+            price = round(float(meta['regularMarketPrice']), 2)
+            prev = float(meta.get('chartPreviousClose') or price)
+            change = round(((price - prev) / prev) * 100, 2) if prev else 0
+            return price, change
         except Exception as e:
             print(f'[watchlist] {symbol} 失敗: {e}')
         return None, 0
