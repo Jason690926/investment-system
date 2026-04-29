@@ -18,14 +18,17 @@ import yfinance as yf
 
 def _fetch_ticker(name, symbol, days=90):
     try:
-        end = datetime.now(TW)
-        start = end - timedelta(days=days)
-        ticker = yf.Ticker(symbol, session=curl_session) if curl_session else yf.Ticker(symbol)
-        hist = ticker.history(
-            start=start.strftime('%Y-%m-%d'),
-            end=(end + timedelta(days=1)).strftime('%Y-%m-%d'),
-            auto_adjust=False
-        )
+        import requests as _rq
+        _r = _rq.get(f'https://query1.finance.yahoo.com/v8/finance/chart/{symbol}',
+            headers={'User-Agent': 'Mozilla/5.0'},
+            params={'interval': '1d', 'range': '6mo'}, timeout=15)
+        _d = _r.json()['chart']['result'][0]
+        _ts = _d['timestamp']
+        _q = _d['indicators']['quote'][0]
+        hist = pd.DataFrame({
+            'Close': _q['close'], 'Volume': _q['volume']
+        }, index=pd.to_datetime([datetime.fromtimestamp(t) for t in _ts]))
+        hist = hist.dropna(subset=['Close'])
         if len(hist) >= 2:
             curr = float(hist['Close'].iloc[-1])
             prev = float(hist['Close'].iloc[-2])
@@ -114,14 +117,15 @@ def _fetch_taiwan_ticker(name, symbol):
 
 def _fetch_macro_ticker(name, symbol):
     try:
-        end = datetime.now(TW)
-        start = end - timedelta(days=90)
-        ticker = yf.Ticker(symbol, session=curl_session) if curl_session else yf.Ticker(symbol)
-        hist = ticker.history(
-            start=start.strftime('%Y-%m-%d'),
-            end=(end + timedelta(days=1)).strftime('%Y-%m-%d'),
-            auto_adjust=False
-        )
+        import requests as _rq
+        _r = _rq.get(f'https://query1.finance.yahoo.com/v8/finance/chart/{symbol}',
+            headers={'User-Agent': 'Mozilla/5.0'},
+            params={'interval': '1d', 'range': '6mo'}, timeout=15)
+        _d = _r.json()['chart']['result'][0]
+        _ts, _q = _d['timestamp'], _d['indicators']['quote'][0]
+        hist = pd.DataFrame({'Close': _q['close'], 'Volume': _q['volume']},
+            index=pd.to_datetime([datetime.fromtimestamp(t) for t in _ts]))
+        hist = hist.dropna(subset=['Close'])
         if len(hist) < 2:
             return name, {'price': 0, 'change': 0, 'symbol': symbol}
 
