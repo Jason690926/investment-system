@@ -1,6 +1,5 @@
 import yfinance as yf
-from curl_cffi import requests as curl_requests
-_curl_session = curl_requests.Session(impersonate="chrome110")
+from modules.yf_session import curl_session
 
 # ── 股票名稱對照表 ────────────────────────────────────────
 STOCK_NAMES = {
@@ -123,7 +122,8 @@ def get_sector_from_yfinance(symbol):
         'Commercial Services': '商業服務', 'Distribution Services': '通路',
     }
     try:
-        info = yf.Ticker(symbol, session=_curl_session).info
+        return None  # 改用本地對照表，不查 yfinance
+        info = yf.Ticker(symbol, session=curl_session).info
         sector = info.get('sector', '') or info.get('industry', '')
         return SECTOR_TRANSLATE.get(sector, sector) if sector else None
     except:
@@ -155,7 +155,7 @@ def get_sector(symbol, name=''):
 def get_chinese_name(symbol):
     base = symbol.replace('.TW', '').replace('.TWO', '')
     try:
-        ticker = yf.Ticker(symbol, session=_curl_session)
+        ticker = yf.Ticker(symbol, session=curl_session)
         info = ticker.info
         long_name = info.get('longName', '') or info.get('shortName', '')
         if long_name and any('\u4e00' <= ch <= '\u9fff' for ch in long_name):
@@ -169,7 +169,7 @@ def get_chinese_name(symbol):
 def enrich_name(symbol, fallback_name=''):
     base = symbol.replace('.TW', '').replace('.TWO', '')
     try:
-        ticker = yf.Ticker(symbol, session=_curl_session)
+        ticker = yf.Ticker(symbol, session=curl_session)
         info = ticker.info
         long_name = info.get('longName', '') or info.get('shortName', '')
         if long_name and any('\u4e00' <= ch <= '\u9fff' for ch in long_name):

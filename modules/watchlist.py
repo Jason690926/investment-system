@@ -106,9 +106,15 @@ def save_watchlist(watchlist):
 # ── 判斷上市/上櫃 ─────────────────────────────────────────
 def _check_symbol(symbol):
     import yfinance as yf
+    from modules.yf_session import curl_session
     try:
-        hist = yf.Ticker(symbol).history(period='5d', timeout=5)
-        return len(hist) > 0
+        import requests as _rq
+        _r = _rq.get(f'https://query1.finance.yahoo.com/v8/finance/chart/{symbol}',
+            headers={'User-Agent': 'Mozilla/5.0'},
+            params={'interval': '1d', 'range': '5d'}, timeout=10)
+        _data = _r.json()
+        hist = _data.get('chart', {}).get('result')
+        return bool(hist)
     except:
         return False
 
