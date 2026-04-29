@@ -453,7 +453,8 @@ def api_watchlist():
             r = _req.get('https://mis.twse.com.tw/stock/api/getStockInfo.jsp',
                 params={'ex_ch': ch, 'json': '1', 'delay': '0'}, timeout=5)
             d = r.json()['msgArray'][0]
-            curr = float(d.get('z') or d.get('y') or 0)
+            z = d.get('z',''); pz = d.get('pz',''); y = d.get('y','')
+            curr = float(z if z and z != '-' else (pz if pz and pz != '-' else y or 0))
             prev = float(d.get('y') or curr)
             change = round(((curr - prev) / prev) * 100, 2) if prev else 0
             return round(curr, 2), change
