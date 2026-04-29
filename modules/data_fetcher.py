@@ -71,7 +71,6 @@ def _fetch_taiwan_ticker(name, symbol):
             }, index=_pd2.to_datetime([datetime.fromtimestamp(t) for t in timestamps]))
             hist.index.name = 'Date'
             hist = hist.dropna(subset=['Close'])
-            if True:
             if len(hist) >= 2:
                 curr  = float(hist['Close'].iloc[-1])
                 prev  = float(hist['Close'].iloc[-2])
