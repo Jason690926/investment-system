@@ -1,10 +1,10 @@
 import yfinance as yf
+from modules.yf_session import curl_session
 import requests
 from curl_cffi import requests as curl_requests
 
 # 修正 Render 環境 IP 被 Yahoo 封鎖問題
 _curl_session = curl_requests.Session(impersonate="chrome110")
-yf.set_tz_cache_location("/tmp/yfinance_cache")
 
 import pandas as pd
 from datetime import datetime, timedelta, timezone
@@ -15,13 +15,12 @@ TW = timezone(timedelta(hours=8))
 
 # yfinance 1.3.0 使用 curl_cffi 自動處理 crumb，不需要自訂 session
 import yfinance as yf
-yf.set_tz_cache_location("/tmp/yfinance_cache")
 
 def _fetch_ticker(name, symbol, days=90):
     try:
         end = datetime.now(TW)
         start = end - timedelta(days=days)
-        ticker = yf.Ticker(symbol, session=_curl_session)
+        ticker = yf.Ticker(symbol, session=curl_session) if curl_session else yf.Ticker(symbol)
         hist = ticker.history(
             start=start.strftime('%Y-%m-%d'),
             end=(end + timedelta(days=1)).strftime('%Y-%m-%d'),
@@ -56,7 +55,7 @@ def _fetch_taiwan_ticker(name, symbol):
         try:
             end = datetime.now(TW)
             start = end - timedelta(days=120)
-            ticker = yf.Ticker(symbol, session=_curl_session)
+            ticker = yf.Ticker(symbol, session=curl_session) if curl_session else yf.Ticker(symbol)
             hist = ticker.history(
                 start=start.strftime('%Y-%m-%d'),
                 end=(end + timedelta(days=1)).strftime('%Y-%m-%d'),
@@ -107,7 +106,7 @@ def _fetch_macro_ticker(name, symbol):
     try:
         end = datetime.now(TW)
         start = end - timedelta(days=90)
-        ticker = yf.Ticker(symbol, session=_curl_session)
+        ticker = yf.Ticker(symbol, session=curl_session) if curl_session else yf.Ticker(symbol)
         hist = ticker.history(
             start=start.strftime('%Y-%m-%d'),
             end=(end + timedelta(days=1)).strftime('%Y-%m-%d'),
