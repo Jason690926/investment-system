@@ -446,20 +446,17 @@ def api_watchlist():
     # 一次查詢所有股票
     def get_price(item):
         symbol = item['symbol']
-        raw = symbol.replace('.TW','').replace('.TWO','')
-        ex = 'otc' if '.TWO' in symbol else 'tse'
-        ch = f'{ex}_{raw}.tw'
         try:
-            r = _req.get('https://mis.twse.com.tw/stock/api/getStockInfo.jsp',
-                params={'ex_ch': ch, 'json': '1', 'delay': '0'}, timeout=5)
-            d = r.json()['msgArray'][0]
-            z = d.get('z',''); pz = d.get('pz',''); y = d.get('y','')
-            curr = float(z if z and z != '-' else (pz if pz and pz != '-' else y or 0))
-            prev = float(d.get('y') or curr)
-            change = round(((curr - prev) / prev) * 100, 2) if prev else 0
-            return round(curr, 2), change
+            ticker = yf.Ticker(symbol, session=curl_session) if curl_session else yf.Ticker(symbol)
+            hist = ticker.history(period='2d')
+            if len(hist) >= 2:
+                price = round(float(hist['Close'].iloc[-1]), 2)
+                prev = float(hist['Close'].iloc[-2])
+                change = round(((price - prev) / prev) * 100, 2)
+                return price, change
         except:
-            return None, 0
+            pass
+        return None, 0
     from concurrent.futures import ThreadPoolExecutor
     stocks = []
     with ThreadPoolExecutor(max_workers=10) as ex:
