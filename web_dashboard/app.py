@@ -15,6 +15,8 @@ from modules.pdf_generator import generate_daily_report
 from modules.email_sender import send_report
 from modules.watchlist import get_watchlist, add_stock, remove_stock
 import config, yfinance as yf
+from curl_cffi import requests as curl_requests
+_curl_session = curl_requests.Session(impersonate="chrome110")
 
 app = Flask(__name__)
 
@@ -445,7 +447,7 @@ def api_watchlist():
     stocks = []
     for item in watchlist:
         try:
-            ticker = yf.Ticker(item['symbol'])
+            ticker = yf.Ticker(item['symbol'], session=_curl_session)
             hist = ticker.history(period='2d')
             price, change = None, 0
             if len(hist) >= 2:
@@ -572,7 +574,7 @@ def generate_report(report_type):
             twii_data = None
             try:
                 import yfinance as yf
-                twii_hist = yf.Ticker('^TWII').history(period='90d')
+                twii_hist = yf.Ticker('^TWII', session=_curl_session).history(period='90d')
                 if len(twii_hist) >= 60:
                     from modules.technical import analyze_stock
                     twii_stock_data = {
