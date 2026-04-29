@@ -1,5 +1,11 @@
 import yfinance as yf
 import requests
+from curl_cffi import requests as curl_requests
+
+# 修正 Render 環境 IP 被 Yahoo 封鎖問題
+_curl_session = curl_requests.Session(impersonate="chrome110")
+yf.set_tz_cache_location("/tmp/yfinance_cache")
+
 import pandas as pd
 from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -7,12 +13,15 @@ import config
 
 TW = timezone(timedelta(hours=8))
 
+# yfinance 1.3.0 使用 curl_cffi 自動處理 crumb，不需要自訂 session
+import yfinance as yf
+yf.set_tz_cache_location("/tmp/yfinance_cache")
+
 def _fetch_ticker(name, symbol, days=90):
-    """強制抓最新資料，包含多時間維度漲跌幅"""
     try:
         end = datetime.now(TW)
         start = end - timedelta(days=days)
-        ticker = yf.Ticker(symbol)
+        ticker = yf.Ticker(symbol, session=_curl_session)
         hist = ticker.history(
             start=start.strftime('%Y-%m-%d'),
             end=(end + timedelta(days=1)).strftime('%Y-%m-%d'),
@@ -43,12 +52,11 @@ def _fetch_ticker(name, symbol, days=90):
     return name, {'price': 0, 'change': 0, 'symbol': symbol}
 
 def _fetch_taiwan_ticker(name, symbol):
-    """台股：強制抓最新120天資料，含多時間維度漲跌幅，有重試機制"""
-    for attempt in range(2):  # 最多重試一次
+    for attempt in range(2):
         try:
             end = datetime.now(TW)
             start = end - timedelta(days=120)
-            ticker = yf.Ticker(symbol)
+            ticker = yf.Ticker(symbol, session=_curl_session)
             hist = ticker.history(
                 start=start.strftime('%Y-%m-%d'),
                 end=(end + timedelta(days=1)).strftime('%Y-%m-%d'),
@@ -95,6 +103,42 @@ def _fetch_taiwan_ticker(name, symbol):
                 print(f'抓取失敗 {name}({symbol}): {e}')
     return name, None
 
+def _fetch_macro_ticker(name, symbol):
+    try:
+        end = datetime.now(TW)
+        start = end - timedelta(days=90)
+        ticker = yf.Ticker(symbol, session=_curl_session)
+        hist = ticker.history(
+            start=start.strftime('%Y-%m-%d'),
+            end=(end + timedelta(days=1)).strftime('%Y-%m-%d'),
+            auto_adjust=True
+        )
+        if len(hist) < 2:
+            return name, {'price': 0, 'change': 0, 'symbol': symbol}
+
+        curr = float(hist['Close'].iloc[-1])
+        prev = float(hist['Close'].iloc[-2])
+        change_1d = round(((curr - prev) / prev) * 100, 2)
+
+        def pct_change(days):
+            if len(hist) >= days:
+                past = float(hist['Close'].iloc[-days])
+                return round(((curr - past) / past) * 100, 2)
+            return None
+
+        return name, {
+            'price': round(curr, 3),
+            'change': change_1d,
+            'change_7d': pct_change(7),
+            'change_14d': pct_change(14),
+            'change_30d': pct_change(30),
+            'change_60d': pct_change(60),
+            'symbol': symbol
+        }
+    except:
+        pass
+    return name, {'price': 0, 'change': 0, 'symbol': symbol}
+
 def get_global_markets():
     symbols = {
         '美國道瓊': '^DJI',
@@ -129,43 +173,6 @@ def get_commodities():
             name, data = f.result()
             result[name] = data
     return result
-
-def _fetch_macro_ticker(name, symbol):
-    """抓取宏觀資產資料，包含今日、7日、14日、30日、60日漲跌幅"""
-    try:
-        end = datetime.now(TW)
-        start = end - timedelta(days=90)  # 抓90天確保60日有資料
-        ticker = yf.Ticker(symbol)
-        hist = ticker.history(
-            start=start.strftime('%Y-%m-%d'),
-            end=(end + timedelta(days=1)).strftime('%Y-%m-%d'),
-            auto_adjust=True
-        )
-        if len(hist) < 2:
-            return name, {'price': 0, 'change': 0, 'symbol': symbol}
-
-        curr = float(hist['Close'].iloc[-1])
-        prev = float(hist['Close'].iloc[-2])
-        change_1d = round(((curr - prev) / prev) * 100, 2)
-
-        def pct_change(days):
-            if len(hist) >= days:
-                past = float(hist['Close'].iloc[-days])
-                return round(((curr - past) / past) * 100, 2)
-            return None
-
-        return name, {
-            'price': round(curr, 3),
-            'change': change_1d,
-            'change_7d': pct_change(7),
-            'change_14d': pct_change(14),
-            'change_30d': pct_change(30),
-            'change_60d': pct_change(60),
-            'symbol': symbol
-        }
-    except:
-        pass
-    return name, {'price': 0, 'change': 0, 'symbol': symbol}
 
 def get_macro_assets():
     symbols = {
