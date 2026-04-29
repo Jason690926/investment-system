@@ -595,7 +595,19 @@ def generate_report(report_type):
             # 抓取大盤（台灣加權）技術數據，確保 AI 使用真實數字
             twii_data = None
             try:
-                twii_hist = yf.Ticker('^TWII', session=curl_session).history(period='90d')
+                import requests as _rq
+                _r = _rq.get('https://query1.finance.yahoo.com/v8/finance/chart/%5ETWII',
+                    headers={'User-Agent': 'Mozilla/5.0'},
+                    params={'interval': '1d', 'range': '6mo'}, timeout=15)
+                import pandas as _pd3
+                _data = _r.json()['chart']['result'][0]
+                _ts = _data['timestamp']
+                _q = _data['indicators']['quote'][0]
+                twii_hist = _pd3.DataFrame({
+                    'Open': _q['open'], 'High': _q['high'],
+                    'Low': _q['low'], 'Close': _q['close'], 'Volume': _q['volume']
+                }, index=_pd3.to_datetime([__import__('datetime').datetime.fromtimestamp(t) for t in _ts]))
+                twii_hist = twii_hist.dropna(subset=['Close'])
                 if len(twii_hist) >= 60:
                     from modules.technical import analyze_stock
                     twii_stock_data = {
