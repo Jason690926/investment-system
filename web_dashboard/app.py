@@ -454,8 +454,10 @@ def api_watchlist():
                 prev = float(hist['Close'].iloc[-2])
                 change = round(((price - prev) / prev) * 100, 2)
                 return price, change
-        except:
-            pass
+            else:
+                print(f'[watchlist] {symbol} 取得 {len(hist)} 筆，不足2筆')
+        except Exception as e:
+            print(f'[watchlist] {symbol} 失敗: {e}')
         return None, 0
     from concurrent.futures import ThreadPoolExecutor
     stocks = []
