@@ -573,7 +573,6 @@ def generate_report(report_type):
             # 抓取大盤（台灣加權）技術數據，確保 AI 使用真實數字
             twii_data = None
             try:
-                import yfinance as yf
                 twii_hist = yf.Ticker('^TWII', session=_curl_session).history(period='90d')
                 if len(twii_hist) >= 60:
                     from modules.technical import analyze_stock

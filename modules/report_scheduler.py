@@ -1,5 +1,7 @@
 from datetime import datetime, date, timedelta
 import yfinance as yf
+from curl_cffi import requests as curl_requests
+_curl_session = curl_requests.Session(impersonate="chrome110")
 
 # 台灣國定假日（每年需更新）
 TAIWAN_HOLIDAYS_2026 = {
@@ -58,7 +60,7 @@ def is_market_closed(check_date=None):
         check_date = check_date.date()
     # 嘗試從 yfinance 確認台股是否有交易資料
     try:
-        ticker = yf.Ticker('^TWII')
+        ticker = yf.Ticker('^TWII', session=_curl_session)
         hist = ticker.history(start=check_date.strftime('%Y-%m-%d'),
                               end=(check_date + timedelta(days=1)).strftime('%Y-%m-%d'))
         return len(hist) == 0
