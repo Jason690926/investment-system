@@ -564,15 +564,15 @@ def generate_report(report_type):
             step('fetch_taiwan', '抓取台股資料')
             step('fetch_news', '抓取財經新聞')
 
+            print("[run] 開始抓取資料")
             with ThreadPoolExecutor(max_workers=5) as ex:
-                print("[run] 開始抓取資料")
-            f_global    = ex.submit(get_global_markets)
+                f_global    = ex.submit(get_global_markets)
                 f_commodity = ex.submit(get_commodities)
                 f_taiwan    = ex.submit(get_taiwan_stocks)
                 f_news      = ex.submit(get_financial_news)
                 f_macro     = ex.submit(get_macro_assets)
                 print("[run] 等待全球市場資料...")
-            global_markets = f_global.result()
+                global_markets = f_global.result()
                 commodities    = f_commodity.result()
                 taiwan_stocks  = f_taiwan.result()
                 news           = f_news.result()
