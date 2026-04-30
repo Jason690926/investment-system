@@ -697,7 +697,7 @@ def generate_report(report_type):
             global _is_generating
             _is_generating = False
 
-    threading.Thread(target=run, daemon=True).start()
+    threading.Thread(target=run, daemon=False).start()
     return jsonify({'job_id': job_id})
 
 if __name__ == '__main__':
