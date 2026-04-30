@@ -550,7 +550,11 @@ def generate_report(report_type):
                     label = key
                 push(q, {'type':'step_done','key':key,'label':label,'pct':STEP_PCT.get(key,0)})
 
+            print('[run] 開始執行報表流程')
+            print('[run] 開始執行報表流程')
             actual_type = get_report_type(force=None)
+            print(f'[run] 報表類型: {actual_type}')
+            print(f'[run] 報表類型: {actual_type}')
             from modules.report_scheduler import get_week_range
             monday, friday = get_week_range()
             week_range = f'{monday.strftime("%Y/%m/%d")} ~ {friday.strftime("%Y/%m/%d")}'
@@ -561,17 +565,20 @@ def generate_report(report_type):
             step('fetch_news', '抓取財經新聞')
 
             with ThreadPoolExecutor(max_workers=5) as ex:
-                f_global    = ex.submit(get_global_markets)
+                print("[run] 開始抓取資料")
+            f_global    = ex.submit(get_global_markets)
                 f_commodity = ex.submit(get_commodities)
                 f_taiwan    = ex.submit(get_taiwan_stocks)
                 f_news      = ex.submit(get_financial_news)
                 f_macro     = ex.submit(get_macro_assets)
-                global_markets = f_global.result()
+                print("[run] 等待全球市場資料...")
+            global_markets = f_global.result()
                 commodities    = f_commodity.result()
                 taiwan_stocks  = f_taiwan.result()
                 news           = f_news.result()
                 macro_data     = f_macro.result()
 
+            print("[run] 全球市場完成")
             done_step('fetch_global', '抓取全球市場資料')
             done_step('fetch_taiwan', '抓取台股資料')
             done_step('fetch_news', '抓取財經新聞')
