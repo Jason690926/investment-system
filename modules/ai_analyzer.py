@@ -333,18 +333,13 @@ def analyze_watchlist_parallel(watchlist, watchlist_stocks, watch_tech, news,
 
     import time
     results = []
-    # 分批執行，每批 5 支，避免超過 API rate limit
-    batch_size = 5
-    for i in range(0, len(watchlist), batch_size):
-        batch = watchlist[i:i+batch_size]
-        with ThreadPoolExecutor(max_workers=batch_size) as ex:
-            futures = {ex.submit(_analyze_one, item): item['name'] for item in batch}
-            for f in as_completed(futures):
-                r = f.result()
-                if r:
-                    results.append(r)
-        # 批次間等待 2 秒，避免超過 rate limit
-        if i + batch_size < len(watchlist):
+    # 序列執行，避免 Render 免費方案記憶體不足
+    for i, item in enumerate(watchlist):
+        print(f"AI 分析持股 {i+1}/{len(watchlist)}: {item['name']}")
+        r = _analyze_one(item)
+        if r:
+            results.append(r)
+        if i < len(watchlist) - 1:
             time.sleep(2)
     # 依原始順序排列
     order = {item['name']: i for i, item in enumerate(watchlist)}
