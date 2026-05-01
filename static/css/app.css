@@ -409,6 +409,11 @@ a:hover { text-decoration: underline; }
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  position: relative;
+  overflow: hidden;
+}
+.zone-overlay {
+  border-radius: 0;
 }
 
 /* ── Analysis ─────────────────────────────────────────── */

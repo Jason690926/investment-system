@@ -80,7 +80,8 @@ class StockAnalysis(Base):
     analysis_date   = Column(Date, nullable=False)
     analysis_type   = Column(String(16), nullable=False)  # 'daily' or 'weekly_full'
     market_analysis = Column(Text)       # AI 產出的客觀市場分析（JSON string）
-    wyckoff_phase   = Column(String(32)) # 威科夫階段快取：accumulation/markup/distribution/markdown
+    html_content    = Column(Text)       # 三宗師完整 HTML 分析內容
+    wyckoff_phase   = Column(String(32)) # 威科夫階段快取
     risk_pct        = Column(Integer)    # 風險係數 0-100
     support_price   = Column(Numeric(10, 2))
     resistance_price= Column(Numeric(10, 2))

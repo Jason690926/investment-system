@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ stock.name }} — 投資追蹤{% endblock %}
+{% block title %}{{ stock.name }} — 股海導航{% endblock %}
 {% block head %}
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 {% endblock %}
@@ -67,8 +67,22 @@
   {% endif %}
 </div>
 
+<!-- 交易記錄（持有中才顯示） -->
+{% if stock.status == 'holding' %}
+<div class="trades-section" id="trades-section">
+  <div class="section-header" style="margin-bottom:12px;">
+    <div style="font-size:15px; font-weight:700;">交易記錄</div>
+    <button class="btn btn-ghost btn-sm" onclick="openTradeModal(null)">＋ 新增交易</button>
+  </div>
+  <div id="trades-list">
+    <div class="loading"><div class="spinner"></div></div>
+  </div>
+  <div id="trades-summary" style="margin-top:10px; font-size:13px; color:var(--muted); text-align:right;"></div>
+</div>
+{% endif %}
+
 <!-- Tabs -->
-<div class="tabs">
+<div class="tabs" style="margin-top:20px;">
   <button class="tab-btn active" onclick="switchTab('chart', this)">K線走勢</button>
   <button class="tab-btn" onclick="switchTab('analysis', this)">三宗師分析</button>
 </div>
@@ -100,6 +114,33 @@
 <!-- Delete -->
 <div style="margin-top:32px; padding-top:20px; border-top:1px solid var(--border); text-align:right;">
   <button class="btn btn-ghost btn-sm" onclick="confirmDelete()">刪除此股票</button>
+</div>
+
+<!-- 交易 Modal（新增/編輯）-->
+<div class="modal-overlay" id="trade-modal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeTradeModal()">×</button>
+    <div class="modal-title" id="trade-modal-title">新增交易</div>
+    <input type="hidden" id="t-trade-id" value="" />
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">買入價（元）</label>
+        <input class="form-control" id="t-buy-price" type="number" step="0.01" placeholder="850" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">張數</label>
+        <input class="form-control" id="t-quantity" type="number" step="0.1" placeholder="1" />
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">買入日期（選填）</label>
+      <input class="form-control" id="t-buy-date" type="date" />
+    </div>
+    <div style="display:flex; gap:10px; margin-top:8px;">
+      <button class="btn btn-ghost" style="flex:1" onclick="closeTradeModal()">取消</button>
+      <button class="btn btn-primary" style="flex:2" onclick="submitTrade()">確認</button>
+    </div>
+  </div>
 </div>
 
 <!-- Hidden data for JS -->

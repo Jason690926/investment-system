@@ -94,3 +94,31 @@ def remove_stock(db: Session, user_id: int, stock_id: int):
         raise ValueError("持股不存在")
     db.delete(stock)
     db.commit()
+
+
+def update_trade(db: Session, user_id: int, trade_id: int,
+                 quantity_zhang: float, buy_price: float = None,
+                 buy_date: str = None) -> Trade:
+    trade = (db.query(Trade).join(Stock)
+               .filter(Trade.id == trade_id, Stock.user_id == user_id).first())
+    if not trade:
+        raise ValueError("交易記錄不存在")
+    trade.quantity_zhang = Decimal(str(quantity_zhang))
+    if buy_price is not None:
+        trade.buy_price = Decimal(str(buy_price))
+    if buy_date is not None:
+        trade.buy_date = date.fromisoformat(buy_date)
+    elif buy_date == '':
+        trade.buy_date = None
+    db.commit()
+    db.refresh(trade)
+    return trade
+
+
+def delete_trade(db: Session, user_id: int, trade_id: int):
+    trade = (db.query(Trade).join(Stock)
+               .filter(Trade.id == trade_id, Stock.user_id == user_id).first())
+    if not trade:
+        raise ValueError("交易記錄不存在")
+    db.delete(trade)
+    db.commit()
