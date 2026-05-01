@@ -64,6 +64,25 @@ def _ohlcv_to_list(df: pd.DataFrame, n: int) -> list:
     return result
 
 
+def get_stock_info(symbol: str) -> dict | None:
+    """快速查詢股票名稱與現價（不抓 OHLCV，省時間）"""
+    try:
+        r = requests.get(
+            f'https://query1.finance.yahoo.com/v8/finance/chart/{symbol}',
+            headers={'User-Agent': 'Mozilla/5.0'},
+            params={'interval': '1d', 'range': '1d'},
+            timeout=8
+        )
+        meta = r.json()['chart']['result'][0]['meta']
+        return {
+            'symbol': symbol,
+            'name':   meta.get('longName') or meta.get('shortName') or '',
+            'price':  meta.get('regularMarketPrice'),
+        }
+    except Exception:
+        return None
+
+
 def get_full_stock_data(symbol: str) -> dict | None:
     """
     回傳一支台股的完整分析資料：

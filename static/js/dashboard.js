@@ -94,6 +94,29 @@ document.querySelectorAll('.chip').forEach(chip => {
   });
 });
 
+/* ── Symbol 自動帶入名稱 ──────────────────────────────── */
+let symbolTimer = null;
+document.getElementById('f-symbol').addEventListener('input', function () {
+  clearTimeout(symbolTimer);
+  const raw = this.value.trim().toUpperCase();
+  if (!raw) return;
+  symbolTimer = setTimeout(async () => {
+    // 純數字自動補 .TW
+    const symbol = /^\d+$/.test(raw) ? raw + '.TW' : raw;
+    if (symbol !== raw) this.value = symbol;
+
+    const nameEl = document.getElementById('f-name');
+    nameEl.placeholder = '查詢中…';
+    try {
+      const info = await api(`/api/market/${encodeURIComponent(symbol)}/info`);
+      if (info.name && !nameEl.value) nameEl.value = info.name;
+      nameEl.placeholder = info.name || '找不到名稱';
+    } catch {
+      nameEl.placeholder = '找不到此代號';
+    }
+  }, 600);
+});
+
 /* ── Add Modal ────────────────────────────────────────── */
 function openAddModal() {
   document.getElementById('add-modal').classList.add('open');
@@ -125,7 +148,9 @@ document.querySelectorAll('.radio-label').forEach(label => {
 });
 
 async function submitAddStock() {
-  const symbol = document.getElementById('f-symbol').value.trim().toUpperCase();
+  const raw    = document.getElementById('f-symbol').value.trim().toUpperCase();
+  const symbol = /^\d+$/.test(raw) ? raw + '.TW' : raw;
+  document.getElementById('f-symbol').value = symbol;
   const name   = document.getElementById('f-name').value.trim();
   const status = document.querySelector('input[name="status"]:checked').value;
   if (!symbol || !name) { toast('請填入代號和名稱', 'error'); return; }

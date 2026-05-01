@@ -38,7 +38,9 @@ async function loadMarketData() {
     updateInfoRow(data);
     buildChart();
   } catch (e) {
-    document.getElementById('d-change').textContent = '資料載入失敗';
+    const el = document.getElementById('d-change');
+    el.innerHTML = `資料載入失敗 <button class="btn btn-ghost btn-sm" onclick="loadMarketData()" style="margin-left:8px;">重試</button>`;
+    el.className = 'detail-change down';
     console.error(e);
   }
 }

@@ -72,6 +72,16 @@ def stock_detail(stock_id):
 
 # ── 市場資料 API ──────────────────────────────────────────
 
+@app.route('/api/market/<symbol>/info')
+@login_required
+def api_market_info(symbol):
+    from modules.data_enricher import get_stock_info
+    info = get_stock_info(symbol)
+    if info is None:
+        return jsonify({'error': f'找不到 {symbol}'}), 404
+    return jsonify(info)
+
+
 @app.route('/api/market/<symbol>/data')
 @login_required
 def api_market_data(symbol):
