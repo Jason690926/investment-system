@@ -1,0 +1,33 @@
+name: Daily Investment Report
+
+  on:
+    schedule:
+      - cron: '30 6 * * 1-5'
+    workflow_dispatch:
+
+  jobs:
+    run-report:
+      runs-on: ubuntu-latest
+      steps:
+        - name: Checkout
+          uses: actions/checkout@v4
+
+        - name: Setup Python
+          uses: actions/setup-python@v5
+          with:
+            python-version: '3.12'
+            cache: 'pip'
+
+        - name: Install dependencies
+          run: pip install -r requirements.txt
+
+        - name: Run report
+          run: python main.py
+          env:
+            CLAUDE_API_KEY:              ${{ secrets.CLAUDE_API_KEY }}
+            NEWS_API_KEY:                ${{ secrets.NEWS_API_KEY }}
+            EMAIL_SENDER:                ${{ secrets.EMAIL_SENDER }}
+            EMAIL_PASSWORD:              ${{ secrets.EMAIL_PASSWORD }}
+            EMAIL_RECEIVER:              ${{ secrets.EMAIL_RECEIVER }}
+            GOOGLE_SHEET_ID:             ${{ secrets.GOOGLE_SHEET_ID }}
+            GOOGLE_SHEETS_CREDENTIALS:   ${{ secrets.GOOGLE_SHEETS_CREDENTIALS }}
