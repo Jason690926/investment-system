@@ -1,4 +1,8 @@
 annotated-types==0.7.0
+SQLAlchemy==2.0.41
+psycopg2-binary==2.9.10
+Flask-Login==0.6.3
+Authlib==1.4.1
 anthropic==0.96.0
 anyio==4.13.0
 APScheduler==3.11.2
