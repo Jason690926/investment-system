@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}{{ stock.name }} — 投資追蹤{% endblock %}
+{% block head %}
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+{% endblock %}
+
+{% block content %}
+<!-- Back -->
+<div style="margin-bottom:16px;">
+  <a href="/dashboard" class="btn btn-ghost btn-sm">← 返回列表</a>
+</div>
+
+<!-- Header -->
+<div class="stock-detail-header">
+  <div>
+    <div class="detail-name">
+      {{ stock.name }}
+      {% if stock.status == 'holding' %}
+        <span class="badge badge-holding" style="position:relative;top:0;right:0;margin-left:8px;">已持有</span>
+      {% else %}
+        <span class="badge badge-watching" style="position:relative;top:0;right:0;margin-left:8px;">觀察中</span>
+      {% endif %}
+    </div>
+    <div class="detail-symbol">{{ stock.symbol }}</div>
+  </div>
+  <div class="detail-price-block">
+    <div class="detail-price" id="d-price">—</div>
+    <div class="detail-change" id="d-change">載入中…</div>
+  </div>
+</div>
+
+<!-- Info row -->
+<div class="info-row" id="info-row">
+  <div class="info-item">
+    <div class="info-label">MA5</div>
+    <div class="info-value" id="d-ma5">—</div>
+  </div>
+  <div class="info-item">
+    <div class="info-label">MA20</div>
+    <div class="info-value" id="d-ma20">—</div>
+  </div>
+  <div class="info-item">
+    <div class="info-label">MA60</div>
+    <div class="info-value" id="d-ma60">—</div>
+  </div>
+  <div class="info-item">
+    <div class="info-label">MACD柱</div>
+    <div class="info-value" id="d-macd">—</div>
+  </div>
+  <div class="info-item">
+    <div class="info-label">今日量</div>
+    <div class="info-value" id="d-vol">—</div>
+  </div>
+  <div class="info-item">
+    <div class="info-label">5日均量</div>
+    <div class="info-value" id="d-vol5">—</div>
+  </div>
+  {% if stock.status == 'holding' and stock.avg_cost %}
+  <div class="info-item">
+    <div class="info-label">均成本</div>
+    <div class="info-value">{{ stock.avg_cost }} 元</div>
+  </div>
+  <div class="info-item">
+    <div class="info-label">損益</div>
+    <div class="info-value" id="d-pnl">—</div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Tabs -->
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchTab('chart', this)">K線走勢</button>
+  <button class="tab-btn" onclick="switchTab('analysis', this)">三宗師分析</button>
+</div>
+
+<!-- Chart Tab -->
+<div class="tab-pane active" id="tab-chart">
+  <div class="chart-toolbar">
+    <div class="chart-timeframe">
+      <button class="tf-btn active" onclick="switchTF('daily', this)">日K</button>
+      <button class="tf-btn" onclick="switchTF('weekly', this)">週K</button>
+      <button class="tf-btn" onclick="switchTF('monthly', this)">月K</button>
+    </div>
+    <span style="font-size:13px; color:var(--muted);" id="chart-range-label"></span>
+  </div>
+  <div id="chart-container"></div>
+</div>
+
+<!-- Analysis Tab -->
+<div class="tab-pane" id="tab-analysis">
+  <div id="analysis-area">
+    <div class="analysis-trigger">
+      <p>點擊下方按鈕，以三大宗師框架（威科夫 + 本間宗久 + 李佛摩）分析此股票。</p>
+      <p style="font-size:13px; color:var(--muted); margin-bottom:24px;">分析約需 20-40 秒，會消耗 AI token。</p>
+      <button class="btn btn-green" onclick="runAnalysis()">🔍 產生三宗師分析</button>
+    </div>
+  </div>
+</div>
+
+<!-- Delete -->
+<div style="margin-top:32px; padding-top:20px; border-top:1px solid var(--border); text-align:right;">
+  <button class="btn btn-ghost btn-sm" onclick="confirmDelete()">刪除此股票</button>
+</div>
+
+<!-- Hidden data for JS -->
+<script>
+  const STOCK_ID     = {{ stock.id }};
+  const STOCK_SYMBOL = "{{ stock.symbol }}";
+  const STOCK_NAME   = "{{ stock.name }}";
+  const STOCK_STATUS = "{{ stock.status }}";
+  const AVG_COST     = {{ stock.avg_cost | tojson }};
+  const TOTAL_ZHANG  = {{ stock.total_zhang | tojson }};
+</script>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/stock.js') }}"></script>
+{% endblock %}

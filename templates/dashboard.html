@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}持股總覽{% endblock %}
+
+{% block content %}
+<div class="section-header">
+  <div class="section-title">我的持股</div>
+  <button class="btn btn-primary" onclick="openAddModal()">＋ 新增股票</button>
+</div>
+
+<div class="filter-chips">
+  <div class="chip active" data-filter="all">全部 <span id="cnt-all"></span></div>
+  <div class="chip" data-filter="holding">已持有 <span id="cnt-holding"></span></div>
+  <div class="chip" data-filter="watching">觀察中 <span id="cnt-watching"></span></div>
+</div>
+
+<div id="stock-grid" class="stock-grid">
+  <div class="loading"><div class="spinner"></div> 載入中…</div>
+</div>
+
+<!-- 新增股票 Modal -->
+<div class="modal-overlay" id="add-modal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeAddModal()">×</button>
+    <div class="modal-title">新增股票</div>
+
+    <div class="form-group">
+      <label class="form-label">股票代號（含市場，如 2330.TW）</label>
+      <input class="form-control" id="f-symbol" placeholder="2330.TW" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">股票名稱</label>
+      <input class="form-control" id="f-name" placeholder="台積電" />
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">狀態</label>
+      <div class="radio-group">
+        <label class="radio-label selected" id="rl-watching">
+          <input type="radio" name="status" value="watching" checked> 觀察中
+        </label>
+        <label class="radio-label" id="rl-holding">
+          <input type="radio" name="status" value="holding"> 已持有
+        </label>
+      </div>
+    </div>
+
+    <div id="holding-fields" style="display:none">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">買入價（元）</label>
+          <input class="form-control" id="f-buy-price" type="number" step="0.01" placeholder="850" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">數量（張）</label>
+          <input class="form-control" id="f-quantity" type="number" step="0.1" placeholder="1" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">買入日期（選填）</label>
+        <input class="form-control" id="f-buy-date" type="date" />
+      </div>
+    </div>
+
+    <div style="display:flex; gap:10px; margin-top:8px;">
+      <button class="btn btn-ghost" style="flex:1" onclick="closeAddModal()">取消</button>
+      <button class="btn btn-primary" style="flex:2" onclick="submitAddStock()">確認新增</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

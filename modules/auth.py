@@ -85,7 +85,7 @@ def callback():
             db.refresh(user)
 
         login_user(LoginUser(user))
-        return redirect('/')
+        return redirect('/dashboard')
     finally:
         db.close()
 
