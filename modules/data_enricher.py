@@ -66,6 +66,8 @@ def _ohlcv_to_list(df: pd.DataFrame, n: int) -> list:
 
 def get_stock_info(symbol: str) -> dict | None:
     """快速查詢股票名稱與現價（不抓 OHLCV，省時間）"""
+    from modules.stock_names import STOCK_NAMES
+    base = symbol.replace('.TW', '').replace('.TWO', '')
     try:
         r = requests.get(
             f'https://query1.finance.yahoo.com/v8/finance/chart/{symbol}',
@@ -74,13 +76,17 @@ def get_stock_info(symbol: str) -> dict | None:
             timeout=8
         )
         meta = r.json()['chart']['result'][0]['meta']
+        yahoo_name = meta.get('longName') or meta.get('shortName') or ''
+        # 優先用本地中文對照表；Yahoo 通常回英文名
+        name = STOCK_NAMES.get(base) or yahoo_name
         return {
             'symbol': symbol,
-            'name':   meta.get('longName') or meta.get('shortName') or '',
+            'name':   name,
             'price':  meta.get('regularMarketPrice'),
         }
     except Exception:
-        return None
+        name = STOCK_NAMES.get(base, '')
+        return {'symbol': symbol, 'name': name, 'price': None} if name else None
 
 
 def get_full_stock_data(symbol: str) -> dict | None:
