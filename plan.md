@@ -1,5 +1,5 @@
 # 投資建議書系統 — 重構計畫
-> 建立日期：2026-04-30｜更新日期：2026-05-02 18:00｜基於兩次訪談決策 + 實作後討論補充
+> 建立日期：2026-04-30｜更新日期：2026-05-02 19:00｜基於兩次訪談決策 + 實作後討論補充
 
 ---
 
@@ -298,10 +298,21 @@ jobs:
 8. ✅ GitHub Secrets 設定完成（Supabase 五個 + 既有 Claude/Email）
 9. ✅ Render 環境變數設定完成（Supabase + OAuth + Flask）
 10. ✅ `plan.md` 移入 `investment-system` repo（GitHub 同步，跨電腦可用）
-11. 🔄 Render 部署進行中（2026-05-02）
+11. ✅ `CLAUDE.md` 建立（自動讀 plan.md + 前端美學指引）
+12. ✅ Render 部署成功（`Your service is live 🎉`）
+13. ✅ Google OAuth redirect URI 修正（ProxyFix，http → https）
+14. ✅ `init_db()` 加入啟動流程（非 fatal）
+15. ✅ Supabase Session Pooler 連線（IPv4，解決 Render 免費版 IPv6 問題）
 
-**Render 部署完成後待做：**
-- [ ] 確認網站可正常登入（Google OAuth）
+**Supabase 連線問題紀錄：**
+- Render 免費版不支援 IPv6，Supabase Direct 連線 `db.cctvzvyfvbwrbcfgidnn.supabase.co` 解析到 IPv6 → 連線失敗
+- 解法：改用 Supabase Session Pooler（IPv4）
+  - `SUPABASE_DB_HOST` → `aws-1-ap-northeast-1.pooler.supabase.com`
+  - `SUPABASE_DB_USER` → `postgres.cctvzvyfvbwrbcfgidnn`
+- 上述兩個 Render 環境變數更新中，更新後需手動重新部署
+
+**部署完成後待做：**
+- ✅ 確認網站可正常登入（Google OAuth）
 - [ ] 加入 GitHub Secret `APP_URL`（Render 網址）
 - [ ] 手動觸發 GitHub Actions 測試批次分析
 
