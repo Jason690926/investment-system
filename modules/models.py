@@ -71,6 +71,21 @@ class Trade(Base):
     stock = relationship('Stock', back_populates='trades')
 
 
+class MarketDataCache(Base):
+    """當日市場 OHLCV 快取，跨用戶共用，避免重複呼叫 Yahoo Finance"""
+    __tablename__ = 'market_data_cache'
+
+    id         = Column(Integer, primary_key=True)
+    symbol     = Column(String(32), nullable=False)
+    cache_date = Column(Date, nullable=False)
+    data_json  = Column(Text, nullable=False)
+    cached_at  = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint('symbol', 'cache_date', name='uq_market_cache'),
+    )
+
+
 class StockAnalysis(Base):
     """每支股票的 AI 分析快取，跨用戶共用客觀市場面"""
     __tablename__ = 'stock_analyses'

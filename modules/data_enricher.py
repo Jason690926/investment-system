@@ -146,6 +146,23 @@ def get_stock_info(symbol: str) -> dict | None:
         return {'symbol': symbol, 'name': name, 'price': None} if name else None
 
 
+def get_stock_quote(symbol: str) -> dict | None:
+    """輕量行情：只抓最近 10 日日K，用於看板快速顯示 OHLC + 漲跌幅"""
+    daily = _yahoo_ohlcv(symbol, '1d', '10d')
+    if daily is None or len(daily) < 1:
+        return None
+    last = daily.iloc[-1]
+    prev = daily.iloc[-2] if len(daily) >= 2 else None
+    return {
+        'symbol':     symbol,
+        'open':       round(float(last['Open']),  2),
+        'high':       round(float(last['High']),  2),
+        'low':        round(float(last['Low']),   2),
+        'close':      round(float(last['Close']), 2),
+        'prev_close': round(float(prev['Close']), 2) if prev is not None else None,
+    }
+
+
 def get_full_stock_data(symbol: str) -> dict | None:
     """
     回傳一支台股的完整分析資料：

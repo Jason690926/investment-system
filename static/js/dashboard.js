@@ -117,48 +117,43 @@ function buildCard(s) {
   </div>`;
 }
 
-/* ── 非同步抓各卡片行情 ───────────────────────────────────── */
+/* ── 非同步抓各卡片行情（輕量 /quote 端點）──────────────── */
 async function loadCardPrices(stocks) {
   await Promise.all(stocks.map(s =>
-    api(`/api/market/${encodeURIComponent(s.symbol)}/data`)
+    api(`/api/market/${encodeURIComponent(s.symbol)}/quote`)
       .then(d => updateCardPrice(s.id, d))
       .catch(() => {})
   ));
 }
 
-function updateCardPrice(stockId, data) {
+function updateCardPrice(stockId, q) {
   const card = document.querySelector(`[data-stock-id="${stockId}"]`);
   if (!card) return;
 
-  const bars = data.daily_bars;
-  const last = bars?.length >= 1 ? bars[bars.length - 1] : null;
-  const prev = bars?.length >= 2 ? bars[bars.length - 2] : null;
-  if (!last) return;
-
   // 收盤價
   const priceEl = card.querySelector('.card-price-val');
-  if (priceEl) priceEl.textContent = last.close != null ? `${last.close}` : '—';
+  if (priceEl) priceEl.textContent = q.close != null ? `${q.close}` : '—';
 
   // 漲跌幅
   const changeEl = card.querySelector('.card-change');
-  if (changeEl && prev?.close) {
-    const chg = (last.close - prev.close) / prev.close * 100;
+  if (changeEl && q.prev_close && q.close != null) {
+    const chg = (q.close - q.prev_close) / q.prev_close * 100;
     const { text, cls } = formatChange(chg);
     changeEl.textContent = text;
     changeEl.className = 'card-change ' + cls;
   }
 
-  // OHLC 四格（高用綠、低用紅）
+  // OHLC 四格
   const set = (sel, val, cls) => {
     const el = card.querySelector(sel);
     if (!el) return;
     el.textContent = val ?? '—';
     if (cls) el.className = cls;
   };
-  set('.ohlc-o', last.open);
-  set('.ohlc-h', last.high,  'up');
-  set('.ohlc-l', last.low,   'down');
-  set('.ohlc-c', last.close);
+  set('.ohlc-o', q.open);
+  set('.ohlc-h', q.high,  'up');
+  set('.ohlc-l', q.low,   'down');
+  set('.ohlc-c', q.close);
 }
 
 /* ── 一鍵分析所有股票 ─────────────────────────────────── */

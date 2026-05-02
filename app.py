@@ -80,6 +80,9 @@ def stock_detail(stock_id):
 
 # ── 市場資料 API ──────────────────────────────────────────
 
+# 輕量行情記憶體快取：{ 'SYMBOL_YYYY-MM-DD': {...} }
+_quote_cache: dict = {}
+
 @app.route('/api/market/<symbol>/info')
 @login_required
 def api_market_info(symbol):
@@ -90,16 +93,57 @@ def api_market_info(symbol):
     return jsonify(info)
 
 
+@app.route('/api/market/<symbol>/quote')
+@login_required
+def api_market_quote(symbol):
+    """輕量行情（OHLC + 漲跌）：看板用，記憶體快取當日資料"""
+    from datetime import date as dt_date
+    from modules.data_enricher import get_stock_quote
+    key = f'{symbol}_{dt_date.today()}'
+    if key not in _quote_cache:
+        data = get_stock_quote(symbol)
+        if data is None:
+            return jsonify({'error': f'無法取得 {symbol} 行情'}), 404
+        _quote_cache[key] = data
+    return jsonify(_quote_cache[key])
+
+
 @app.route('/api/market/<symbol>/data')
 @login_required
 def api_market_data(symbol):
+    """完整市場資料：股票詳情頁用，DB 當日快取、跨用戶共用"""
+    import json
+    from datetime import date as dt_date
+    from modules.models import MarketDataCache
     from modules.data_enricher import get_full_stock_data
-    print(f"[market/data] 查詢 {symbol}")
-    data = get_full_stock_data(symbol)
-    if data is None:
-        print(f"[market/data] 失敗 {symbol}")
-        return jsonify({'error': f'無法取得 {symbol} 資料，請確認代號格式（如 2330.TW）'}), 404
-    return jsonify(data)
+    today = dt_date.today()
+    db = SessionLocal()
+    try:
+        cached = db.query(MarketDataCache).filter_by(
+            symbol=symbol, cache_date=today
+        ).first()
+        if cached:
+            print(f"[market/data] 快取命中 {symbol}")
+            return jsonify(json.loads(cached.data_json))
+
+        print(f"[market/data] 快取 miss，抓 Yahoo {symbol}")
+        data = get_full_stock_data(symbol)
+        if data is None:
+            return jsonify({'error': f'無法取得 {symbol} 資料'}), 404
+
+        try:
+            db.add(MarketDataCache(
+                symbol=symbol, cache_date=today,
+                data_json=json.dumps(data, ensure_ascii=False)
+            ))
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            print(f"[market/data] 快取寫入失敗 {symbol}: {e}")
+
+        return jsonify(data)
+    finally:
+        db.close()
 
 
 # ── AI 分析 API ───────────────────────────────────────────
