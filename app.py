@@ -13,6 +13,9 @@ app = Flask(__name__)
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'dev-secret')
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
+from modules.database import init_db
+init_db()
+
 init_auth(app)
 
 
