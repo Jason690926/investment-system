@@ -323,25 +323,13 @@ jobs:
 - ✅ 功能：Dashboard 一鍵分析按鈕（⚡ 逐支分析，完成的卡片亮藍色頂邊 + ✦ 已分析標記）
 - ✅ Bug：股票名稱顯示英文（`stock_names.py` 從 76 支擴充為 39,255 支，涵蓋全台股上市+上櫃）
   - 查詢優先順序：本地字典 → TWSE/TPEX API → Yahoo 英文名（最後手段）
-  - 資料來源：`isin.twse.com.tw`，可定期重跑腳本更新
-- ✅ Bug：AI 分析報表白/黑背景不一致（Claude 有時輸出含 `background:white` inline style）
-  - 修法：Python 清理 tag 行 + 移除 background inline style；CSS 強制深色主題背景 transparent
-- ✅ Bug：登出按鈕無效（`/logout` → `/login` 直接觸發 Google OAuth 等於重新登入）
-  - 修法：改導向 `/`（顯示 login.html 登入按鈕頁）
-- ✅ Bug：Dashboard 看板未顯示「已分析」/風險係數（`get_user_stocks()` 從未回傳 `risk_pct`/`wyckoff_phase`）
-  - 修法：`stock_service.py` 加入查詢各 symbol 最新 `StockAnalysis` 並合入結果
-- ✅ Bug：報表文字完全看不見（舊快取 HTML 含 `color:#333` 深色文字，CSS 背景透明後深色字蓋深色背景）
-  - 修法：`#analysis-content *` 用 `!important` 強制 `color: var(--text)` + `background: transparent`，特定標記 class 各自保留顏色
-
-**週5 Bug 修復（2026-05-02 續）：**
-- ✅ Bug：Dashboard 風險係數數字後面有色塊（`.risk-low/mid/high` 同時套在 `<span>` 和 `.risk-fill` 上，只定義 background 導致文字背景出現色塊）
-  - 修法：`.risk-low/mid/high` 改為 `color`（文字顏色），補 `.risk-fill.risk-low/mid/high` 的 `background`（色條）
-- ✅ Bug：分析報表 metadata 行洩露（`RISK_PCT: 35 SUPPORT: 397...` 出現在頁面頂部）
-  - 原因：`_clean_html_output` 缺少 `TARGET_PRICE:` 過濾項目，且無通用 TAG 格式 fallback
-  - 修法：補 `TARGET_PRICE:`；加通用 regex `^[A-Z_]+\s*:\S` 攔截任意 TAG 格式行
-- ✅ Bug：分析報表字色/背景不統一（AI 有時輸出各種 inline `style=` 導致深色主題破版）
-  - 修法：`_clean_html_output` 改為剝除所有 `style=""` 屬性，讓 CSS 完全接管
-  - CSS 重構：合併重複 h3/h4 規則、補 `pre/code/blockquote` 覆蓋、`#analysis-content` 改為明確 `background: var(--card)`
+- ✅ Bug：登出按鈕無效 → 改導向 `/`（顯示 login.html 登入按鈕頁）
+- ✅ Bug：Dashboard 看板未顯示「已分析」/風險係數 → `stock_service.py` 合入 `StockAnalysis` 查詢結果
+- ✅ Bug：分析報表文字不可見 → `#analysis-content *` 用 `!important` 強制深色主題；剝除所有 inline `style=""`
+- ✅ Bug：分析報表 metadata 行洩露（`RISK_PCT: 35...`）→ 補 `TARGET_PRICE:` + 通用 TAG regex；API 端也套 `_clean_html_output`（含舊快取）
+- ✅ Bug：Dashboard 風險係數數字有色塊 → `.risk-low/mid/high` 改為 `color`，補 `.risk-fill.*` 的 `background`
+- ✅ UI：分析報表護眼優化（`--text-dim: #b0bec8`，`line-height:1.9`，`font-size:15px`，統一 CSS 覆蓋）
+- ✅ UI：看板卡片放大（`minmax(360px)` / `min-height:200px` / padding 放大 / 字體 card-name 20px bold）
 
 ---
 
