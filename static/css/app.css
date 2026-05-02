@@ -196,9 +196,12 @@ a:hover { text-decoration: underline; }
   border-radius: 3px;
   transition: width .4s ease;
 }
-.risk-low    { background: var(--green); }
-.risk-mid    { background: var(--orange); }
-.risk-high   { background: var(--red); }
+.risk-low  { color: var(--green); }
+.risk-mid  { color: var(--orange); }
+.risk-high { color: var(--red); }
+.risk-fill.risk-low  { background: var(--green); }
+.risk-fill.risk-mid  { background: var(--orange); }
+.risk-fill.risk-high { background: var(--red); }
 
 .card-meta {
   font-size: 12px;
