@@ -372,7 +372,14 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
 
 ---
 
-## 請用繁體中文 + HTML 格式輸出以下分析（不含操作建議）：
+## 輸出格式規則
+- 語言：繁體中文 + HTML
+- <span class="key-point"> 使用規則：每個小節（###）最多標記 **1-2 句**最重要的結論，不可濫用
+  - 正確用法：`<span class="key-point">目前處於威科夫積累末段，量縮價穩是關鍵依據。</span>`
+  - 禁止：整段文字都加，或每句都加 → 失去強調效果
+- 其他語意 span 照舊使用（support-level / resistance-level / stop-loss / target-price 等）
+
+## 請輸出以下分析（不含操作建議）：
 
 ### 一、威科夫骨幹分析
 - 月K階段：目前處於哪個威科夫階段？（積累/上漲/派發/下跌/再積累/再派發）說明3個以上具體依據
@@ -542,6 +549,8 @@ def generate_personal_recommendation(
 {position_info}
 
 請用繁體中文 + HTML 格式輸出以下建議（務必填入所有具體數字）：
+
+格式規則：用 <span class="key-point">...</span> 標記整份建議中最關鍵的 1-2 句（例如整體判斷句、停損句），每份建議不超過 2 個，禁止濫用。
 
 {action_template}
 

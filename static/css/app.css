@@ -572,6 +572,16 @@ a:hover { text-decoration: underline; }
 #analysis-content .bear             { color: var(--red) !important; }
 #analysis-content .neutral          { color: var(--muted) !important; }
 #analysis-content .close-price      { color: var(--text) !important; }
+#analysis-content .key-point {
+  color: var(--orange) !important;
+  font-weight: 700 !important;
+  background-color: rgba(227,179,65,.08) !important;
+  border-left: 3px solid var(--orange) !important;
+  padding: 3px 10px !important;
+  display: block !important;
+  border-radius: 0 4px 4px 0 !important;
+  margin: 6px 0 !important;
+}
 
 /* ── 全域語意 span（analysis-content 外也可使用）── */
 .short-term-title  { color: var(--blue);   font-weight: 700; }
@@ -584,6 +594,16 @@ a:hover { text-decoration: underline; }
 .bear              { color: var(--red); }
 .bull              { color: var(--green); }
 .neutral           { color: var(--muted); }
+.key-point {
+  color: var(--orange);
+  font-weight: 700;
+  background: rgba(227,179,65,.08);
+  border-left: 3px solid var(--orange);
+  padding: 3px 10px;
+  display: block;
+  border-radius: 0 4px 4px 0;
+  margin: 6px 0;
+}
 
 /* ── Personal Recommendation Section ─────────────────── */
 .recommend-section {
@@ -637,6 +657,16 @@ a:hover { text-decoration: underline; }
 .recommend-content .resistance-level { color: var(--red) !important; }
 .recommend-content .bull             { color: var(--green) !important; }
 .recommend-content .bear             { color: var(--red) !important; }
+.recommend-content .key-point {
+  color: var(--orange) !important;
+  font-weight: 700 !important;
+  background-color: rgba(227,179,65,.08) !important;
+  border-left: 3px solid var(--orange) !important;
+  padding: 3px 10px !important;
+  display: block !important;
+  border-radius: 0 4px 4px 0 !important;
+  margin: 6px 0 !important;
+}
 
 /* ── Risk Summary Box ─────────────────────────────────── */
 .risk-summary {
