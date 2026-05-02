@@ -28,10 +28,25 @@ function renderGrid() {
                  : watching;
 
   if (filtered.length === 0) {
+    grid.style.gridTemplateColumns = '';
+    grid.style.removeProperty('--card-min-h');
     grid.innerHTML = `<div class="empty-state"><div class="icon">📊</div><p>尚無${currentFilter === 'watching' ? '觀察' : currentFilter === 'holding' ? '持有' : ''}股票，點右上角新增</p></div>`;
     return;
   }
+  adjustGridLayout(grid, filtered.length);
   grid.innerHTML = filtered.map(buildCard).join('');
+}
+
+function adjustGridLayout(grid, count) {
+  /* 依顯示中的股票數，動態決定欄寬與卡片最低高度 */
+  let minCol, minH;
+  if      (count <= 2) { minCol = '520px'; minH = '300px'; }
+  else if (count <= 4) { minCol = '420px'; minH = '260px'; }
+  else if (count <= 6) { minCol = '360px'; minH = '220px'; }
+  else if (count <= 9) { minCol = '300px'; minH = '195px'; }
+  else                 { minCol = '260px'; minH = '175px'; }
+  grid.style.gridTemplateColumns = `repeat(auto-fill, minmax(${minCol}, 1fr))`;
+  grid.style.setProperty('--card-min-h', minH);
 }
 
 function buildCard(s) {

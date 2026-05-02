@@ -135,7 +135,7 @@ a:hover { text-decoration: underline; }
 /* ── Stock Grid ───────────────────────────────────────── */
 .stock-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); /* JS 動態覆寫 */
   gap: 18px;
 }
 
@@ -148,7 +148,7 @@ a:hover { text-decoration: underline; }
   cursor: pointer;
   transition: all .2s;
   position: relative;
-  min-height: 200px;
+  min-height: var(--card-min-h, 200px); /* JS 依股票數動態設定 */
   display: flex;
   flex-direction: column;
 }
