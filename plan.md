@@ -316,6 +316,12 @@ jobs:
 - ✅ 加入 GitHub Secret `APP_URL`（Render 網址）
 - ✅ 手動觸發 GitHub Actions 測試批次分析（成功，Email 收到）
 
+**週5 Bug 修復與功能補強（2026-05-02）：**
+- ✅ Bug：改股票代號後名稱不更新（移除 `!nameEl.value` 條件）
+- ✅ Bug：K 線 crosshair 移動時成交量數字不更新（加 `subscribeCrosshairMove`）
+- ✅ Bug：週K / 月K 成交量與 K 線重疊（動態調整 `scaleMargins.top`：日0.80/週0.85/月0.88）
+- ✅ 功能：Dashboard 一鍵分析按鈕（⚡ 逐支分析，完成的卡片亮藍色頂邊 + ✦ 已分析標記）
+
 ---
 
 ## 十一、AI 分析架構補充決定（2026-05-02）
