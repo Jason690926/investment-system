@@ -109,7 +109,7 @@ document.getElementById('f-symbol').addEventListener('input', function () {
     nameEl.placeholder = '查詢中…';
     try {
       const info = await api(`/api/market/${encodeURIComponent(symbol)}/info`);
-      if (info.name && !nameEl.value) nameEl.value = info.name;
+      if (info.name) nameEl.value = info.name;
       nameEl.placeholder = info.name || '找不到名稱';
     } catch {
       nameEl.placeholder = '找不到此代號';
