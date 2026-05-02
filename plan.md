@@ -1,5 +1,5 @@
 # 投資建議書系統 — 重構計畫
-> 建立日期：2026-04-30｜更新日期：2026-05-02 19:00｜基於兩次訪談決策 + 實作後討論補充
+> 建立日期：2026-04-30｜更新日期：2026-05-02 20:30｜基於兩次訪談決策 + 實作後討論補充
 
 ---
 
@@ -332,6 +332,16 @@ jobs:
   - 修法：`stock_service.py` 加入查詢各 symbol 最新 `StockAnalysis` 並合入結果
 - ✅ Bug：報表文字完全看不見（舊快取 HTML 含 `color:#333` 深色文字，CSS 背景透明後深色字蓋深色背景）
   - 修法：`#analysis-content *` 用 `!important` 強制 `color: var(--text)` + `background: transparent`，特定標記 class 各自保留顏色
+
+**週5 Bug 修復（2026-05-02 續）：**
+- ✅ Bug：Dashboard 風險係數數字後面有色塊（`.risk-low/mid/high` 同時套在 `<span>` 和 `.risk-fill` 上，只定義 background 導致文字背景出現色塊）
+  - 修法：`.risk-low/mid/high` 改為 `color`（文字顏色），補 `.risk-fill.risk-low/mid/high` 的 `background`（色條）
+- ✅ Bug：分析報表 metadata 行洩露（`RISK_PCT: 35 SUPPORT: 397...` 出現在頁面頂部）
+  - 原因：`_clean_html_output` 缺少 `TARGET_PRICE:` 過濾項目，且無通用 TAG 格式 fallback
+  - 修法：補 `TARGET_PRICE:`；加通用 regex `^[A-Z_]+\s*:\S` 攔截任意 TAG 格式行
+- ✅ Bug：分析報表字色/背景不統一（AI 有時輸出各種 inline `style=` 導致深色主題破版）
+  - 修法：`_clean_html_output` 改為剝除所有 `style=""` 屬性，讓 CSS 完全接管
+  - CSS 重構：合併重複 h3/h4 規則、補 `pre/code/blockquote` 覆蓋、`#analysis-content` 改為明確 `background: var(--card)`
 
 ---
 
