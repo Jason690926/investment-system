@@ -72,6 +72,54 @@ def _normalize_symbol(symbol: str) -> str:
     return s
 
 
+_tw_name_cache: dict[str, str] = {}
+
+def _get_tw_chinese_name(code: str) -> str | None:
+    """查 TWSE stockSearch → TWSE 月資料 title，回傳繁體中文名稱"""
+    if code in _tw_name_cache:
+        return _tw_name_cache[code]
+
+    def _is_chinese(s: str) -> bool:
+        return bool(s) and any(ord(c) > 127 for c in s)
+
+    # 1. TWSE / TPEX 搜尋 API
+    try:
+        r = requests.get(
+            'https://www.twse.com.tw/rwd/zh/api/stockSearch',
+            params={'keyword': code, 'type': 'stock'},
+            headers={'User-Agent': 'Mozilla/5.0'},
+            timeout=6
+        )
+        data = r.json()
+        items = data if isinstance(data, list) else data.get('msgArray', [])
+        for item in items:
+            name = item.get('Name') or item.get('name') or item.get('stockName') or ''
+            if _is_chinese(name):
+                _tw_name_cache[code] = name
+                return name
+    except Exception:
+        pass
+
+    # 2. TWSE 月成交資料（title 欄位含中文名稱）
+    try:
+        from datetime import datetime as _dt
+        date_str = _dt.now().strftime('%Y%m01')
+        r = requests.get(
+            'https://www.twse.com.tw/exchangeReport/STOCK_DAY',
+            params={'response': 'json', 'date': date_str, 'stockNo': code},
+            headers={'User-Agent': 'Mozilla/5.0'},
+            timeout=8
+        )
+        parts = r.json().get('title', '').split()
+        if len(parts) >= 2 and _is_chinese(parts[1]):
+            _tw_name_cache[code] = parts[1]
+            return parts[1]
+    except Exception:
+        pass
+
+    return None
+
+
 def get_stock_info(symbol: str) -> dict | None:
     """快速查詢股票名稱與現價（不抓 OHLCV，省時間）"""
     from modules.stock_names import STOCK_NAMES
@@ -86,14 +134,15 @@ def get_stock_info(symbol: str) -> dict | None:
         )
         meta = r.json()['chart']['result'][0]['meta']
         yahoo_name = meta.get('longName') or meta.get('shortName') or ''
-        name = STOCK_NAMES.get(base) or yahoo_name
+        # 優先：本地對照表 → TWSE/TPEX → Yahoo（通常英文，最後手段）
+        name = STOCK_NAMES.get(base) or _get_tw_chinese_name(base) or yahoo_name
         return {
             'symbol': symbol,
             'name':   name,
             'price':  meta.get('regularMarketPrice'),
         }
     except Exception:
-        name = STOCK_NAMES.get(base, '')
+        name = STOCK_NAMES.get(base) or _get_tw_chinese_name(base) or ''
         return {'symbol': symbol, 'name': name, 'price': None} if name else None
 
 
