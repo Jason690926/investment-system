@@ -330,6 +330,8 @@ jobs:
   - 修法：改導向 `/`（顯示 login.html 登入按鈕頁）
 - ✅ Bug：Dashboard 看板未顯示「已分析」/風險係數（`get_user_stocks()` 從未回傳 `risk_pct`/`wyckoff_phase`）
   - 修法：`stock_service.py` 加入查詢各 symbol 最新 `StockAnalysis` 並合入結果
+- ✅ Bug：報表文字完全看不見（舊快取 HTML 含 `color:#333` 深色文字，CSS 背景透明後深色字蓋深色背景）
+  - 修法：`#analysis-content *` 用 `!important` 強制 `color: var(--text)` + `background: transparent`，特定標記 class 各自保留顏色
 
 ---
 
