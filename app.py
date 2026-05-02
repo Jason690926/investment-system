@@ -6,10 +6,12 @@ from modules.auth import init_auth
 from modules.database import SessionLocal
 from modules.stock_service import get_user_stocks, add_stock, add_trade, remove_stock, update_trade, delete_trade
 
+from werkzeug.middleware.proxy_fix import ProxyFix
 load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'dev-secret')
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 init_auth(app)
 
