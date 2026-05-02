@@ -330,6 +330,31 @@ jobs:
 - ✅ Bug：Dashboard 風險係數數字有色塊 → `.risk-low/mid/high` 改為 `color`，補 `.risk-fill.*` 的 `background`
 - ✅ UI：分析報表護眼優化（`--text-dim: #b0bec8`，`line-height:1.9`，`font-size:15px`，統一 CSS 覆蓋）
 - ✅ UI：看板卡片放大（`minmax(360px)` / `min-height:200px` / padding 放大 / 字體 card-name 20px bold）
+- ✅ UI：看板卡片依股票數動態調整大小（`adjustGridLayout(count)`：1-2支→520px/300px，3-4→420px/260px，5-6→360px/220px，7-9→300px/195px，10+→260px/175px）
+- ✅ 功能：看板卡片顯示當日 OHLC + 收盤價 + 漲跌幅（非同步並行抓取）
+- ✅ 功能：Wyckoff 相位 badge 大型化（14px bold，多頭綠/空頭紅/中性橘，分析後即時更新）
+- ✅ Bug：AI 分析白背景污染整頁（`<style>body{background:white}</style>` 被注入 innerHTML）
+  - 修法：`_clean_html_output` 加第一步驟：剝除 `<style>`、`<head>`、`<html>`、`<body>` 標籤
+- ✅ Bug：看板股價未顯示（原因：用 `/data` 端點抓 4 月資料，6 支股並行 = 18 次 Yahoo API，超時失敗）
+  - 修法：新增輕量 `/api/market/<symbol>/quote` 端點（只抓 10 日），看板改用此端點
+- ✅ 功能：市場資料雙層快取（加 `MarketDataCache` DB 表）
+  - `/quote`：伺服器記憶體快取，當日有效，跨 user 共用
+  - `/data`：Supabase DB 快取，當日有效，跨 user 共用，Render 重啟不失效
+  - 效果：首次訪問股票詳情頁約 3 秒；同日第 2 位 user 訪問同一股票 → 瞬間回傳
+
+**AI 分析品質優化（2026-05-02）：**
+- ✅ 功能：K線型態強化 — `analyze_market_only()` 第二節強制要求逐根說出中文型態名稱（錘子/吞噬/早晨之星等），日K由15根增至20根，max_tokens 2800→3500
+- ✅ 功能：李佛摩「等待」原則補強 — 加入轉折點確認（Pivot Point，前高突破/前低跌破）、明確等待條件、三選一行動判斷（立刻可行動/等待確認/不宜行動）
+- ✅ Bug：個人操作建議從未顯示 — `stock.js` 僅呼叫市場分析，從未觸發 `/recommend` 端點
+  - 修法：`showAnalysis()` 結尾自動掛入 `.recommend-section` 骨架並呼叫 `loadRecommendation()`
+  - 市場分析（藍色標題）與個人建議（橘色標題）分兩區塊顯示
+- ✅ 功能：個人建議大幅強化（max_tokens 500→1200）
+  - 已持有：整體判斷（續抱/加碼/減碼/出場）+ 加碼觸發條件含量能 + 分階段停利 + 具體停損價格
+  - 觀察中：進場判斷（立刻可入/等待/不建議）+ 短線介入含量能門檻 + 中線布局條件 + 李佛摩「等什麼確認」
+  - `app.py /recommend`：從 `MarketDataCache` 取近5根日K傳給 AI，讓建議更貼近當前盤面
+- ✅ UI：`key-point` 重要結論標記（金黃色粗體 + 左側實線條 + 淡金底色）
+  - 顏色語意分工：🟡金黃=本節最重要結論（每節限1-2句）/ 🔴紅色=危險停損壓力 / 🟢綠色=支撐多頭 / 🟣紫色=目標價 / 🔵藍色=標題
+  - AI prompt 明確限制：每節最多標記1-2句，禁止濫用
 
 ---
 
