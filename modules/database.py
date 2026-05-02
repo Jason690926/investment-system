@@ -15,7 +15,7 @@ def get_database_url():
     user = os.getenv('SUPABASE_DB_USER', 'postgres')
     name = os.getenv('SUPABASE_DB_NAME', 'postgres')
     port = os.getenv('SUPABASE_DB_PORT', '5432')
-    return f"postgresql+psycopg://{user}:{password}@{host}:{port}/{name}"
+    return f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{name}"
 
 engine = create_engine(
     get_database_url(),
