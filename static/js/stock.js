@@ -119,6 +119,20 @@ function buildChart() {
 
   chart.timeScale().subscribeVisibleTimeRangeChange(drawPriceZones);
 
+  chart.subscribeCrosshairMove(param => {
+    const volEl = document.getElementById('d-vol');
+    if (!volEl) return;
+    if (!param.time) {
+      if (enrichedData?.volume_zhang != null) volEl.textContent = `${enrichedData.volume_zhang} 張`;
+      return;
+    }
+    const volData = param.seriesData.get(volumeSeries);
+    if (volData !== undefined && volData !== null) {
+      const val = typeof volData === 'object' ? volData.value : volData;
+      volEl.textContent = val != null ? `${val} 張` : '—';
+    }
+  });
+
   updateChartData();
 }
 
