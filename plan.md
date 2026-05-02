@@ -321,6 +321,9 @@ jobs:
 - ✅ Bug：K 線 crosshair 移動時成交量數字不更新（加 `subscribeCrosshairMove`）
 - ✅ Bug：週K / 月K 成交量與 K 線重疊（動態調整 `scaleMargins.top`：日0.80/週0.85/月0.88）
 - ✅ 功能：Dashboard 一鍵分析按鈕（⚡ 逐支分析，完成的卡片亮藍色頂邊 + ✦ 已分析標記）
+- ✅ Bug：股票名稱顯示英文（`stock_names.py` 從 76 支擴充為 39,255 支，涵蓋全台股上市+上櫃）
+  - 查詢優先順序：本地字典 → TWSE/TPEX API → Yahoo 英文名（最後手段）
+  - 資料來源：`isin.twse.com.tw`，可定期重跑腳本更新
 
 ---
 
