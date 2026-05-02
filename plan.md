@@ -342,6 +342,14 @@ jobs:
   - `/data`：Supabase DB 快取，當日有效，跨 user 共用，Render 重啟不失效
   - 效果：首次訪問股票詳情頁約 3 秒；同日第 2 位 user 訪問同一股票 → 瞬間回傳
 
+**效能與 Bug 修復（2026-05-03）：**
+- ✅ Perf：一鍵分析改為 3 並行 worker pool（10 支：~250s → ~90s）；進度條同時顯示 3 支名稱 + 快取命中數
+- ✅ Bug：分析中點擊卡片導航 → 剩餘股票全部停止分析
+  - 修法：新增 `isAnalyzing` 旗標；`openStockPage()` 在分析期間改為 `window.open(_blank)`，分析繼續在原分頁跑
+- ✅ Bug：一鍵分析後部分股票無股價（如 2891）
+  - 根因：分析完大量 Yahoo Finance 請求後速率受限，後續 `/quote` 獨立呼叫失敗
+  - 修法：`/quote` 端點優先從 `MarketDataCache`（分析時已存 DB）推導 OHLC，完全不再打 Yahoo Finance；僅冷啟動時才 fallback
+
 **AI 分析品質優化（2026-05-02）：**
 - ✅ 功能：K線型態強化 — `analyze_market_only()` 第二節強制要求逐根說出中文型態名稱（錘子/吞噬/早晨之星等），日K由15根增至20根，max_tokens 2800→3500
 - ✅ 功能：李佛摩「等待」原則補強 — 加入轉折點確認（Pivot Point，前高突破/前低跌破）、明確等待條件、三選一行動判斷（立刻可行動/等待確認/不宜行動）
