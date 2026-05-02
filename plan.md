@@ -1,5 +1,5 @@
 # 投資建議書系統 — 重構計畫
-> 建立日期：2026-04-30｜更新日期：2026-05-02｜基於兩次訪談決策 + 實作後討論補充
+> 建立日期：2026-04-30｜更新日期：2026-05-02 18:00｜基於兩次訪談決策 + 實作後討論補充
 
 ---
 
@@ -293,6 +293,17 @@ jobs:
 3. ✅ 修 `daily_report.yml`：改用新腳本 + Supabase secrets
 4. ✅ `ai_analyzer_v2.py`：加入兩段式函式（`analyze_market_only` + `generate_personal_recommendation`）
 5. ✅ `app.py`：`/analyze` 存市場快取，新增 `/recommend` 個人建議端點
+6. ✅ `database.py`：連線驅動從 `psycopg` 改為 `psycopg2`（已在 requirements.txt）
+7. ✅ `app.py`：Flask 綁定 `0.0.0.0` + 讀取 `PORT` 環境變數（Render 部署必要）
+8. ✅ GitHub Secrets 設定完成（Supabase 五個 + 既有 Claude/Email）
+9. ✅ Render 環境變數設定完成（Supabase + OAuth + Flask）
+10. ✅ `plan.md` 移入 `investment-system` repo（GitHub 同步，跨電腦可用）
+11. 🔄 Render 部署進行中（2026-05-02）
+
+**Render 部署完成後待做：**
+- [ ] 確認網站可正常登入（Google OAuth）
+- [ ] 加入 GitHub Secret `APP_URL`（Render 網址）
+- [ ] 手動觸發 GitHub Actions 測試批次分析
 
 ---
 
