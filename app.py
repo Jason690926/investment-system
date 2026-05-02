@@ -121,9 +121,10 @@ def api_get_analysis(stock_id):
         ).first()
         if not cached or not cached.html_content:
             return jsonify({'cached': False})
+        from modules.ai_analyzer_v2 import _clean_html_output
         return jsonify({
             'cached':        True,
-            'html':          cached.html_content,
+            'html':          _clean_html_output(cached.html_content),
             'risk_pct':      cached.risk_pct,
             'support':       float(cached.support_price)    if cached.support_price    else None,
             'resistance':    float(cached.resistance_price) if cached.resistance_price else None,
