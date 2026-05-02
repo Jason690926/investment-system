@@ -35,6 +35,7 @@ function renderGrid() {
   }
   adjustGridLayout(grid, filtered.length);
   grid.innerHTML = filtered.map(buildCard).join('');
+  loadCardPrices(filtered);
 }
 
 function adjustGridLayout(grid, count) {
@@ -49,12 +50,21 @@ function adjustGridLayout(grid, count) {
   grid.style.setProperty('--card-min-h', minH);
 }
 
+function wyckoffBadgeCls(phase) {
+  if (!phase) return 'wyckoff-none';
+  const bull = ['上漲', '積累', '再積累'];
+  const bear = ['派發', '下跌', '再派發'];
+  if (bull.some(p => phase.includes(p))) return 'wyckoff-bull';
+  if (bear.some(p => phase.includes(p))) return 'wyckoff-bear';
+  return 'wyckoff-neutral';
+}
+
 function buildCard(s) {
-  const riskPct     = s.risk_pct  ?? null;
-  const wyckoff     = s.wyckoff_phase ?? '';
-  const badgeCls    = s.status === 'holding' ? 'badge-holding' : 'badge-watching';
-  const badgeText   = s.status === 'holding' ? '已持有' : '觀察中';
-  const isAnalyzed  = riskPct != null;
+  const riskPct    = s.risk_pct  ?? null;
+  const wyckoff    = s.wyckoff_phase ?? '';
+  const badgeCls   = s.status === 'holding' ? 'badge-holding' : 'badge-watching';
+  const badgeText  = s.status === 'holding' ? '已持有' : '觀察中';
+  const isAnalyzed = riskPct != null;
 
   const riskBar = riskPct != null ? `
     <div class="risk-block">
@@ -74,9 +84,9 @@ function buildCard(s) {
     </div>`;
   }
 
-  const wyckoffTag = wyckoff
-    ? `<div class="wyckoff-tag">⬡ ${wyckoff}</div>`
-    : '';
+  const wyckoffBadge = wyckoff
+    ? `<div class="wyckoff-badge ${wyckoffBadgeCls(wyckoff)}">${wyckoff}</div>`
+    : `<div class="wyckoff-badge wyckoff-none"></div>`;
 
   return `
   <div class="stock-card${isAnalyzed ? ' analyzed' : ''}" data-stock-id="${s.id}" onclick="location.href='/stock/${s.id}'">
@@ -85,12 +95,18 @@ function buildCard(s) {
       <div>
         <div class="card-name">${s.name}</div>
         <div class="card-symbol">${s.symbol}</div>
-        ${wyckoffTag}
+        ${wyckoffBadge}
       </div>
       <div class="card-price-block">
-        <div class="card-price">—</div>
+        <div class="card-price card-price-val">—</div>
         <div class="card-change flat">—</div>
       </div>
+    </div>
+    <div class="card-ohlc">
+      <span class="ohlc-item">開 <strong class="ohlc-o">—</strong></span>
+      <span class="ohlc-item">高 <strong class="ohlc-h">—</strong></span>
+      <span class="ohlc-item">低 <strong class="ohlc-l">—</strong></span>
+      <span class="ohlc-item">收 <strong class="ohlc-c">—</strong></span>
     </div>
     <hr class="card-divider">
     <div class="card-row2">
@@ -99,6 +115,50 @@ function buildCard(s) {
     </div>
     ${isAnalyzed ? '<div class="analyzed-badge">✦ 已分析</div>' : ''}
   </div>`;
+}
+
+/* ── 非同步抓各卡片行情 ───────────────────────────────────── */
+async function loadCardPrices(stocks) {
+  await Promise.all(stocks.map(s =>
+    api(`/api/market/${encodeURIComponent(s.symbol)}/data`)
+      .then(d => updateCardPrice(s.id, d))
+      .catch(() => {})
+  ));
+}
+
+function updateCardPrice(stockId, data) {
+  const card = document.querySelector(`[data-stock-id="${stockId}"]`);
+  if (!card) return;
+
+  const bars = data.daily_bars;
+  const last = bars?.length >= 1 ? bars[bars.length - 1] : null;
+  const prev = bars?.length >= 2 ? bars[bars.length - 2] : null;
+  if (!last) return;
+
+  // 收盤價
+  const priceEl = card.querySelector('.card-price-val');
+  if (priceEl) priceEl.textContent = last.close != null ? `${last.close}` : '—';
+
+  // 漲跌幅
+  const changeEl = card.querySelector('.card-change');
+  if (changeEl && prev?.close) {
+    const chg = (last.close - prev.close) / prev.close * 100;
+    const { text, cls } = formatChange(chg);
+    changeEl.textContent = text;
+    changeEl.className = 'card-change ' + cls;
+  }
+
+  // OHLC 四格（高用綠、低用紅）
+  const set = (sel, val, cls) => {
+    const el = card.querySelector(sel);
+    if (!el) return;
+    el.textContent = val ?? '—';
+    if (cls) el.className = cls;
+  };
+  set('.ohlc-o', last.open);
+  set('.ohlc-h', last.high,  'up');
+  set('.ohlc-l', last.low,   'down');
+  set('.ohlc-c', last.close);
 }
 
 /* ── 一鍵分析所有股票 ─────────────────────────────────── */
@@ -144,11 +204,14 @@ function markCardAnalyzed(stockId, riskPct, wyckoffPhase) {
       <div class="risk-bar"><div class="risk-fill ${rc}" style="width:${riskPct}%"></div></div>`;
   }
   if (wyckoffPhase) {
-    const wy = card.querySelector('.wyckoff-tag');
-    if (wy) wy.textContent = `⬡ ${wyckoffPhase}`;
-    else {
+    const wb = card.querySelector('.wyckoff-badge');
+    if (wb) {
+      wb.textContent = wyckoffPhase;
+      wb.className = `wyckoff-badge ${wyckoffBadgeCls(wyckoffPhase)}`;
+    } else {
       card.querySelector('.card-symbol')
-          ?.insertAdjacentHTML('afterend', `<div class="wyckoff-tag">⬡ ${wyckoffPhase}</div>`);
+          ?.insertAdjacentHTML('afterend',
+            `<div class="wyckoff-badge ${wyckoffBadgeCls(wyckoffPhase)}">${wyckoffPhase}</div>`);
     }
   }
   if (!card.querySelector('.analyzed-badge')) {
