@@ -62,7 +62,21 @@ def _fmt_bars(bars: list, label: str, n: int) -> str:
 
 
 def _clean_html_output(raw: str) -> str:
-    """移除 AI 回應頂部的結構化標記行，並剝除所有 inline style 讓 CSS 統一控制"""
+    """
+    清理 AI 回應：
+    1. 移除完整 HTML document 結構（<head>/<style>/<body> 等），防止 CSS 注入污染頁面
+    2. 移除頂部結構化標記行（RISK_PCT: ... 等）
+    3. 剝除所有 inline style 屬性，讓 CSS 統一控制深色主題
+    """
+    # ── 步驟1：剝除會污染頁面的 HTML document 結構 ──────────
+    # <style> 最危險：注入後直接改變全頁背景/字色
+    raw = re.sub(r'<style[^>]*>.*?</style>', '', raw, flags=re.IGNORECASE | re.DOTALL)
+    # <!DOCTYPE>, <html>, <head>, <body> 標籤
+    raw = re.sub(r'<!DOCTYPE[^>]*>', '', raw, flags=re.IGNORECASE)
+    raw = re.sub(r'<head\b[^>]*>.*?</head>', '', raw, flags=re.IGNORECASE | re.DOTALL)
+    raw = re.sub(r'</?(?:html|body)\b[^>]*>', '', raw, flags=re.IGNORECASE)
+
+    # ── 步驟2：跳過頂部 metadata 行 ──────────────────────────
     lines = raw.split('\n')
     content_lines = []
     skip_header = True
@@ -73,7 +87,6 @@ def _clean_html_output(raw: str) -> str:
     for line in lines:
         s = line.strip().upper()
         if skip_header:
-            # 跳過已知 tag 行、空行、以及任何 WORD: value 格式行
             if (any(s.startswith(t) for t in tag_prefixes)
                     or s == ''
                     or re.match(r'^[A-Z_]+\s*:\s*\S', s)):
@@ -81,7 +94,8 @@ def _clean_html_output(raw: str) -> str:
             skip_header = False
         content_lines.append(line)
     html = '\n'.join(content_lines).strip()
-    # 剝除所有 inline style 屬性，讓 CSS 統一控制深色主題顏色
+
+    # ── 步驟3：剝除所有 inline style 屬性 ────────────────────
     html = re.sub(r'\s+style\s*=\s*(?:"[^"]*"|\'[^\']*\')', '', html, flags=re.IGNORECASE)
     return html
 
