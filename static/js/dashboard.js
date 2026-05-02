@@ -156,8 +156,9 @@ function updateCardPrice(stockId, q) {
   set('.ohlc-c', q.close);
 }
 
-/* ── 一鍵分析所有股票 ─────────────────────────────────── */
+/* ── 一鍵分析所有股票（3 並行 worker pool）──────────────── */
 async function analyzeAll() {
+  const CONCURRENCY = 3;
   const btn      = document.getElementById('btn-analyze-all');
   const progress = document.getElementById('analyze-progress');
   const stocks   = [...allStocks];
@@ -165,23 +166,48 @@ async function analyzeAll() {
 
   btn.disabled = true;
   progress.style.display = 'flex';
-  let done = 0;
 
-  for (const stock of stocks) {
-    progress.innerHTML = `<div class="spinner" style="width:14px;height:14px;border-width:2px;flex-shrink:0"></div>分析中 ${done}/${stocks.length}：${stock.name}`;
-    try {
-      const res = await api(`/api/stocks/${stock.id}/analyze`, { method: 'POST' });
-      done++;
-      const idx = allStocks.findIndex(s => s.id === stock.id);
-      if (idx >= 0) {
-        allStocks[idx].risk_pct      = res.risk_pct;
-        allStocks[idx].wyckoff_phase = res.wyckoff_phase;
-      }
-      markCardAnalyzed(stock.id, res.risk_pct, res.wyckoff_phase);
-    } catch { done++; }
+  const queue   = [...stocks];
+  const inFlight = new Set();
+  let done = 0;
+  let cached = 0;
+
+  function renderProgress() {
+    const names = [...inFlight].join(' · ');
+    const cachedNote = cached > 0 ? ` <span style="color:var(--muted);font-size:11px;">（${cached} 支快取）</span>` : '';
+    progress.innerHTML =
+      `<div class="spinner" style="width:14px;height:14px;border-width:2px;flex-shrink:0"></div>` +
+      `分析中 ${done}/${stocks.length}${cachedNote}` +
+      (names ? ` ▸ <span style="color:var(--blue)">${names}</span>` : '');
   }
 
-  progress.innerHTML = `<span style="color:var(--green);font-weight:700;">✓ 分析完成（${stocks.length} 支）</span>`;
+  async function worker() {
+    while (true) {
+      const stock = queue.shift();
+      if (!stock) break;
+      inFlight.add(stock.name);
+      renderProgress();
+      try {
+        const res = await api(`/api/stocks/${stock.id}/analyze`, { method: 'POST' });
+        if (res.from_cache) cached++;
+        done++;
+        const idx = allStocks.findIndex(s => s.id === stock.id);
+        if (idx >= 0) {
+          allStocks[idx].risk_pct      = res.risk_pct;
+          allStocks[idx].wyckoff_phase = res.wyckoff_phase;
+        }
+        markCardAnalyzed(stock.id, res.risk_pct, res.wyckoff_phase);
+      } catch { done++; }
+      inFlight.delete(stock.name);
+      renderProgress();
+    }
+  }
+
+  // 同時啟動 CONCURRENCY 個 worker，共用同一個 queue
+  await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+
+  const cacheMsg = cached > 0 ? `，其中 ${cached} 支來自快取` : '';
+  progress.innerHTML = `<span style="color:var(--green);font-weight:700;">✓ 分析完成（${stocks.length} 支${cacheMsg}）</span>`;
   btn.disabled = false;
   setTimeout(() => { progress.style.display = 'none'; }, 3500);
 }
