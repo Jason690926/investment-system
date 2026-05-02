@@ -458,7 +458,17 @@ a:hover { text-decoration: underline; }
   padding: 50px 20px;
 }
 .analysis-trigger p { color: var(--muted); margin-bottom: 20px; }
-#analysis-content { line-height: 1.8; }
+#analysis-content { line-height: 1.8; color: var(--text); }
+/* 防止 AI 產生的 HTML 帶入白/淺色背景破壞深色主題 */
+#analysis-content table,
+#analysis-content thead,
+#analysis-content tbody,
+#analysis-content tr,
+#analysis-content td,
+#analysis-content div,
+#analysis-content p,
+#analysis-content section,
+#analysis-content article { background-color: transparent; }
 #analysis-content h3, #analysis-content h4 {
   color: var(--blue);
   margin: 20px 0 10px;

@@ -1,11 +1,34 @@
 from decimal import Decimal
 from datetime import date
 from sqlalchemy.orm import Session
-from modules.models import Stock, Trade, User
+from sqlalchemy import func
+from modules.models import Stock, Trade, User, StockAnalysis
 
 
 def get_user_stocks(db: Session, user_id: int) -> list:
     stocks = db.query(Stock).filter_by(user_id=user_id).order_by(Stock.created_at).all()
+
+    # 一次查出所有 symbol 最新一筆分析（不限日期，顯示最近快取狀態）
+    symbols = [s.symbol for s in stocks]
+    analyses = {}
+    if symbols:
+        subq = (
+            db.query(StockAnalysis.symbol,
+                     func.max(StockAnalysis.analysis_date).label('max_date'))
+            .filter(StockAnalysis.symbol.in_(symbols),
+                    StockAnalysis.analysis_type == 'daily',
+                    StockAnalysis.html_content.isnot(None))
+            .group_by(StockAnalysis.symbol)
+            .subquery()
+        )
+        rows = (
+            db.query(StockAnalysis)
+            .join(subq, (StockAnalysis.symbol == subq.c.symbol) &
+                        (StockAnalysis.analysis_date == subq.c.max_date))
+            .all()
+        )
+        analyses = {r.symbol: r for r in rows}
+
     result = []
     for s in stocks:
         item = {
@@ -14,6 +37,10 @@ def get_user_stocks(db: Session, user_id: int) -> list:
             'name': s.name,
             'status': s.status,
         }
+        analysis = analyses.get(s.symbol)
+        if analysis:
+            item['risk_pct']      = analysis.risk_pct
+            item['wyckoff_phase'] = analysis.wyckoff_phase
         if s.status == 'holding' and s.trades:
             total = s.total_zhang
             item['total_zhang'] = float(total)

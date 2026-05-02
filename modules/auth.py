@@ -94,4 +94,5 @@ def callback():
 @login_required
 def logout():
     logout_user()
-    return redirect('/login')
+    session.clear()
+    return redirect('/')
