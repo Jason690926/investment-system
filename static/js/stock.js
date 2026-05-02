@@ -151,8 +151,14 @@ function drawPriceZones() {
     const yHigh = candleSeries.priceToCoordinate(centerPrice * 1.02);
     const yLow  = candleSeries.priceToCoordinate(centerPrice * 0.98);
     if (yHigh == null || yLow == null) return;
-    const top    = Math.min(yHigh, yLow);
-    const height = Math.max(Math.abs(yHigh - yLow), 6);
+    const rawTop    = Math.min(yHigh, yLow);
+    const rawBottom = rawTop + Math.max(Math.abs(yHigh - yLow), 6);
+    // 限制在 chart container 範圍內，避免溢出蓋住上方 info row
+    const chartH = container.offsetHeight;
+    const top    = Math.max(0, rawTop);
+    const bottom = Math.min(rawBottom, chartH);
+    const height = bottom - top;
+    if (height <= 0) return;
     const el = document.createElement('div');
     el.className = 'zone-overlay';
     el.style.cssText = `position:absolute;pointer-events:none;z-index:2;
