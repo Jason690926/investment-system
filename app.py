@@ -86,9 +86,11 @@ def api_market_info(symbol):
 @login_required
 def api_market_data(symbol):
     from modules.data_enricher import get_full_stock_data
+    print(f"[market/data] 查詢 {symbol}")
     data = get_full_stock_data(symbol)
     if data is None:
-        return jsonify({'error': f'無法取得 {symbol} 資料'}), 404
+        print(f"[market/data] 失敗 {symbol}")
+        return jsonify({'error': f'無法取得 {symbol} 資料，請確認代號格式（如 2330.TW）'}), 404
     return jsonify(data)
 
 
@@ -97,7 +99,7 @@ def api_market_data(symbol):
 @app.route('/api/stocks/<int:stock_id>/analysis')
 @login_required
 def api_get_analysis(stock_id):
-    """讀取今日快取分析（若存在）"""
+    """讀取今日市場快取分析（若存在，不含個人建議）"""
     from datetime import date as dt_date
     from modules.models import Stock, StockAnalysis
     db = SessionLocal()
@@ -115,9 +117,9 @@ def api_get_analysis(stock_id):
             'cached':        True,
             'html':          cached.html_content,
             'risk_pct':      cached.risk_pct,
-            'support':       float(cached.support_price)   if cached.support_price   else None,
+            'support':       float(cached.support_price)    if cached.support_price    else None,
             'resistance':    float(cached.resistance_price) if cached.resistance_price else None,
-            'target_pnf':    float(cached.target_price)    if cached.target_price    else None,
+            'target_pnf':    float(cached.target_price)     if cached.target_price     else None,
             'wyckoff_phase': cached.wyckoff_phase,
             'generated_at':  cached.generated_at.strftime('%H:%M') if cached.generated_at else None,
         })
@@ -128,10 +130,12 @@ def api_get_analysis(stock_id):
 @app.route('/api/stocks/<int:stock_id>/analyze', methods=['POST'])
 @login_required
 def api_analyze_stock(stock_id):
+    """產生市場分析（第一段）並存入跨用戶快取"""
     from datetime import date as dt_date
+    import datetime as _dt
     from modules.models import Stock, StockAnalysis
     from modules.data_enricher import get_full_stock_data
-    from modules.ai_analyzer_v2 import analyze_stock_three_masters
+    from modules.ai_analyzer_v2 import analyze_market_only
     from decimal import Decimal
 
     db = SessionLocal()
@@ -140,32 +144,39 @@ def api_analyze_stock(stock_id):
         if not stock:
             return jsonify({'error': '股票不存在'}), 404
 
+        today = dt_date.today()
+        # 已有今日快取直接回傳，不重複呼叫 AI
+        existing = db.query(StockAnalysis).filter_by(
+            symbol=stock.symbol, analysis_date=today, analysis_type='daily'
+        ).first()
+        if existing and existing.html_content:
+            return jsonify({
+                'html':          existing.html_content,
+                'risk_pct':      existing.risk_pct,
+                'support':       float(existing.support_price)    if existing.support_price    else None,
+                'resistance':    float(existing.resistance_price) if existing.resistance_price else None,
+                'target_pnf':    float(existing.target_price)     if existing.target_price     else None,
+                'wyckoff_phase': existing.wyckoff_phase,
+                'from_cache':    True,
+            })
+
         enriched = get_full_stock_data(stock.symbol)
         if enriched is None:
             return jsonify({'error': f'無法取得 {stock.symbol} 市場資料'}), 503
 
-        avg   = float(stock.avg_cost)    if stock.avg_cost    else None
-        total = float(stock.total_zhang) if stock.total_zhang else None
-
-        result = analyze_stock_three_masters(
+        result = analyze_market_only(
             name=stock.name, symbol=stock.symbol,
-            enriched_data=enriched, status=stock.status,
-            avg_cost=avg, total_zhang=total, news_list=[],
+            enriched_data=enriched, news_list=[],
         )
 
-        # 存入快取（upsert）
-        today = dt_date.today()
-        cached = db.query(StockAnalysis).filter_by(
-            symbol=stock.symbol, analysis_date=today, analysis_type='daily'
-        ).first()
-        if cached:
-            cached.html_content     = result['html']
-            cached.risk_pct         = result['risk_pct']
-            cached.support_price    = Decimal(str(result['support']))    if result['support']    else None
-            cached.resistance_price = Decimal(str(result['resistance'])) if result['resistance'] else None
-            cached.target_price     = Decimal(str(result['target_pnf'])) if result['target_pnf'] else None
-            cached.wyckoff_phase    = result['wyckoff_phase']
-            cached.generated_at     = __import__('datetime').datetime.utcnow()
+        if existing:
+            existing.html_content     = result['html']
+            existing.risk_pct         = result['risk_pct']
+            existing.support_price    = Decimal(str(result['support']))    if result['support']    else None
+            existing.resistance_price = Decimal(str(result['resistance'])) if result['resistance'] else None
+            existing.target_price     = Decimal(str(result['target_pnf'])) if result['target_pnf'] else None
+            existing.wyckoff_phase    = result['wyckoff_phase']
+            existing.generated_at     = _dt.datetime.utcnow()
         else:
             db.add(StockAnalysis(
                 symbol=stock.symbol, analysis_date=today, analysis_type='daily',
@@ -184,7 +195,53 @@ def api_analyze_stock(stock_id):
             'resistance':    result['resistance'],
             'target_pnf':    result['target_pnf'],
             'wyckoff_phase': result['wyckoff_phase'],
+            'from_cache':    False,
         })
+    finally:
+        db.close()
+
+
+@app.route('/api/stocks/<int:stock_id>/recommend', methods=['POST'])
+@login_required
+def api_recommend_stock(stock_id):
+    """產生個人化操作建議（第二段），使用市場快取資料，不另外存入 DB"""
+    from datetime import date as dt_date
+    from modules.models import Stock, StockAnalysis
+    from modules.data_enricher import get_stock_info
+    from modules.ai_analyzer_v2 import generate_personal_recommendation
+
+    db = SessionLocal()
+    try:
+        stock = db.query(Stock).filter_by(id=stock_id, user_id=current_user.id).first()
+        if not stock:
+            return jsonify({'error': '股票不存在'}), 404
+
+        today = dt_date.today()
+        cached = db.query(StockAnalysis).filter_by(
+            symbol=stock.symbol, analysis_date=today, analysis_type='daily'
+        ).first()
+        if not cached or not cached.html_content:
+            return jsonify({'error': '尚無市場分析，請先產生分析'}), 404
+
+        info = get_stock_info(stock.symbol)
+        current_price = info['price'] if info else 0
+
+        avg   = float(stock.avg_cost)    if stock.avg_cost    else None
+        total = float(stock.total_zhang) if stock.total_zhang else None
+
+        html = generate_personal_recommendation(
+            name=stock.name, symbol=stock.symbol,
+            current_price=current_price,
+            wyckoff_phase=cached.wyckoff_phase or '未知',
+            risk_pct=cached.risk_pct or 50,
+            support=float(cached.support_price)    if cached.support_price    else None,
+            resistance=float(cached.resistance_price) if cached.resistance_price else None,
+            target_pnf=float(cached.target_price)  if cached.target_price    else None,
+            status=stock.status,
+            avg_cost=avg,
+            total_zhang=total,
+        )
+        return jsonify({'html': html})
     finally:
         db.close()
 

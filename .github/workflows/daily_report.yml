@@ -2,8 +2,8 @@ name: Daily Investment Report
 
 on:
   schedule:
-    - cron: '30 6 * * 1-5'
-  workflow_dispatch:
+    - cron: '30 6 * * 1-5'  # UTC 06:30 = 台灣 14:30，週一到週五
+  workflow_dispatch:         # 支援手動觸發
 
 jobs:
   run-report:
@@ -21,13 +21,15 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run report
-        run: python main.py
+      - name: Run daily report
+        run: python run_daily_report.py
         env:
-          CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
-          NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
-          EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
-          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
-          EMAIL_RECEIVER: ${{ secrets.EMAIL_RECEIVER }}
-          GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
-          GOOGLE_SHEETS_CREDENTIALS: ${{ secrets.GOOGLE_SHEETS_CREDENTIALS }}
+          SUPABASE_DB_HOST:     ${{ secrets.SUPABASE_DB_HOST }}
+          SUPABASE_DB_USER:     ${{ secrets.SUPABASE_DB_USER }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_DB_NAME:     ${{ secrets.SUPABASE_DB_NAME }}
+          SUPABASE_DB_PORT:     ${{ secrets.SUPABASE_DB_PORT }}
+          CLAUDE_API_KEY:       ${{ secrets.CLAUDE_API_KEY }}
+          EMAIL_SENDER:         ${{ secrets.EMAIL_SENDER }}
+          EMAIL_PASSWORD:       ${{ secrets.EMAIL_PASSWORD }}
+          APP_URL:              ${{ secrets.APP_URL }}

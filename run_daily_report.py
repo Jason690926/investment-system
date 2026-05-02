@@ -1,0 +1,162 @@
+"""
+run_daily_report.py
+GitHub Actions 每日 14:30（UTC 06:30）執行。
+1. 掃所有用戶追蹤的股票，依重疊性排序（重疊最多優先）
+2. 逐支分析：今日快取存在則跳過，否則呼叫 AI（第一段：客觀市場分析）
+3. 通知有開啟 email_notify 的用戶
+"""
+import os
+import time
+import smtplib
+from datetime import date, datetime, timezone, timedelta
+from decimal import Decimal
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+
+from dotenv import load_dotenv
+load_dotenv()
+
+from sqlalchemy import func
+from modules.database import SessionLocal, init_db
+from modules.models import User, Stock, StockAnalysis
+from modules.data_enricher import get_full_stock_data
+from modules.ai_analyzer_v2 import analyze_market_only
+
+TW = timezone(timedelta(hours=8))
+
+
+def get_symbols_by_overlap(db) -> list[tuple[str, str, int]]:
+    """回傳 [(symbol, name, user_count), ...] 依重疊人數降冪排列"""
+    rows = (
+        db.query(Stock.symbol, Stock.name, func.count(Stock.user_id).label('cnt'))
+        .group_by(Stock.symbol, Stock.name)
+        .order_by(func.count(Stock.user_id).desc())
+        .all()
+    )
+    return [(r.symbol, r.name, r.cnt) for r in rows]
+
+
+def is_cached_today(db, symbol: str) -> bool:
+    return db.query(StockAnalysis).filter_by(
+        symbol=symbol, analysis_date=date.today(), analysis_type='daily'
+    ).count() > 0
+
+
+def cache_market_analysis(db, symbol: str, name: str) -> bool:
+    enriched = get_full_stock_data(symbol)
+    if enriched is None:
+        print(f"[batch] ⚠ 無法取得 {symbol} 資料，跳過")
+        return False
+
+    result = analyze_market_only(name=name, symbol=symbol, enriched_data=enriched)
+
+    today = date.today()
+    existing = db.query(StockAnalysis).filter_by(
+        symbol=symbol, analysis_date=today, analysis_type='daily'
+    ).first()
+
+    if existing:
+        existing.html_content     = result['html']
+        existing.risk_pct         = result['risk_pct']
+        existing.support_price    = Decimal(str(result['support']))    if result['support']    else None
+        existing.resistance_price = Decimal(str(result['resistance'])) if result['resistance'] else None
+        existing.target_price     = Decimal(str(result['target_pnf'])) if result['target_pnf'] else None
+        existing.wyckoff_phase    = result['wyckoff_phase']
+        existing.generated_at     = datetime.utcnow()
+    else:
+        db.add(StockAnalysis(
+            symbol=symbol, analysis_date=today, analysis_type='daily',
+            html_content=result['html'],
+            risk_pct=result['risk_pct'],
+            support_price=Decimal(str(result['support']))    if result['support']    else None,
+            resistance_price=Decimal(str(result['resistance'])) if result['resistance'] else None,
+            target_price=Decimal(str(result['target_pnf'])) if result['target_pnf'] else None,
+            wyckoff_phase=result['wyckoff_phase'],
+        ))
+    db.commit()
+    return True
+
+
+def send_notification(users: list, app_url: str):
+    sender   = os.getenv('EMAIL_SENDER')
+    password = os.getenv('EMAIL_PASSWORD')
+    if not sender or not password:
+        print("[batch] EMAIL_SENDER / EMAIL_PASSWORD 未設定，跳過通知")
+        return
+
+    today_str = datetime.now(TW).strftime('%Y/%m/%d')
+
+    for user in users:
+        try:
+            msg = MIMEMultipart()
+            msg['From']    = sender
+            msg['To']      = user.email
+            msg['Subject'] = f'【投資建議】{today_str} 今日分析已就緒'
+
+            body = (
+                f'您好 {user.name}，\n\n'
+                f'今日（{today_str}）三大宗師分析已完成，請點連結查看：\n\n'
+                f'{app_url}/dashboard\n\n'
+                f'本報表由自動化系統產生，僅供學習參考，不構成實際投資建議。\n\n'
+                f'祝投資順利！'
+            )
+            msg.attach(MIMEText(body, 'plain', 'utf-8'))
+
+            with smtplib.SMTP('smtp.gmail.com', 587) as server:
+                server.starttls()
+                server.login(sender, password)
+                server.sendmail(sender, user.email, msg.as_string())
+
+            print(f"[batch] ✉ 通知已寄送：{user.email}")
+        except Exception as e:
+            print(f"[batch] ✉ 寄送失敗 {user.email}: {e}")
+
+
+def main():
+    print(f"[batch] 開始 — {datetime.now(TW).strftime('%Y-%m-%d %H:%M')} 台灣時間")
+    init_db()
+
+    db = SessionLocal()
+    try:
+        symbols = get_symbols_by_overlap(db)
+        if not symbols:
+            print("[batch] 沒有任何追蹤股票，結束")
+            return
+
+        total    = len(symbols)
+        analyzed = 0
+        skipped  = 0
+
+        for i, (symbol, name, user_count) in enumerate(symbols, 1):
+            if is_cached_today(db, symbol):
+                print(f"[batch] {i}/{total} {symbol} 今日已有快取，跳過")
+                skipped += 1
+                continue
+
+            print(f"[batch] {i}/{total} 分析 {name}（{symbol}）— {user_count} 人追蹤")
+            ok = cache_market_analysis(db, symbol, name)
+            if ok:
+                analyzed += 1
+
+            # 避免 rate limit，兩支之間稍作間隔
+            if i < total:
+                time.sleep(3)
+
+        print(f"[batch] 完成：分析 {analyzed} 支，快取命中 {skipped} 支，共 {total} 支")
+
+        # Email 通知
+        app_url = os.getenv('APP_URL', 'https://investment-system-lxq5.onrender.com')
+        notify_users = db.query(User).filter_by(email_notify=True).all()
+        if notify_users:
+            send_notification(notify_users, app_url)
+        else:
+            print("[batch] 無需通知的用戶")
+
+    finally:
+        db.close()
+
+    print(f"[batch] 結束 — {datetime.now(TW).strftime('%Y-%m-%d %H:%M')} 台灣時間")
+
+
+if __name__ == '__main__':
+    main()

@@ -39,7 +39,7 @@ async function loadMarketData() {
     buildChart();
   } catch (e) {
     const el = document.getElementById('d-change');
-    el.innerHTML = `資料載入失敗 <button class="btn btn-ghost btn-sm" onclick="loadMarketData()" style="margin-left:8px;">重試</button>`;
+    el.innerHTML = `載入失敗：${e.message} <button class="btn btn-ghost btn-sm" onclick="loadMarketData()" style="margin-left:8px;">重試</button>`;
     el.className = 'detail-change down';
     console.error(e);
   }

@@ -64,9 +64,18 @@ def _ohlcv_to_list(df: pd.DataFrame, n: int) -> list:
     return result
 
 
+def _normalize_symbol(symbol: str) -> str:
+    """純數字代號自動補 .TW（台股）"""
+    s = symbol.strip().upper()
+    if s.isdigit():
+        return s + '.TW'
+    return s
+
+
 def get_stock_info(symbol: str) -> dict | None:
     """快速查詢股票名稱與現價（不抓 OHLCV，省時間）"""
     from modules.stock_names import STOCK_NAMES
+    symbol = _normalize_symbol(symbol)
     base = symbol.replace('.TW', '').replace('.TWO', '')
     try:
         r = requests.get(
@@ -77,7 +86,6 @@ def get_stock_info(symbol: str) -> dict | None:
         )
         meta = r.json()['chart']['result'][0]['meta']
         yahoo_name = meta.get('longName') or meta.get('shortName') or ''
-        # 優先用本地中文對照表；Yahoo 通常回英文名
         name = STOCK_NAMES.get(base) or yahoo_name
         return {
             'symbol': symbol,

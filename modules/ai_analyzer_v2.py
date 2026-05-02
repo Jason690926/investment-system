@@ -252,6 +252,203 @@ P&F 概念目標：根據近期整理箱體高度概算（非精確值）
     return result
 
 
+# ── 第一段：客觀市場分析（跨用戶共用快取）──────────────────────
+
+def analyze_market_only(
+    name: str,
+    symbol: str,
+    enriched_data: dict,
+    news_list: list = None,
+) -> dict:
+    """
+    客觀市場分析，不含個人持倉資訊，結果跨用戶共用。
+    存入 StockAnalysis.html_content。
+    回傳 dict 與 analyze_stock_three_masters 同格式。
+    """
+    from datetime import datetime, timezone, timedelta
+    TW = timezone(timedelta(hours=8))
+    today = datetime.now(TW).strftime('%Y/%m/%d')
+
+    price     = enriched_data.get('price', '--')
+    ma5       = enriched_data.get('ma5',  '--')
+    ma20      = enriched_data.get('ma20', '--')
+    ma60      = enriched_data.get('ma60', '--')
+    macd      = enriched_data.get('macd') or {}
+    vol_today = enriched_data.get('volume_zhang', '--')
+    vol_5avg  = enriched_data.get('volume_5d_avg_zhang', '--')
+
+    monthly_text = _fmt_bars(enriched_data.get('monthly_bars', []), "月K", 6)
+    weekly_text  = _fmt_bars(enriched_data.get('weekly_bars',  []), "週K", 8)
+    daily_text   = _fmt_bars(enriched_data.get('daily_bars',   []), "日K", 15)
+
+    news_text = (
+        '\n'.join([f"- {n['title']}" for n in (news_list or [])[:5]])
+        or '暫無相關新聞'
+    )
+
+    prompt = f"""你是融合三大宗師智慧的台股分析師。分析日期：{today}
+
+⚠️ 重要：請在回應的**第一行**先輸出以下結構化標記（純數字），再輸出分析內容：
+RISK_PCT: [0到100整數]
+SUPPORT: [支撐價]
+RESISTANCE: [壓力價]
+TARGET_PNF: [P&F概念目標價，無法估算填0]
+WYCKOFF_PHASE: [積累|上漲|派發|下跌|再積累|再派發|不明]
+---
+
+## 三大宗師主從架構
+1. 【威科夫】（骨幹）：月K定趨勢方向 → 日K量價驗證 → 5日均線確認動能
+2. 【本間宗久】（確認）：週K型態 → 日K蠟燭 → 方向是否一致
+3. 【李佛摩】（時機）：月線位階 + 5日均趨勢 → 是否為介入時機
+
+⚠️ 上位優先：威科夫月K趨勢為最高骨幹，若本間/李佛摩短線訊號與月線方向衝突，以月線為準。
+
+## 風險係數評分原則（0=低風險 100=高風險）
+- 威科夫月K明確下跌趨勢中日線試圖反彈 → +25
+- MACD 柱狀線方向與近期價格趨勢背離 → +15
+- 價格低於 MA60（位於長期均線下方）→ +20
+- 本間週K出現明確頂部反轉型態（如黃昏之星/吊人）→ +15
+- 本間週K出現底部反轉型態（如晨星/鎚子）→ -15
+- 威科夫量縮無力創高（努力大於結果）→ +10
+- 李佛摩5日均線下彎且遠離月線支撐 → +15
+- 三宗師方向完全一致（多頭排列）→ -20
+
+## 股票資料
+
+股票：{name}（{symbol}）
+現價：{price} 元
+均線：MA5={ma5} | MA20={ma20} | MA60={ma60}
+MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={macd.get('histogram','--')}
+成交量：今日 {vol_today} 張 ｜ 5日均量 {vol_5avg} 張
+
+{monthly_text}
+
+{weekly_text}
+
+{daily_text}
+
+【近期相關新聞】
+{news_text}
+
+---
+
+## 請用繁體中文 + HTML 格式輸出以下分析（不含操作建議）：
+
+### 一、威科夫骨幹分析
+- 月K階段：目前處於哪個威科夫階段？說明依據
+- 量價關係：近期放量/縮量與價格方向的「努力 vs 結果」解析
+- 從月K/日K推導：<span class="support-level">關鍵支撐：XX 元</span> 與 <span class="resistance-level">關鍵壓力：XX 元</span>
+
+### 二、本間宗久K線確認
+- 週K型態（最近3根）：形態名稱與多空含意
+- 日K型態（最近5根）：形態名稱與多空含意
+- 週K ↔ 日K 方向是否一致確認？
+
+### 三、李佛摩時機判斷
+- 月線位階：距離關鍵支撐/壓力的距離，是否為「自然反彈/回落」
+- 5日均線動能：上揚/持平/下彎，是否形成加速或衰竭訊號
+- 當前是否為介入時機？說明原因
+
+### 四、三宗師融合結論
+三個框架方向是否一致？有衝突時說明主從優先級與衝突程度。
+<span class="target-price">P&F 概念目標：XX 元</span>（以整理區間高度×倍數估算）
+
+重要提醒：以上為模擬分析，不構成實際投資建議。"""
+
+    raw = _generate(prompt, max_tokens=2800)
+
+    result = {
+        'html':          raw,
+        'risk_pct':      50,
+        'support':       None,
+        'resistance':    None,
+        'target_pnf':    None,
+        'wyckoff_phase': '未知',
+    }
+    try:
+        rp = _parse_tagged(raw, 'RISK_PCT', None)
+        if rp: result['risk_pct'] = max(0, min(100, int(rp)))
+        sp = _parse_tagged(raw, 'SUPPORT', None)
+        if sp and sp != '0': result['support'] = float(sp)
+        rs = _parse_tagged(raw, 'RESISTANCE', None)
+        if rs and rs != '0': result['resistance'] = float(rs)
+        tp = _parse_tagged(raw, 'TARGET_PNF', None)
+        if tp and tp != '0': result['target_pnf'] = float(tp)
+        wp = _parse_tagged(raw, 'WYCKOFF_PHASE', None)
+        if wp: result['wyckoff_phase'] = wp
+    except Exception as e:
+        print(f"[ai_analyzer_v2] 解析結構化輸出失敗: {e}")
+
+    return result
+
+
+# ── 第二段：個人化操作建議（各用戶獨立，不快取）──────────────────
+
+def generate_personal_recommendation(
+    name: str,
+    symbol: str,
+    current_price,
+    wyckoff_phase: str,
+    risk_pct: int,
+    support,
+    resistance,
+    target_pnf,
+    status: str,
+    avg_cost=None,
+    total_zhang=None,
+) -> str:
+    """
+    基於第一段的結構化快取資料，針對個人持倉給出操作建議。
+    prompt 短，token 少，不儲存（每次重新產生）。
+    """
+    if status == 'holding' and avg_cost:
+        try:
+            pnl = round((float(current_price) - float(avg_cost)) / float(avg_cost) * 100, 2)
+            position_info = (
+                f"已持有 {total_zhang or '--'} 張，"
+                f"平均成本 {avg_cost} 元，目前損益 {pnl:+.2f}%"
+            )
+        except Exception:
+            position_info = f"已持有，平均成本 {avg_cost} 元"
+    elif status == 'watching':
+        position_info = "觀察中（尚未買入）"
+    else:
+        position_info = "已持有"
+
+    market_summary = (
+        f"威科夫階段：{wyckoff_phase}，風險係數：{risk_pct}%，"
+        f"支撐：{support or '--'}，壓力：{resistance or '--'}，"
+        f"P&F目標：{target_pnf or '--'}"
+    )
+
+    if status == 'holding':
+        action_request = """### 五、操作建議（已持有）
+- <span class="short-term-title">▶ 短期（1-5日）</span>：續抱 / 加碼 / 減碼 / 出場（選一，說明理由）
+- 加碼條件：突破何種壓力 + 量能條件
+- 減碼/停利條件：達到何種目標 or 出現何種警訊
+- <span class="stop-loss">停損：XX 元（跌破請執行，不要猶豫）</span>"""
+    else:
+        action_request = """### 五、操作建議（觀察中）
+- <span class="short-term-title">▶ 短線介入條件（1-5日）</span>：突破 XX 元且量超過 5 日均量
+- <span class="mid-term-title">▶ 中線布局條件（月線角度）</span>：威科夫積累完成確認
+- <span class="stop-loss">預設停損：XX 元（買進後若跌破立即出場）</span>
+- 目前是否適合介入？說明理由"""
+
+    prompt = f"""你是台股操作顧問。針對{name}（{symbol}）給出個人化操作建議。
+
+市場分析摘要：{market_summary}
+現價：{current_price} 元
+投資人狀況：{position_info}
+
+請用繁體中文 + HTML 格式輸出（簡潔，3-5 行即可）：
+
+{action_request}
+
+不構成實際投資建議。"""
+
+    return _generate(prompt, max_tokens=500)
+
+
 # ── 平行分析所有持股（v2）────────────────────────────────────
 
 def analyze_stocks_parallel_v2(
