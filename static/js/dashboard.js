@@ -1,7 +1,8 @@
-/* ── Dashboard ────────────────────────────────────────── */
+﻿/* ── Dashboard ────────────────────────────────────────── */
 
 let allStocks = [];
 let currentFilter = 'all';
+let isAnalyzing  = false;
 
 async function loadStocks() {
   const grid = document.getElementById('stock-grid');
@@ -89,7 +90,7 @@ function buildCard(s) {
     : `<div class="wyckoff-badge wyckoff-none"></div>`;
 
   return `
-  <div class="stock-card${isAnalyzed ? ' analyzed' : ''}" data-stock-id="${s.id}" onclick="location.href='/stock/${s.id}'">
+  <div class="stock-card${isAnalyzed ? ' analyzed' : ''}" data-stock-id="${s.id}" onclick="openStockPage(${s.id})">
     <span class="badge ${badgeCls}">${badgeText}</span>
     <div class="card-row1">
       <div>
@@ -165,6 +166,7 @@ async function analyzeAll() {
   if (!stocks.length) { toast('尚無股票', 'error'); return; }
 
   btn.disabled = true;
+  isAnalyzing  = true;
   progress.style.display = 'flex';
 
   const queue   = [...stocks];
@@ -206,10 +208,20 @@ async function analyzeAll() {
   // 同時啟動 CONCURRENCY 個 worker，共用同一個 queue
   await Promise.all(Array.from({ length: CONCURRENCY }, worker));
 
+  isAnalyzing = false;
   const cacheMsg = cached > 0 ? `，其中 ${cached} 支來自快取` : '';
   progress.innerHTML = `<span style="color:var(--green);font-weight:700;">✓ 分析完成（${stocks.length} 支${cacheMsg}）</span>`;
   btn.disabled = false;
   setTimeout(() => { progress.style.display = 'none'; }, 3500);
+}
+
+/* ── 股票卡片導航（分析中改開新分頁，避免中斷）─────────── */
+function openStockPage(stockId) {
+  if (isAnalyzing) {
+    window.open(`/stock/${stockId}`, '_blank');
+  } else {
+    location.href = `/stock/${stockId}`;
+  }
 }
 
 function markCardAnalyzed(stockId, riskPct, wyckoffPhase) {

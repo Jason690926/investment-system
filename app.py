@@ -96,15 +96,47 @@ def api_market_info(symbol):
 @app.route('/api/market/<symbol>/quote')
 @login_required
 def api_market_quote(symbol):
-    """輕量行情（OHLC + 漲跌）：看板用，記憶體快取當日資料"""
+    """輕量行情（OHLC + 漲跌）：看板用，記憶體快取當日資料。
+    優先從 MarketDataCache 推導（分析時已存入），避免重複打 Yahoo Finance。"""
+    import json as _json
     from datetime import date as dt_date
     from modules.data_enricher import get_stock_quote
-    key = f'{symbol}_{dt_date.today()}'
+    from modules.models import MarketDataCache
+
+    today = dt_date.today()
+    key = f'{symbol}_{today}'
+
     if key not in _quote_cache:
-        data = get_stock_quote(symbol)
-        if data is None:
-            return jsonify({'error': f'無法取得 {symbol} 行情'}), 404
-        _quote_cache[key] = data
+        # ① 優先從 DB 快取推導（分析後即可用，速度快、不觸碰 Yahoo 速率）
+        db = SessionLocal()
+        try:
+            mkt = db.query(MarketDataCache).filter_by(
+                symbol=symbol, cache_date=today
+            ).first()
+            if mkt:
+                bars = _json.loads(mkt.data_json).get('daily_bars', [])
+                if len(bars) >= 2:
+                    last, prev = bars[-1], bars[-2]
+                    _quote_cache[key] = {
+                        'symbol':     symbol,
+                        'open':       last['open'],
+                        'high':       last['high'],
+                        'low':        last['low'],
+                        'close':      last['close'],
+                        'prev_close': prev['close'],
+                    }
+        except Exception as e:
+            print(f"[quote] DB 快取讀取失敗 {symbol}: {e}")
+        finally:
+            db.close()
+
+        # ② DB 沒有時才打 Yahoo Finance
+        if key not in _quote_cache:
+            data = get_stock_quote(symbol)
+            if data is None:
+                return jsonify({'error': f'無法取得 {symbol} 行情'}), 404
+            _quote_cache[key] = data
+
     return jsonify(_quote_cache[key])
 
 
