@@ -324,6 +324,12 @@ jobs:
 - ✅ Bug：股票名稱顯示英文（`stock_names.py` 從 76 支擴充為 39,255 支，涵蓋全台股上市+上櫃）
   - 查詢優先順序：本地字典 → TWSE/TPEX API → Yahoo 英文名（最後手段）
   - 資料來源：`isin.twse.com.tw`，可定期重跑腳本更新
+- ✅ Bug：AI 分析報表白/黑背景不一致（Claude 有時輸出含 `background:white` inline style）
+  - 修法：Python 清理 tag 行 + 移除 background inline style；CSS 強制深色主題背景 transparent
+- ✅ Bug：登出按鈕無效（`/logout` → `/login` 直接觸發 Google OAuth 等於重新登入）
+  - 修法：改導向 `/`（顯示 login.html 登入按鈕頁）
+- ✅ Bug：Dashboard 看板未顯示「已分析」/風險係數（`get_user_stocks()` 從未回傳 `risk_pct`/`wyckoff_phase`）
+  - 修法：`stock_service.py` 加入查詢各 symbol 最新 `StockAnalysis` 並合入結果
 
 ---
 
