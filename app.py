@@ -14,7 +14,10 @@ app.secret_key = os.getenv('FLASK_SECRET_KEY', 'dev-secret')
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 from modules.database import init_db
-init_db()
+try:
+    init_db()
+except Exception as e:
+    print(f"[DB] 啟動時初始化失敗（稍後重試）: {e}")
 
 init_auth(app)
 
