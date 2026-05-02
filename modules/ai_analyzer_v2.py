@@ -319,7 +319,7 @@ def analyze_market_only(
 
     monthly_text = _fmt_bars(enriched_data.get('monthly_bars', []), "月K", 6)
     weekly_text  = _fmt_bars(enriched_data.get('weekly_bars',  []), "週K", 8)
-    daily_text   = _fmt_bars(enriched_data.get('daily_bars',   []), "日K", 15)
+    daily_text   = _fmt_bars(enriched_data.get('daily_bars',   []), "日K", 20)
 
     news_text = (
         '\n'.join([f"- {n['title']}" for n in (news_list or [])[:5]])
@@ -375,27 +375,38 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
 ## 請用繁體中文 + HTML 格式輸出以下分析（不含操作建議）：
 
 ### 一、威科夫骨幹分析
-- 月K階段：目前處於哪個威科夫階段？說明依據
-- 量價關係：近期放量/縮量與價格方向的「努力 vs 結果」解析
-- 從月K/日K推導：<span class="support-level">關鍵支撐：XX 元</span> 與 <span class="resistance-level">關鍵壓力：XX 元</span>
+- 月K階段：目前處於哪個威科夫階段？（積累/上漲/派發/下跌/再積累/再派發）說明3個以上具體依據
+- 量價關係：逐一分析近期放量/縮量與價格方向的「努力 vs 結果」，是否有背離？
+- <span class="support-level">關鍵支撐：XX 元</span>（說明為何是此支撐）與 <span class="resistance-level">關鍵壓力：XX 元</span>（說明為何是此壓力）
 
-### 二、本間宗久K線確認
-- 週K型態（最近3根）：形態名稱與多空含意
-- 日K型態（最近5根）：形態名稱與多空含意
-- 週K ↔ 日K 方向是否一致確認？
+### 二、本間宗久K線確認（⚠️ 每根K棒必須說出具體中文型態名稱）
+K棒型態參考（根據 OHLC 推導）：
+長紅K（陽線，收>開幅度大）、長黑K（陰線，收<開幅度大）、十字星（開收幾乎相等）、
+錘子（下影線≥實體2倍，底部出現=看漲）、吊人（錘子型但出現在高位=看跌）、
+射擊之星/流星（上影線≥實體2倍，頂部出現=看跌）、倒錘（倒置射擊之星，底部出現=看漲）、
+早晨之星（三根：長黑+小K+長紅，底部反轉）、黃昏之星（三根：長紅+小K+長黑，頂部反轉）、
+多頭吞噬（第二根陽線完全吞噬第一根陰線）、空頭吞噬（第二根陰線完全吞噬第一根陽線）、
+貫穿線（底部，陽線收在前一陰線中點以上）、烏雲蓋頂（頂部，陰線收在前一陽線中點以下）、
+孕線（小K完全在前一根K棒實體範圍內，猶豫信號）、高腳/長腳十字（影線極長=市場混亂）
+
+- 週K型態（最近3根）：逐根說明【型態名稱】+ 多空含意，三根合看組合解讀
+- 日K型態（最近5根）：逐根說明【型態名稱】+ 多空含意，今日K棒意義特別強調
+- 週K ↔ 日K 方向是否一致？（一致多頭/一致空頭/訊號分歧 + 分歧時說明優先哪個）
 
 ### 三、李佛摩時機判斷
-- 月線位階：距離關鍵支撐/壓力的距離，是否為「自然反彈/回落」
-- 5日均線動能：上揚/持平/下彎，是否形成加速或衰竭訊號
-- 當前是否為介入時機？說明原因
+- 月線位階：距離關鍵支撐/壓力幾%？是否屬於「自然反彈/自然回落」範疇？
+- 5日均線動能：上揚/持平/下彎（說明斜率變化），是否形成加速或衰竭訊號？
+- 轉折點確認（Pivot Point）：近期有無關鍵轉折點？是否已突破前高（多頭確認）或跌破前低（空頭確認）？
+- 「等待」原則：目前需要等待哪個具體條件才適合行動？（說明等待什麼：量能/價格/K棒型態）
+- 今日是否為行動時機？（立刻可行動 / 等待確認 / 不宜行動，給出明確判斷）
 
 ### 四、三宗師融合結論
-三個框架方向是否一致？有衝突時說明主從優先級與衝突程度。
-<span class="target-price">P&F 概念目標：XX 元</span>（以整理區間高度×倍數估算）
+三個框架方向是否一致？衝突時說明主從優先與衝突程度。
+<span class="target-price">P&F 概念目標：XX 元</span>（以近期整理箱體高度概算，非精確值）
 
 重要提醒：以上為模擬分析，不構成實際投資建議。"""
 
-    raw = _generate(prompt, max_tokens=2800)
+    raw = _generate(prompt, max_tokens=3500)
 
     result = {
         'html':          _clean_html_output(raw),
@@ -436,57 +447,107 @@ def generate_personal_recommendation(
     status: str,
     avg_cost=None,
     total_zhang=None,
+    recent_bars: list = None,
 ) -> str:
     """
     基於第一段的結構化快取資料，針對個人持倉給出操作建議。
-    prompt 短，token 少，不儲存（每次重新產生）。
+    不儲存（每次重新產生）。
     """
     if status == 'holding' and avg_cost:
         try:
             pnl = round((float(current_price) - float(avg_cost)) / float(avg_cost) * 100, 2)
+            pnl_str = f"{pnl:+.2f}%"
             position_info = (
                 f"已持有 {total_zhang or '--'} 張，"
-                f"平均成本 {avg_cost} 元，目前損益 {pnl:+.2f}%"
+                f"平均成本 {avg_cost} 元，目前損益 {pnl_str}"
             )
         except Exception:
+            pnl_str = '--'
             position_info = f"已持有，平均成本 {avg_cost} 元"
     elif status == 'watching':
+        pnl_str = None
         position_info = "觀察中（尚未買入）"
     else:
-        position_info = "已持有"
+        pnl_str = None
+        position_info = "已持有（無成本資料）"
+
+    # 近期 K 棒摘要
+    bars_text = ''
+    if recent_bars:
+        lines = [
+            f"{b['date']}  O={b['open']} H={b['high']} L={b['low']} C={b['close']}  量={b.get('volume_zhang','--')}張"
+            for b in recent_bars[-5:]
+        ]
+        bars_text = "【近期日K（最後5根）】\n" + "\n".join(lines)
 
     market_summary = (
-        f"威科夫階段：{wyckoff_phase}，風險係數：{risk_pct}%，"
-        f"支撐：{support or '--'}，壓力：{resistance or '--'}，"
-        f"P&F目標：{target_pnf or '--'}"
+        f"威科夫階段：{wyckoff_phase} | 風險係數：{risk_pct}%\n"
+        f"關鍵支撐：{support or '--'} 元 | 關鍵壓力：{resistance or '--'} 元 | P&F目標：{target_pnf or '--'} 元"
     )
 
     if status == 'holding':
-        action_request = """### 五、操作建議（已持有）
-- <span class="short-term-title">▶ 短期（1-5日）</span>：續抱 / 加碼 / 減碼 / 出場（選一，說明理由）
-- 加碼條件：突破何種壓力 + 量能條件
-- 減碼/停利條件：達到何種目標 or 出現何種警訊
-- <span class="stop-loss">停損：XX 元（跌破請執行，不要猶豫）</span>"""
+        action_template = """### 操作建議（已持有）
+
+▶ 整體判斷：（只選一個，加粗）**續抱 / 加碼 / 減碼 / 出場** — 說明理由（不超過40字）
+
+▶ 加碼機會（若市況允許）
+- 加碼觸發條件：突破 ___元 + 量需超過 ___張（約5日均量的___倍）
+- 加碼最高位置：不超過 ___元，避免追高
+- 加碼後停損：跌回 ___元則全部停損
+
+▶ 停利/減碼計劃
+- 第一減碼點：___元（獲利約___% 時，減碼___成）
+- 最終目標：___元（P&F概念目標，預期獲利___% ）
+
+▶ 停損（最重要，務必給具體數字）
+<span class="stop-loss">⚠ 停損位：___元 — 跌破請執行，不要猶豫（距現價約-___% ）</span>
+（設在支撐位 ___元 下方約2-3%）
+
+▶ 今日K棒提醒
+（結合最後一根K棒型態+量能，一句話說明當下最值得注意的盤面訊號）"""
     else:
-        action_request = """### 五、操作建議（觀察中）
-- <span class="short-term-title">▶ 短線介入條件（1-5日）</span>：突破 XX 元且量超過 5 日均量
-- <span class="mid-term-title">▶ 中線布局條件（月線角度）</span>：威科夫積累完成確認
-- <span class="stop-loss">預設停損：XX 元（買進後若跌破立即出場）</span>
-- 目前是否適合介入？說明理由"""
+        action_template = """### 操作建議（準備進場）
 
-    prompt = f"""你是台股操作顧問。針對{name}（{symbol}）給出個人化操作建議。
+▶ 現在適合進場嗎？
+（只選一個，加粗）**<span class="short-term-title">立刻可入 / 等待確認 / 不建議進場</span>** — 理由（不超過40字）
 
-市場分析摘要：{market_summary}
-現價：{current_price} 元
-投資人狀況：{position_info}
+▶ 短線介入條件（1-5日，李佛摩轉折點確認）
+- 進場觸發：突破 ___元（前高/關鍵壓力），且量超過 ___張（5日均量的___倍）
+- 首批建倉位：___元附近，建議___張
+- 短線目標：___元（約+___% ）
+- <span class="stop-loss">⚠ 進場後停損：___元（跌破立即出場，損失約-___% ）</span>
 
-請用繁體中文 + HTML 格式輸出（簡潔，3-5 行即可）：
+▶ 中線布局條件（威科夫積累完成確認）
+- 等待信號：___（具體說明：什麼K線型態 / 什麼量能條件 / 哪個支撐確認）
+- 理想建倉區：___元 ~ ___元（支撐帶附近）
+- 中線目標：___元（P&F概念目標）
 
-{action_request}
+▶ 李佛摩「等待」原則
+- 目前需要等什麼確認？（沒有達到此條件前，不要輕易進場）
 
-不構成實際投資建議。"""
+▶ 風險提示
+（根據風險係數 {risk_pct}% 說明最主要潛在風險，不超過2行）""".replace('{risk_pct}', str(risk_pct))
 
-    return _generate(prompt, max_tokens=500)
+    prompt = f"""你是台股操作顧問，提供具體、有數字、可執行的操作策略。
+每個建議都必須有具體價格數字，絕不說「視情況而定」。
+
+股票：{name}（{symbol}）現價：{current_price} 元
+
+【市場分析摘要】
+{market_summary}
+
+{bars_text}
+
+【投資人持倉狀況】
+{position_info}
+
+請用繁體中文 + HTML 格式輸出以下建議（務必填入所有具體數字）：
+
+{action_template}
+
+⚠️ 不構成實際投資建議，投資人需自行評估風險。"""
+
+    return _generate(prompt, max_tokens=1200)
 
 
 # ── 平行分析所有持股（v2）────────────────────────────────────

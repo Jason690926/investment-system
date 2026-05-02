@@ -282,6 +282,19 @@ def api_recommend_stock(stock_id):
         avg   = float(stock.avg_cost)    if stock.avg_cost    else None
         total = float(stock.total_zhang) if stock.total_zhang else None
 
+        # 從 DB 快取取近期 K 棒
+        import json as _json
+        from modules.models import MarketDataCache
+        recent_bars = []
+        mkt_cache = db.query(MarketDataCache).filter_by(
+            symbol=stock.symbol, cache_date=today
+        ).first()
+        if mkt_cache:
+            try:
+                recent_bars = _json.loads(mkt_cache.data_json).get('daily_bars', [])[-5:]
+            except Exception:
+                pass
+
         html = generate_personal_recommendation(
             name=stock.name, symbol=stock.symbol,
             current_price=current_price,
@@ -293,6 +306,7 @@ def api_recommend_stock(stock_id):
             status=stock.status,
             avg_cost=avg,
             total_zhang=total,
+            recent_bars=recent_bars,
         )
         return jsonify({'html': html})
     finally:

@@ -585,6 +585,59 @@ a:hover { text-decoration: underline; }
 .bull              { color: var(--green); }
 .neutral           { color: var(--muted); }
 
+/* ── Personal Recommendation Section ─────────────────── */
+.recommend-section {
+  margin-top: 32px;
+  border-top: 2px solid rgba(227,179,65,.3);
+  padding-top: 20px;
+}
+.recommend-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.recommend-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--orange);
+}
+.recommend-content {
+  background: rgba(227,179,65,.04);
+  border: 1px solid rgba(227,179,65,.2);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  line-height: 1.9;
+  color: var(--text-dim);
+  font-size: 15px;
+}
+.recommend-content * {
+  background-color: transparent !important;
+  color: var(--text-dim) !important;
+  border-color: var(--border) !important;
+}
+.recommend-content h1,
+.recommend-content h2,
+.recommend-content h3,
+.recommend-content h4,
+.recommend-content h5 {
+  color: var(--orange) !important;
+  margin: 20px 0 10px !important;
+  font-size: 16px !important;
+  background-color: transparent !important;
+}
+.recommend-content p  { margin-bottom: 10px; }
+.recommend-content ul,
+.recommend-content ol { padding-left: 20px; margin-bottom: 10px; }
+.recommend-content li { margin-bottom: 6px; }
+.recommend-content .short-term-title { color: var(--blue) !important; }
+.recommend-content .mid-term-title   { color: var(--orange) !important; }
+.recommend-content .target-price     { color: var(--purple) !important; }
+.recommend-content .stop-loss        { color: var(--red) !important; font-weight: 700 !important; }
+.recommend-content .support-level    { color: var(--green) !important; }
+.recommend-content .resistance-level { color: var(--red) !important; }
+.recommend-content .bull             { color: var(--green) !important; }
+.recommend-content .bear             { color: var(--red) !important; }
+
 /* ── Risk Summary Box ─────────────────────────────────── */
 .risk-summary {
   display: flex;

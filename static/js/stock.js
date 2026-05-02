@@ -233,7 +233,34 @@ function showAnalysis(res) {
     </div>
     ${res.generated_at ? `<p style="font-size:12px;color:var(--muted);margin-bottom:12px;">今日分析 ${res.generated_at} · <button class="btn btn-ghost btn-sm" onclick="runAnalysis()">重新分析</button></p>` : ''}`;
   }
-  area.innerHTML = riskHtml + `<div id="analysis-content">${res.html}</div>`;
+
+  const recommendTitle = STOCK_STATUS === 'holding' ? '📌 持股操作建議' : '🎯 進場時機建議';
+  area.innerHTML = riskHtml +
+    `<div id="analysis-content">${res.html}</div>` +
+    `<div class="recommend-section">
+       <div class="recommend-header">
+         <div class="recommend-title">${recommendTitle}</div>
+       </div>
+       <div id="recommend-content" class="loading">
+         <div class="spinner"></div> 產生個人化建議中…
+       </div>
+     </div>`;
+
+  loadRecommendation();
+}
+
+async function loadRecommendation() {
+  const el = document.getElementById('recommend-content');
+  if (!el) return;
+  try {
+    const res = await api(`/api/stocks/${STOCK_ID}/recommend`, { method: 'POST' });
+    el.innerHTML = res.html;
+    el.className = 'recommend-content';
+  } catch (e) {
+    el.innerHTML = `<p style="color:var(--muted);font-size:13px;">建議載入失敗：${e.message}
+      <button class="btn btn-ghost btn-sm" style="margin-left:8px;" onclick="loadRecommendation()">重試</button></p>`;
+    el.className = 'recommend-content';
+  }
 }
 
 async function runAnalysis() {
