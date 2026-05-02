@@ -39,6 +39,7 @@ function buildCard(s) {
   const wyckoff     = s.wyckoff_phase ?? '';
   const badgeCls    = s.status === 'holding' ? 'badge-holding' : 'badge-watching';
   const badgeText   = s.status === 'holding' ? '已持有' : '觀察中';
+  const isAnalyzed  = riskPct != null;
 
   const riskBar = riskPct != null ? `
     <div class="risk-block">
@@ -63,7 +64,7 @@ function buildCard(s) {
     : '';
 
   return `
-  <div class="stock-card" onclick="location.href='/stock/${s.id}'">
+  <div class="stock-card${isAnalyzed ? ' analyzed' : ''}" data-stock-id="${s.id}" onclick="location.href='/stock/${s.id}'">
     <span class="badge ${badgeCls}">${badgeText}</span>
     <div class="card-row1">
       <div>
@@ -81,7 +82,66 @@ function buildCard(s) {
       ${riskBar}
       ${metaHtml}
     </div>
+    ${isAnalyzed ? '<div class="analyzed-badge">✦ 已分析</div>' : ''}
   </div>`;
+}
+
+/* ── 一鍵分析所有股票 ─────────────────────────────────── */
+async function analyzeAll() {
+  const btn      = document.getElementById('btn-analyze-all');
+  const progress = document.getElementById('analyze-progress');
+  const stocks   = [...allStocks];
+  if (!stocks.length) { toast('尚無股票', 'error'); return; }
+
+  btn.disabled = true;
+  progress.style.display = 'flex';
+  let done = 0;
+
+  for (const stock of stocks) {
+    progress.innerHTML = `<div class="spinner" style="width:14px;height:14px;border-width:2px;flex-shrink:0"></div>分析中 ${done}/${stocks.length}：${stock.name}`;
+    try {
+      const res = await api(`/api/stocks/${stock.id}/analyze`, { method: 'POST' });
+      done++;
+      const idx = allStocks.findIndex(s => s.id === stock.id);
+      if (idx >= 0) {
+        allStocks[idx].risk_pct      = res.risk_pct;
+        allStocks[idx].wyckoff_phase = res.wyckoff_phase;
+      }
+      markCardAnalyzed(stock.id, res.risk_pct, res.wyckoff_phase);
+    } catch { done++; }
+  }
+
+  progress.innerHTML = `<span style="color:var(--green);font-weight:700;">✓ 分析完成（${stocks.length} 支）</span>`;
+  btn.disabled = false;
+  setTimeout(() => { progress.style.display = 'none'; }, 3500);
+}
+
+function markCardAnalyzed(stockId, riskPct, wyckoffPhase) {
+  const card = document.querySelector(`[data-stock-id="${stockId}"]`);
+  if (!card) return;
+  card.classList.add('analyzed');
+
+  if (riskPct != null) {
+    const rc = riskClass(riskPct);
+    const rb = card.querySelector('.risk-block');
+    if (rb) rb.innerHTML = `
+      <div class="risk-label">風險係數 <span class="${rc}">${riskPct}%</span></div>
+      <div class="risk-bar"><div class="risk-fill ${rc}" style="width:${riskPct}%"></div></div>`;
+  }
+  if (wyckoffPhase) {
+    const wy = card.querySelector('.wyckoff-tag');
+    if (wy) wy.textContent = `⬡ ${wyckoffPhase}`;
+    else {
+      card.querySelector('.card-symbol')
+          ?.insertAdjacentHTML('afterend', `<div class="wyckoff-tag">⬡ ${wyckoffPhase}</div>`);
+    }
+  }
+  if (!card.querySelector('.analyzed-badge')) {
+    const b = document.createElement('div');
+    b.className = 'analyzed-badge';
+    b.textContent = '✦ 已分析';
+    card.appendChild(b);
+  }
 }
 
 /* ── Filter ───────────────────────────────────────────── */

@@ -221,6 +221,43 @@ a:hover { text-decoration: underline; }
 .badge-holding  { background: rgba(63,185,80,.15);  color: var(--green); }
 .badge-watching { background: rgba(88,166,255,.15); color: var(--blue);  }
 
+/* ── Analyzed card state ──────────────────────────────── */
+.stock-card.analyzed {
+  border-color: rgba(88,166,255,.35);
+}
+.stock-card.analyzed::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--blue), rgba(88,166,255,0));
+  border-radius: var(--radius) var(--radius) 0 0;
+  pointer-events: none;
+}
+.analyzed-badge {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--blue);
+  opacity: 0.6;
+  text-align: right;
+  margin-top: 8px;
+  letter-spacing: 0.08em;
+}
+
+/* ── Analyze progress bar ─────────────────────────────── */
+.analyze-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 16px;
+}
+
 /* ── Wyckoff tag ──────────────────────────────────────── */
 .wyckoff-tag {
   font-size: 11px;

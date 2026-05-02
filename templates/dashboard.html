@@ -4,8 +4,12 @@
 {% block content %}
 <div class="section-header">
   <div class="section-title">我的持股</div>
-  <button class="btn btn-primary" onclick="openAddModal()">＋ 新增股票</button>
+  <div style="display:flex;gap:8px;align-items:center;">
+    <button class="btn btn-ghost" id="btn-analyze-all" onclick="analyzeAll()">⚡ 一鍵分析</button>
+    <button class="btn btn-primary" onclick="openAddModal()">＋ 新增股票</button>
+  </div>
 </div>
+<div id="analyze-progress" class="analyze-progress" style="display:none;"></div>
 
 <div class="filter-chips">
   <div class="chip active" data-filter="all">全部 <span id="cnt-all"></span></div>

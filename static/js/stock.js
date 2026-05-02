@@ -191,6 +191,11 @@ function updateChartData() {
 
   candleSeries.setData(candles);
   volumeSeries.setData(volumes);
+
+  // 根據 bar 數量動態調整成交量佔高比例，避免月K/週K 重疊
+  const topMargin = bars.length <= 12 ? 0.88 : bars.length <= 26 ? 0.85 : 0.80;
+  chart.priceScale('vol').applyOptions({ scaleMargins: { top: topMargin, bottom: 0 } });
+
   chart.timeScale().fitContent();
 
   const label = { daily: `日K（${bars.length}根）`, weekly: `週K（${bars.length}根）`, monthly: `月K（${bars.length}根）` };
