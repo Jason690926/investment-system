@@ -284,7 +284,7 @@ jobs:
 週2 ✅：Google OAuth + PostgreSQL/SQLAlchemy + 持股管理重構（已持有/觀察中）
 週3 ✅：新 data_enricher（週K/月K/成交量/MACD/MA）+ AI 三宗師框架
 週4 ✅：深色主題前端（RWD + lightweight-charts + 逐股分析 + 看圖模式）
-週5：產業週報 + PDF 匯出 + Render Starter 部署（+ 以下補充決策）
+週5（進行中）：產業週報 + PDF 匯出 + Render Starter 部署（+ 以下補充決策）
 ```
 
 **部署前修復（2026-05-02 已完成）：**
@@ -313,8 +313,8 @@ jobs:
 
 **部署完成後待做：**
 - ✅ 確認網站可正常登入（Google OAuth）
-- [ ] 加入 GitHub Secret `APP_URL`（Render 網址）
-- [ ] 手動觸發 GitHub Actions 測試批次分析
+- ✅ 加入 GitHub Secret `APP_URL`（Render 網址）
+- ✅ 手動觸發 GitHub Actions 測試批次分析（成功，Email 收到）
 
 ---
 
