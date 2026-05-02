@@ -461,38 +461,41 @@ a:hover { text-decoration: underline; }
   padding: 50px 20px;
 }
 .analysis-trigger p { color: var(--muted); margin-bottom: 20px; }
-#analysis-content { line-height: 1.8; }
-/* 強制覆蓋 AI 輸出的所有 inline 顏色/背景，統一深色主題 */
-#analysis-content,
+
+/* 分析內容容器：明確深色背景，防止透明疊白 */
+#analysis-content {
+  line-height: 1.8;
+  background: var(--card);
+  color: var(--text);
+  padding: 4px 0;
+}
+
+/* 強制所有 AI 輸出元素統一深色主題 */
 #analysis-content * {
   background-color: transparent !important;
   color: var(--text) !important;
   border-color: var(--border) !important;
 }
-/* 特定元素保留原有顏色設計 */
-#analysis-content th                { background-color: #1a3a5c !important; color: #fff !important; }
+
+/* ── 標題 ── */
+#analysis-content h1,
+#analysis-content h2,
 #analysis-content h3,
-#analysis-content h4                { color: var(--blue) !important; }
-#analysis-content .support-level   { color: var(--green) !important; }
-#analysis-content .resistance-level{ color: var(--red) !important; }
-#analysis-content .target-price    { color: var(--purple) !important; }
-#analysis-content .stop-loss       { color: var(--red) !important; }
-#analysis-content .bear             { color: var(--red) !important; }
-#analysis-content .bull             { color: var(--green) !important; }
-#analysis-content .neutral          { color: var(--muted) !important; }
-#analysis-content .short-term-title { color: var(--blue) !important; }
-#analysis-content .mid-term-title   { color: var(--orange) !important; }
-#analysis-content h3, #analysis-content h4 {
-  color: var(--blue);
-  margin: 20px 0 10px;
-  font-size: 16px;
+#analysis-content h4,
+#analysis-content h5 {
+  color: var(--blue) !important;
+  margin: 20px 0 10px !important;
+  font-size: 16px !important;
+  background-color: transparent !important;
 }
-#analysis-content p { margin-bottom: 10px; }
-#analysis-content ul, #analysis-content ol {
-  padding-left: 20px;
-  margin-bottom: 10px;
-}
+
+/* ── 段落/清單 ── */
+#analysis-content p  { margin-bottom: 10px; }
+#analysis-content ul,
+#analysis-content ol { padding-left: 20px; margin-bottom: 10px; }
 #analysis-content li { margin-bottom: 6px; }
+
+/* ── 表格 ── */
 #analysis-content table {
   width: 100%;
   border-collapse: collapse;
@@ -500,23 +503,50 @@ a:hover { text-decoration: underline; }
   font-size: 13px;
 }
 #analysis-content th {
-  background: #1a3a5c;
-  color: #fff;
-  padding: 8px;
+  background-color: #1a3a5c !important;
+  color: #e6edf3 !important;
+  padding: 8px !important;
   text-align: left;
 }
 #analysis-content td {
   padding: 7px 8px;
   border-bottom: 1px solid var(--border);
+  color: var(--text) !important;
 }
-#analysis-content tr:nth-child(even) td { background: rgba(255,255,255,.02); }
-/* AI 分析內嵌 span 標籤 */
+#analysis-content tr:nth-child(even) td {
+  background-color: rgba(255,255,255,.02) !important;
+}
+
+/* ── 程式碼/引用區塊 ── */
+#analysis-content pre,
+#analysis-content code,
+#analysis-content blockquote {
+  background-color: var(--bg) !important;
+  color: var(--text) !important;
+  border-color: var(--border) !important;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+/* ── 語意色彩 span（class 明確，覆蓋 * 規則）── */
+#analysis-content .short-term-title { color: var(--blue) !important; }
+#analysis-content .mid-term-title   { color: var(--orange) !important; }
+#analysis-content .target-price     { color: var(--purple) !important; }
+#analysis-content .stop-loss        { color: var(--red) !important; }
+#analysis-content .support-level    { color: var(--green) !important; }
+#analysis-content .resistance-level { color: var(--red) !important; }
+#analysis-content .bull             { color: var(--green) !important; }
+#analysis-content .bear             { color: var(--red) !important; }
+#analysis-content .neutral          { color: var(--muted) !important; }
+#analysis-content .close-price      { color: var(--text) !important; }
+
+/* ── 全域語意 span（analysis-content 外也可使用）── */
 .short-term-title  { color: var(--blue);   font-weight: 700; }
 .mid-term-title    { color: var(--orange); font-weight: 700; }
 .target-price      { color: var(--purple); font-weight: 700; background: rgba(210,168,255,.1); padding: 2px 8px; border-radius: 4px; }
-.stop-loss         { color: var(--red);    font-weight: 700; background: rgba(248,81,73,.1);  padding: 2px 8px; border-radius: 4px; }
-.support-level     { color: var(--green);  font-weight: 700; background: rgba(63,185,80,.1);  padding: 2px 8px; border-radius: 4px; }
-.resistance-level  { color: var(--red);    font-weight: 700; background: rgba(248,81,73,.1);  padding: 2px 8px; border-radius: 4px; }
+.stop-loss         { color: var(--red);    font-weight: 700; background: rgba(248,81,73,.1);   padding: 2px 8px; border-radius: 4px; }
+.support-level     { color: var(--green);  font-weight: 700; background: rgba(63,185,80,.1);   padding: 2px 8px; border-radius: 4px; }
+.resistance-level  { color: var(--red);    font-weight: 700; background: rgba(248,81,73,.1);   padding: 2px 8px; border-radius: 4px; }
 .close-price       { color: var(--text);   font-weight: 700; }
 .bear              { color: var(--red); }
 .bull              { color: var(--green); }

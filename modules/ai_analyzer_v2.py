@@ -62,23 +62,27 @@ def _fmt_bars(bars: list, label: str, n: int) -> str:
 
 
 def _clean_html_output(raw: str) -> str:
-    """移除 AI 回應頂部的結構化標記行，並清除破壞深色主題的 inline 背景/顏色樣式"""
+    """移除 AI 回應頂部的結構化標記行，並剝除所有 inline style 讓 CSS 統一控制"""
     lines = raw.split('\n')
     content_lines = []
     skip_header = True
-    tag_prefixes = ('RISK_PCT:', 'SUPPORT:', 'RESISTANCE:', 'TARGET_PNF:', 'WYCKOFF_PHASE:', '---')
+    tag_prefixes = (
+        'RISK_PCT:', 'SUPPORT:', 'RESISTANCE:', 'TARGET_PNF:', 'TARGET_PRICE:',
+        'WYCKOFF_PHASE:', '---', '```',
+    )
     for line in lines:
         s = line.strip().upper()
         if skip_header:
-            if any(s.startswith(t) for t in tag_prefixes) or s == '':
+            # 跳過已知 tag 行、空行、以及任何 WORD: value 格式行
+            if (any(s.startswith(t) for t in tag_prefixes)
+                    or s == ''
+                    or re.match(r'^[A-Z_]+\s*:\s*\S', s)):
                 continue
             skip_header = False
         content_lines.append(line)
     html = '\n'.join(content_lines).strip()
-    # 移除所有 inline background 樣式
-    html = re.sub(r'background(?:-color)?\s*:[^;}"\']+;?', '', html, flags=re.IGNORECASE)
-    # 移除明確的黑色文字（破壞深色主題可讀性）
-    html = re.sub(r'color\s*:\s*(?:black|#000(?:000)?)\s*;?', '', html, flags=re.IGNORECASE)
+    # 剝除所有 inline style 屬性，讓 CSS 統一控制深色主題顏色
+    html = re.sub(r'\s+style\s*=\s*(?:"[^"]*"|\'[^\']*\')', '', html, flags=re.IGNORECASE)
     return html
 
 
