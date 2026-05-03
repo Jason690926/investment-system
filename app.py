@@ -672,6 +672,103 @@ def api_generate_weekly_report():
     return jsonify({'ok': True})
 
 
+# ── Email 分享 PDF 報表 ──────────────────────────────────
+
+@app.route('/api/contacts')
+@login_required
+def api_list_contacts():
+    """列出當前用戶的 email 通訊錄（最近用過的優先）"""
+    from modules.models import EmailContact
+    db = SessionLocal()
+    try:
+        rows = (db.query(EmailContact)
+                .filter_by(user_id=current_user.id)
+                .order_by(EmailContact.last_used_at.desc())
+                .all())
+        return jsonify([
+            {'id': r.id, 'email': r.email, 'name': r.name}
+            for r in rows
+        ])
+    finally:
+        db.close()
+
+
+@app.route('/api/share/dashboard-pdf', methods=['POST'])
+@login_required
+def api_share_dashboard_pdf():
+    """multipart：pdf 檔 + emails JSON list；用 SMTP 寄出附檔，BCC 隱藏多收件人"""
+    import json as _json
+    import smtplib
+    from datetime import datetime as _dt, date as _date
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.application import MIMEApplication
+    from modules.models import EmailContact
+
+    pdf_file = request.files.get('pdf')
+    emails_raw = request.form.get('emails') or '[]'
+    try:
+        emails = _json.loads(emails_raw)
+    except Exception:
+        return jsonify({'ok': False, 'error': 'emails 格式錯誤'}), 400
+    emails = [e.strip() for e in emails if isinstance(e, str) and '@' in e]
+    if not pdf_file or not emails:
+        return jsonify({'ok': False, 'error': '需要 pdf 檔與至少 1 個收件人'}), 400
+
+    pdf_bytes = pdf_file.read()
+    if len(pdf_bytes) > 10 * 1024 * 1024:
+        return jsonify({'ok': False, 'error': 'PDF 超過 10MB'}), 400
+
+    sender = os.getenv('EMAIL_SENDER')
+    password = os.getenv('EMAIL_PASSWORD')
+    if not sender or not password:
+        return jsonify({'ok': False, 'error': 'SMTP 未設定（EMAIL_SENDER/PASSWORD）'}), 500
+
+    today = _date.today().strftime('%Y/%m/%d')
+    fname_date = _date.today().strftime('%Y%m%d')
+    msg = MIMEMultipart()
+    msg['From'] = sender
+    msg['To'] = sender              # 主要收件人放自己
+    msg['Bcc'] = ', '.join(emails)  # 朋友以 BCC 隱藏彼此
+    msg['Subject'] = f'【{current_user.name}】{today} 投資建議書'
+    body = (
+        f'您好，\n\n'
+        f'這是 {current_user.name} 的本日投資建議書 PDF，請見附件。\n\n'
+        f'本報表為自動化系統產出，僅供參考，不構成實際投資建議。\n'
+    )
+    msg.attach(MIMEText(body, 'plain', 'utf-8'))
+    pdf_part = MIMEApplication(pdf_bytes, _subtype='pdf')
+    pdf_part.add_header('Content-Disposition', 'attachment',
+                        filename=f'投資建議書_{fname_date}.pdf')
+    msg.attach(pdf_part)
+
+    try:
+        with smtplib.SMTP('smtp.gmail.com', 587, timeout=20) as server:
+            server.starttls()
+            server.login(sender, password)
+            server.sendmail(sender, [sender] + emails, msg.as_string())
+    except Exception as e:
+        return jsonify({'ok': False, 'error': f'寄送失敗: {e}'}), 500
+
+    # 寫入/更新通訊錄
+    db = SessionLocal()
+    try:
+        now = _dt.utcnow()
+        for em in emails:
+            existing = db.query(EmailContact).filter_by(
+                user_id=current_user.id, email=em
+            ).first()
+            if existing:
+                existing.last_used_at = now
+            else:
+                db.add(EmailContact(user_id=current_user.id, email=em, last_used_at=now))
+        db.commit()
+    finally:
+        db.close()
+
+    return jsonify({'ok': True, 'sent_to': emails})
+
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)

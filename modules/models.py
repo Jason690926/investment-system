@@ -110,6 +110,22 @@ class StockAnalysis(Base):
     )
 
 
+class EmailContact(Base):
+    """每個用戶的 email 通訊錄（分享 PDF 報表用）"""
+    __tablename__ = 'email_contacts'
+
+    id           = Column(Integer, primary_key=True)
+    user_id      = Column(Integer, ForeignKey('users.id'), nullable=False)
+    email        = Column(String(256), nullable=False)
+    name         = Column(String(64), nullable=True)
+    last_used_at = Column(DateTime, default=datetime.utcnow)
+    created_at   = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint('user_id', 'email', name='uq_user_email_contact'),
+    )
+
+
 class WeeklyReport(Base):
     """產業週報，每週一份，跨用戶共用"""
     __tablename__ = 'weekly_reports'

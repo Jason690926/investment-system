@@ -414,6 +414,38 @@ a:hover { text-decoration: underline; }
 .suggest-name { color: var(--text); }
 .suggest-symbol { color: var(--muted); font-family: monospace; font-size: 12px; }
 
+/* ── 分享 PDF Modal 的 chip ───────────────────────────── */
+.contact-chips, .recipient-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 30px;
+  padding: 6px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+.contact-chip, .recipient-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: var(--card-hover);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+  transition: all .15s;
+}
+.contact-chip:hover { border-color: var(--blue); background: var(--card); }
+.recipient-chip { cursor: default; background: var(--card); border-color: var(--blue); }
+.recipient-chip .rm {
+  cursor: pointer; color: var(--muted); padding: 0 2px; font-weight: 700;
+}
+.recipient-chip .rm:hover { color: var(--orange); }
+.muted-text { color: var(--muted); }
+
 /* ── Form ─────────────────────────────────────────────── */
 .form-group { margin-bottom: 16px; }
 .form-label {

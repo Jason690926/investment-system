@@ -580,7 +580,64 @@ ORDER BY user_count DESC
 
 ---
 
-## 十三、待確認事項
+## 十三、Email 分享 PDF 報表（2026-05-03）
+
+### 需求
+1 人使用情境，產出報表後可手動把 dashboard 報表寄給朋友（PDF 附檔）。
+收件人需可被記憶，下次寄不用重打 email。
+
+### 設計：客戶端產 PDF
+- 為何不用 server 端 WeasyPrint：commit `6a20805` 已移除（Render 中文字體/啟動慢）
+- 改用 `html2pdf.js`（CDN ~100KB）在前端用既有 `/print-report` 頁面渲染 PDF
+- PDF Blob 上傳到 server，server 用既有 `EMAIL_SENDER` SMTP 寄出
+
+### 資料模型
+新表 `email_contacts`：
+| 欄位 | 型別 | 說明 |
+|------|------|------|
+| id | INT PK | |
+| user_id | INT FK users | 屬於誰的通訊錄 |
+| email | VARCHAR(256) | 收件人 |
+| name | VARCHAR(64) nullable | 顯示名（選填）|
+| last_used_at | DATETIME | 排序：最近用過的優先顯示 |
+| created_at | DATETIME | |
+
+UNIQUE (user_id, email) 防止同一 email 重複入庫。
+
+### API
+- `GET /api/contacts` → 列出我的聯絡人（按 last_used_at DESC）
+- `POST /api/share/dashboard-pdf`（multipart）
+  - `pdf`: PDF 檔案
+  - `emails`: JSON list `["a@x.com", "b@y.com"]`
+  - server 把 PDF 當附檔寄給每個 email（BCC 隱藏其他收件人）
+  - 寄完後新 email 自動入 `email_contacts`、舊 email 更新 last_used_at
+
+### UI
+- Dashboard 標頭加「📧 分享」按鈕（在「⚡ 一鍵分析」旁）
+- 按下→ Modal：
+  - 已記憶聯絡人：chip 列表（點擊加入收件人）
+  - 收件人輸入框：可手打新 email，逗號分隔多人
+  - 已選收件人：以 chip 顯示（可移除）
+  - 「確認寄送」→ 顯示「產生 PDF 中…」→「寄送中…」→「✓ 已寄出」
+
+### 信件內容
+- Subject: `【{你的名字}】{YYYY/MM/DD} 投資建議書`
+- Body（純文字）：
+  ```
+  您好，
+  這是 {你的名字} 的本日投資建議書 PDF，請見附件。
+  本報表為自動化系統產出，僅供參考，不構成投資建議。
+  ```
+- Attachment: `投資建議書_{YYYYMMDD}.pdf`
+
+### 邊界情況
+- PDF 太大（>10MB）：先 client-side 限制每次最多 20 支股票（dashboard 本來就 1-15 支左右，極端情況才會超）
+- SMTP 失敗：toast 顯示失敗的收件人 email
+- 朋友未回信：通訊錄保留無妨，使用者自己手動移除（v1 不做「移除聯絡人」UI，下版加）
+
+---
+
+## 十四、待確認事項
 
 - [x] GitHub Repo 網址：`https://github.com/Jason690926/investment-system`（私人）
 - [ ] 財經新聞來源（計畫用 Google News RSS，待確認）

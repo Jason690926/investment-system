@@ -425,6 +425,139 @@ document.getElementById('add-modal').addEventListener('click', e => {
   if (e.target === e.currentTarget) closeAddModal();
 });
 
+/* ── 分享 PDF Modal ─────────────────────────────────────── */
+let shareRecipients = new Set();
+
+async function openShareModal() {
+  shareRecipients = new Set();
+  document.getElementById('f-share-email').value = '';
+  document.getElementById('share-status').style.display = 'none';
+  renderRecipients();
+  document.getElementById('share-modal').classList.add('open');
+  // 載入聯絡人
+  const chipBox = document.getElementById('contact-chips');
+  try {
+    const contacts = await api('/api/contacts');
+    if (!contacts.length) {
+      chipBox.innerHTML = '<span class="muted-text" style="font-size:13px;">尚無記憶；首次寄送後自動記住</span>';
+    } else {
+      chipBox.innerHTML = contacts.map(c =>
+        `<span class="contact-chip" data-email="${c.email}">${c.email}</span>`
+      ).join('');
+    }
+  } catch (e) {
+    chipBox.innerHTML = `<span class="muted-text" style="font-size:13px;">載入失敗：${e.message}</span>`;
+  }
+}
+
+function closeShareModal() {
+  document.getElementById('share-modal').classList.remove('open');
+}
+
+function renderRecipients() {
+  const box = document.getElementById('selected-recipients');
+  if (!shareRecipients.size) {
+    box.innerHTML = '<span class="muted-text" style="font-size:13px;">尚未加入收件人</span>';
+    return;
+  }
+  box.innerHTML = [...shareRecipients].map(em =>
+    `<span class="recipient-chip">${em} <span class="rm" data-email="${em}">×</span></span>`
+  ).join('');
+}
+
+document.getElementById('contact-chips').addEventListener('click', e => {
+  const chip = e.target.closest('.contact-chip');
+  if (!chip) return;
+  shareRecipients.add(chip.dataset.email);
+  renderRecipients();
+});
+
+document.getElementById('selected-recipients').addEventListener('click', e => {
+  const rm = e.target.closest('.rm');
+  if (!rm) return;
+  shareRecipients.delete(rm.dataset.email);
+  renderRecipients();
+});
+
+// Enter / 逗號將輸入框內容拆分加入
+document.getElementById('f-share-email').addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === ',') {
+    e.preventDefault();
+    flushEmailInput();
+  }
+});
+
+function flushEmailInput() {
+  const inp = document.getElementById('f-share-email');
+  const parts = inp.value.split(/[,\s]+/).map(s => s.trim()).filter(Boolean);
+  for (const p of parts) {
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(p)) {
+      shareRecipients.add(p);
+    }
+  }
+  inp.value = '';
+  renderRecipients();
+}
+
+document.getElementById('share-modal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeShareModal();
+});
+
+async function submitShare() {
+  flushEmailInput();
+  if (!shareRecipients.size) { toast('請加入至少 1 個收件人', 'error'); return; }
+  const btn = document.getElementById('btn-share-send');
+  const status = document.getElementById('share-status');
+  btn.disabled = true;
+  status.style.display = 'block';
+  try {
+    // 1. 抓 print-report HTML 渲染成 PDF
+    status.textContent = '⏳ 取得報表內容…';
+    const html = await fetch('/print-report', { credentials: 'same-origin' }).then(r => r.text());
+    // 用隱藏 iframe 載入 print-report 完整 DOM，然後截整頁渲染 PDF
+    const iframe = document.createElement('iframe');
+    iframe.style.cssText = 'position:fixed;left:-9999px;top:0;width:1024px;height:1400px;border:0;';
+    document.body.appendChild(iframe);
+    iframe.srcdoc = html;
+    await new Promise(res => iframe.addEventListener('load', res, { once: true }));
+    // 等 print-report 自己的 fetch /api/* 完成（給 2 秒緩衝）
+    await new Promise(r => setTimeout(r, 2000));
+
+    status.textContent = '⏳ 產生 PDF（約 5-10 秒）…';
+    const target = iframe.contentDocument.body;
+    const pdfBlob = await html2pdf().set({
+      margin: 8,
+      filename: '投資建議書.pdf',
+      image: { type: 'jpeg', quality: 0.92 },
+      html2canvas: { scale: 1.5, useCORS: true, backgroundColor: '#0f1115' },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
+    }).from(target).output('blob');
+    document.body.removeChild(iframe);
+
+    // 2. 上傳 + 寄出
+    status.textContent = '⏳ 寄送中…';
+    const fd = new FormData();
+    fd.append('pdf', pdfBlob, '投資建議書.pdf');
+    fd.append('emails', JSON.stringify([...shareRecipients]));
+    const res = await fetch('/api/share/dashboard-pdf', {
+      method: 'POST', body: fd, credentials: 'same-origin',
+    }).then(async r => {
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+      return j;
+    });
+    status.textContent = `✓ 已寄出給 ${res.sent_to.length} 位`;
+    toast(`已寄出給 ${res.sent_to.length} 位`);
+    setTimeout(closeShareModal, 1500);
+  } catch (e) {
+    status.textContent = `❌ ${e.message}`;
+    toast(e.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 /* ── 測試用：清除今日快取 ─────────────────────────────── */
 async function clearTodayCache() {
   if (!confirm('確定清除今日所有分析快取？（僅測試用）')) return;
