@@ -350,4 +350,22 @@ document.getElementById('add-modal').addEventListener('click', e => {
   if (e.target === e.currentTarget) closeAddModal();
 });
 
+/* ── 測試用：清除今日快取 ─────────────────────────────── */
+async function clearTodayCache() {
+  if (!confirm('確定清除今日所有分析快取？（僅測試用）')) return;
+  const btn = document.getElementById('btn-clear-cache');
+  btn.disabled = true;
+  btn.textContent = '清除中…';
+  try {
+    const res = await api('/api/admin/clear-today-cache', { method: 'POST' });
+    toast(`已清除 ${res.deleted} 筆今日快取（${res.date}）`);
+    loadStocks();
+  } catch (e) {
+    toast(e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🗑 清快取';
+  }
+}
+
 loadStocks();

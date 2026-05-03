@@ -484,6 +484,22 @@ def api_add_trade():
         db.close()
 
 
+@app.route('/api/admin/clear-today-cache', methods=['POST'])
+@login_required
+def api_clear_today_cache():
+    """⚠️ 測試用：清除今日所有 StockAnalysis 快取"""
+    from datetime import date as dt_date
+    from modules.models import StockAnalysis
+    db = SessionLocal()
+    try:
+        today = dt_date.today()
+        deleted = db.query(StockAnalysis).filter(StockAnalysis.analysis_date == today).delete()
+        db.commit()
+        return jsonify({'deleted': deleted, 'date': str(today)})
+    finally:
+        db.close()
+
+
 @app.route('/api/stocks/remove', methods=['POST'])
 @login_required
 def api_remove_stock():
