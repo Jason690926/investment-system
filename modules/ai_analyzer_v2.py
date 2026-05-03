@@ -70,12 +70,18 @@ def _clean_html_output(raw: str) -> str:
     4. 剝除所有 inline style 屬性，讓 CSS 統一控制深色主題
     """
     # ── 步驟1：剝除會污染頁面的 HTML document 結構 ──────────
-    # <style> 最危險：注入後直接改變全頁背景/字色
-    raw = re.sub(r'<style[^>]*>.*?</style>', '', raw, flags=re.IGNORECASE | re.DOTALL)
-    # <!DOCTYPE>, <html>, <head>, <body> 標籤
+    # <style>/<head> 最危險：注入後直接改變全頁背景/字色，且「未閉合」會吃掉後續內容
+    # 先處理完整對：
+    raw = re.sub(r'<style\b[^>]*>.*?</style>', '', raw, flags=re.IGNORECASE | re.DOTALL)
+    raw = re.sub(r'<head\b[^>]*>.*?</head>',   '', raw, flags=re.IGNORECASE | re.DOTALL)
+    # 再砍「殘破未閉合」的：從 tag 開始一路到字串尾（AI 偶爾把 max_tokens 全花在 CSS 上會發生）
+    raw = re.sub(r'<style\b[^>]*>.*$', '', raw, flags=re.IGNORECASE | re.DOTALL)
+    raw = re.sub(r'<head\b[^>]*>.*$',  '', raw, flags=re.IGNORECASE | re.DOTALL)
+    # <!DOCTYPE>, <html>, <body>, <script> 標籤
     raw = re.sub(r'<!DOCTYPE[^>]*>', '', raw, flags=re.IGNORECASE)
-    raw = re.sub(r'<head\b[^>]*>.*?</head>', '', raw, flags=re.IGNORECASE | re.DOTALL)
     raw = re.sub(r'</?(?:html|body)\b[^>]*>', '', raw, flags=re.IGNORECASE)
+    raw = re.sub(r'<script\b[^>]*>.*?</script>', '', raw, flags=re.IGNORECASE | re.DOTALL)
+    raw = re.sub(r'<script\b[^>]*>.*$', '', raw, flags=re.IGNORECASE | re.DOTALL)
 
     # ── 步驟2：剝除 markdown 代碼塊圍欄（任意位置） ─────────
     # 整行 ```html / ```xml / ``` 都當分隔符移除（保留中間內容）
@@ -734,7 +740,11 @@ def get_industry_indicator_stocks(news: list, global_summary: str) -> str:
 
 ⚠️ 這些股票僅為產業代表，不代表推薦買進，請自行評估。
 
-【嚴格輸出規定】直接輸出純 HTML 內容，禁止用 ```html ... ``` 之類 markdown 代碼塊包裝，禁止在開頭加 # 標題。"""
+【嚴格輸出規定】
+- 直接輸出純 HTML 片段內容，不要包在 ```html ... ``` markdown 代碼塊
+- 禁止輸出 <head>、<style>、<script>、<title>、<!DOCTYPE>、<html>、<body> 等 document 結構標籤（網站已自帶樣式）
+- 禁止在開頭加 # / ## / ### markdown 標題
+- 只輸出實際內容區塊（<div>、<p>、<ul>、<strong>、<span class="..."> 等）"""
 
     return _clean_html_output(_generate(prompt, max_tokens=800))
 
@@ -789,6 +799,10 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
 
 重要提醒：以上為模擬分析，不構成實際投資建議。
 
-【嚴格輸出規定】直接輸出純 HTML 內容，禁止用 ```html ... ``` 之類 markdown 代碼塊包裝，禁止在開頭加 # 標題。"""
+【嚴格輸出規定】
+- 直接輸出純 HTML 片段內容，不要包在 ```html ... ``` markdown 代碼塊
+- 禁止輸出 <head>、<style>、<script>、<title>、<!DOCTYPE>、<html>、<body> 等 document 結構標籤（網站已自帶樣式）
+- 禁止在開頭加 # 標題（用 ### 或 <h3> 即可）
+- 只輸出實際分析內容（標題與段落，可用 <span class="support-level"> / <span class="resistance-level"> 等網站既有 class）"""
 
     return _clean_html_output(_generate(prompt, max_tokens=1200))
