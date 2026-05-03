@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}產業週報 — 股海導航{% endblock %}
+
+{% block content %}
+<div style="margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+  <a href="/dashboard" class="btn btn-ghost btn-sm">← 返回列表</a>
+  {% if current_user.role == 'admin' %}
+  <button class="btn btn-ghost btn-sm" id="btn-gen" onclick="generateReport()"
+    style="color:var(--accent);border-color:var(--accent);">
+    ⚡ 手動產生週報
+  </button>
+  {% endif %}
+</div>
+
+{% if report %}
+<!-- Header -->
+<div class="stock-detail-header" style="margin-bottom:24px;">
+  <div>
+    <div class="detail-name" style="font-size:22px;">📊 產業週報</div>
+    <div class="detail-symbol">
+      {{ report.week_start.strftime('%Y/%m/%d') }} ~ {{ report.week_end.strftime('%Y/%m/%d') }}
+    </div>
+  </div>
+  <div style="text-align:right;opacity:.6;font-size:13px;line-height:1.6;">
+    產生時間<br>
+    {{ report.generated_at.strftime('%Y/%m/%d %H:%M') }} UTC
+  </div>
+</div>
+
+<!-- 大盤週報 -->
+<div class="analysis-section" style="margin-bottom:32px;">
+  <div class="section-header" style="margin-bottom:16px;">
+    <div class="section-title" style="font-size:16px;">🗾 大盤週報</div>
+  </div>
+  <div id="market-content" class="analysis-content">
+    {{ report.html_market | safe }}
+  </div>
+</div>
+
+<!-- 產業輪動與指標股 -->
+<div class="analysis-section">
+  <div class="section-header" style="margin-bottom:16px;">
+    <div class="section-title" style="font-size:16px;">🏭 產業輪動與指標股</div>
+  </div>
+  <div id="industry-content" class="analysis-content">
+    {{ report.html_industry | safe }}
+  </div>
+</div>
+
+{% else %}
+<!-- 尚無週報 -->
+<div style="text-align:center;padding:80px 20px;opacity:.5;">
+  <div style="font-size:48px;margin-bottom:16px;">📭</div>
+  <div style="font-size:18px;margin-bottom:8px;">本週尚無週報</div>
+  <div style="font-size:13px;">每週六 09:00 自動產生</div>
+  {% if current_user.role == 'admin' %}
+  <button class="btn btn-primary" style="margin-top:24px;" onclick="generateReport()">
+    ⚡ 立即產生
+  </button>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function generateReport() {
+  const btn = document.getElementById('btn-gen');
+  if (btn) { btn.disabled = true; btn.textContent = '產生中…'; }
+  try {
+    const res = await fetch('/api/weekly-report/generate', { method: 'POST' });
+    const data = await res.json();
+    if (res.ok) {
+      toast('週報正在背景產生，約 1-2 分鐘後重整頁面');
+      setTimeout(() => location.reload(), 90000);
+    } else {
+      toast(data.error || '產生失敗', 'error');
+    }
+  } catch (e) {
+    toast('請求失敗：' + e.message, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '⚡ 手動產生週報'; }
+  }
+}
+</script>
+{% endblock %}

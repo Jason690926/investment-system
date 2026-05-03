@@ -107,3 +107,19 @@ class StockAnalysis(Base):
         UniqueConstraint('symbol', 'analysis_date', 'analysis_type',
                          name='uq_stock_analysis'),
     )
+
+
+class WeeklyReport(Base):
+    """產業週報，每週一份，跨用戶共用"""
+    __tablename__ = 'weekly_reports'
+
+    id            = Column(Integer, primary_key=True)
+    week_start    = Column(Date, nullable=False)
+    week_end      = Column(Date, nullable=False)
+    html_market   = Column(Text)   # 大盤週報 HTML
+    html_industry = Column(Text)   # 產業指標股 HTML
+    generated_at  = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint('week_start', name='uq_weekly_report'),
+    )

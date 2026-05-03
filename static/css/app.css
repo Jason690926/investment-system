@@ -883,4 +883,5 @@ a:hover { text-decoration: underline; }
   .info-row { gap: 14px; }
   #chart-container { height: 300px; }
   .risk-summary { gap: 10px; }
+  .hide-mobile { display: none !important; }
 }

@@ -512,6 +512,59 @@ def api_remove_stock():
         db.close()
 
 
+@app.route('/export/pdf')
+@login_required
+def export_pdf():
+    from modules.pdf_generator import generate_analysis_pdf
+    from flask import Response
+    from datetime import datetime, timezone, timedelta
+    db = SessionLocal()
+    try:
+        pdf_bytes = generate_analysis_pdf(db, current_user)
+        if not pdf_bytes:
+            return '尚無持股資料', 404
+        now_tw = datetime.now(timezone(timedelta(hours=8)))
+        filename = f"stock_report_{now_tw.strftime('%Y%m%d')}.pdf"
+        return Response(
+            pdf_bytes,
+            mimetype='application/pdf',
+            headers={'Content-Disposition': f'attachment; filename="{filename}"'}
+        )
+    finally:
+        db.close()
+
+
+@app.route('/weekly-report')
+@login_required
+def weekly_report():
+    from modules.models import WeeklyReport
+    db = SessionLocal()
+    try:
+        report = db.query(WeeklyReport).order_by(WeeklyReport.week_start.desc()).first()
+        return render_template('weekly_report.html', report=report)
+    finally:
+        db.close()
+
+
+@app.route('/api/weekly-report/generate', methods=['POST'])
+@login_required
+def api_generate_weekly_report():
+    if current_user.role != 'admin':
+        return jsonify({'error': '無權限'}), 403
+
+    import threading
+    from run_weekly_report import main as weekly_main
+
+    def run():
+        try:
+            weekly_main()
+        except Exception as e:
+            print(f"[api] 手動週報失敗: {e}")
+
+    threading.Thread(target=run, daemon=True).start()
+    return jsonify({'ok': True})
+
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)

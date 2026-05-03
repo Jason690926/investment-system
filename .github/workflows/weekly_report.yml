@@ -1,0 +1,35 @@
+name: Weekly Investment Report
+
+on:
+  schedule:
+    - cron: '0 1 * * 6'  # UTC 01:00 週六 = 台灣 09:00 週六
+  workflow_dispatch:       # 支援手動觸發
+
+jobs:
+  run-weekly:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run weekly report
+        run: python run_weekly_report.py
+        env:
+          SUPABASE_DB_HOST:     ${{ secrets.SUPABASE_DB_HOST }}
+          SUPABASE_DB_USER:     ${{ secrets.SUPABASE_DB_USER }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_DB_NAME:     ${{ secrets.SUPABASE_DB_NAME }}
+          SUPABASE_DB_PORT:     ${{ secrets.SUPABASE_DB_PORT }}
+          CLAUDE_API_KEY:       ${{ secrets.CLAUDE_API_KEY }}
+          EMAIL_SENDER:         ${{ secrets.EMAIL_SENDER }}
+          EMAIL_PASSWORD:       ${{ secrets.EMAIL_PASSWORD }}
+          APP_URL:              ${{ secrets.APP_URL }}

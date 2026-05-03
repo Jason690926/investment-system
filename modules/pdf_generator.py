@@ -1,7 +1,196 @@
 import os
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import config
 import markdown as md
+
+TW = timezone(timedelta(hours=8))
+
+# ── CSS for PDF export (light theme, print-friendly) ──────────────────────────
+_PDF_CSS = """
+* { box-sizing: border-box; }
+body {
+  font-family: "Microsoft JhengHei", "PingFang TC", "Heiti TC", "蘋方-繁", Arial, sans-serif;
+  font-size: 13px; color: #1a1a2e; background: #fff;
+  margin: 0; padding: 24px 28px; line-height: 1.7;
+}
+.report-header {
+  background: linear-gradient(135deg, #1a237e 0%, #283593 100%);
+  color: #fff; padding: 20px 24px; border-radius: 8px; margin-bottom: 24px;
+}
+.report-header h1 { margin: 0 0 4px; font-size: 20px; }
+.report-header p  { margin: 0; font-size: 12px; opacity: .8; }
+
+.stock-block {
+  border: 1px solid #dde3f0; border-radius: 8px;
+  margin-bottom: 24px; page-break-inside: avoid; overflow: hidden;
+}
+.stock-block-header {
+  background: #e8eaf6; padding: 12px 16px;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.stock-block-name  { font-size: 16px; font-weight: 700; color: #1a237e; }
+.stock-block-symbol{ font-size: 12px; color: #666; margin-top: 2px; }
+.stock-block-meta  { text-align: right; font-size: 12px; color: #555; line-height: 1.6; }
+
+.stock-meta-row {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  padding: 10px 16px; background: #f8f9ff;
+  border-bottom: 1px solid #dde3f0; font-size: 12px;
+}
+.meta-pill {
+  background: #fff; border: 1px solid #c5cae9;
+  border-radius: 20px; padding: 3px 10px; color: #444;
+}
+.badge-holding { background: #e8f5e9; color: #2e7d32; border-color: #a5d6a7; }
+.badge-watching{ background: #e3f2fd; color: #1565c0; border-color: #90caf9; }
+
+.analysis-wrap { padding: 16px; }
+.no-analysis   { padding: 20px 16px; color: #999; font-style: italic; text-align: center; }
+
+/* AI 分析 HTML 元素 ─ 對應深色主題 class */
+.analysis-wrap h3 {
+  font-size: 13px; font-weight: 700; color: #1a237e;
+  border-left: 4px solid #1a237e; padding: 6px 10px;
+  background: #e8eaf6; border-radius: 0 4px 4px 0;
+  margin: 18px 0 8px;
+}
+.analysis-wrap ul  { padding-left: 18px; margin: 4px 0; }
+.analysis-wrap li  { margin: 4px 0; }
+.analysis-wrap p   { margin: 6px 0; }
+
+.key-point {
+  display: inline-block;
+  color: #7c5e00; font-weight: 700;
+  background: #fff8e1; border-left: 3px solid #f9a825;
+  padding: 2px 8px; border-radius: 0 4px 4px 0; margin: 2px 0;
+}
+.support-level    { color: #1565c0; font-weight: 700; background: #e3f2fd; padding: 1px 6px; border-radius: 4px; }
+.resistance-level { color: #c62828; font-weight: 700; background: #ffebee; padding: 1px 6px; border-radius: 4px; }
+.target-price     { color: #2e7d32; font-weight: 700; background: #e8f5e9; padding: 1px 6px; border-radius: 4px; }
+.stop-loss        { color: #b71c1c; font-weight: 700; background: #ffebee; padding: 1px 6px; border-radius: 4px; }
+.short-term-title { color: #d84315; font-weight: 700; }
+.mid-term-title   { color: #1565c0; font-weight: 700; }
+
+/* K 線 table */
+.analysis-wrap table { width: 100%; border-collapse: collapse; font-size: 12px; margin: 8px 0; }
+.analysis-wrap th    { background: #e8eaf6; padding: 6px 8px; text-align: left; font-weight: 600; color: #333; }
+.analysis-wrap td    { padding: 5px 8px; border-bottom: 1px solid #f0f0f0; }
+.bull { color: #e53935; font-weight: 600; }
+.bear { color: #43a047; font-weight: 600; }
+
+.recommend-section h3 { border-left-color: #e65100; background: #fff3e0; color: #e65100; }
+.recommend-section .stop-loss { display: block; margin: 4px 0; }
+
+.disclaimer {
+  background: #fff3e0; border: 1px solid #ffe0b2;
+  border-radius: 6px; padding: 10px 14px;
+  font-size: 11px; color: #e65100; margin-top: 24px;
+}
+"""
+
+
+def generate_analysis_pdf(db, user) -> bytes:
+    """
+    產生用戶持股分析 PDF。
+    回傳 PDF bytes（可直接用 Flask Response 回傳下載）。
+    """
+    from modules.models import Stock, StockAnalysis
+    from sqlalchemy import func
+
+    now_tw = datetime.now(TW)
+    date_str = now_tw.strftime('%Y/%m/%d %H:%M')
+
+    stocks = db.query(Stock).filter_by(user_id=user.id).order_by(Stock.created_at).all()
+    if not stocks:
+        return None
+
+    # 一次撈所有最新分析
+    symbols = [s.symbol for s in stocks]
+    subq = (
+        db.query(StockAnalysis.symbol,
+                 func.max(StockAnalysis.analysis_date).label('max_date'))
+        .filter(StockAnalysis.symbol.in_(symbols),
+                StockAnalysis.analysis_type == 'daily',
+                StockAnalysis.html_content.isnot(None))
+        .group_by(StockAnalysis.symbol)
+        .subquery()
+    )
+    rows = (
+        db.query(StockAnalysis)
+        .join(subq, (StockAnalysis.symbol == subq.c.symbol) &
+                    (StockAnalysis.analysis_date == subq.c.max_date))
+        .all()
+    )
+    analyses = {r.symbol: r for r in rows}
+
+    stocks_html = ''
+    for s in stocks:
+        a = analyses.get(s.symbol)
+        status_label = '已持有' if s.status == 'holding' else '觀察中'
+        status_cls   = 'badge-holding' if s.status == 'holding' else 'badge-watching'
+
+        meta_pills = [f'<span class="meta-pill {status_cls}">{status_label}</span>']
+        if s.status == 'holding' and s.trades:
+            meta_pills.append(f'<span class="meta-pill">均成本 {float(s.avg_cost):.2f} 元</span>')
+            meta_pills.append(f'<span class="meta-pill">持有 {float(s.total_zhang):.1f} 張</span>')
+        if a:
+            meta_pills.append(f'<span class="meta-pill">風險 {a.risk_pct}%</span>')
+            if a.wyckoff_phase:
+                meta_pills.append(f'<span class="meta-pill">威科夫：{a.wyckoff_phase}</span>')
+            if a.support_price:
+                meta_pills.append(f'<span class="meta-pill support-level">撐 {float(a.support_price):.1f}</span>')
+            if a.resistance_price:
+                meta_pills.append(f'<span class="meta-pill resistance-level">壓 {float(a.resistance_price):.1f}</span>')
+            if a.target_price:
+                meta_pills.append(f'<span class="meta-pill target-price">目標 {float(a.target_price):.1f}</span>')
+
+        analysis_html = (
+            f'<div class="analysis-wrap">{a.html_content}</div>'
+            if a and a.html_content
+            else '<div class="no-analysis">尚無分析資料，請先執行一鍵分析</div>'
+        )
+        analysis_date_note = ''
+        if a:
+            analysis_date_note = f'分析日期：{a.analysis_date.strftime("%Y/%m/%d")}'
+
+        stocks_html += f"""
+<div class="stock-block">
+  <div class="stock-block-header">
+    <div>
+      <div class="stock-block-name">{s.name}</div>
+      <div class="stock-block-symbol">{s.symbol}</div>
+    </div>
+    <div class="stock-block-meta">{analysis_date_note}</div>
+  </div>
+  <div class="stock-meta-row">{''.join(meta_pills)}</div>
+  {analysis_html}
+</div>"""
+
+    holding_count  = sum(1 for s in stocks if s.status == 'holding')
+    watching_count = len(stocks) - holding_count
+
+    full_html = f"""<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <style>{_PDF_CSS}</style>
+</head>
+<body>
+<div class="report-header">
+  <h1>📊 股海導航 — 持股分析報告</h1>
+  <p>{user.name} ｜ 產生時間：{date_str}（台灣時間）｜ 已持有 {holding_count} 支 · 觀察中 {watching_count} 支</p>
+</div>
+
+{stocks_html}
+
+<div class="disclaimer">
+  ⚠️ 免責聲明：本報表由 AI 自動分析產生，所有分析與建議僅供學習參考，不構成實際投資建議。投資有風險，請自行評估後謹慎決策。
+</div>
+</body>
+</html>"""
+
+    from weasyprint import HTML
+    return HTML(string=full_html, base_url=None).write_pdf()
 
 def _md(text):
     if not text:
