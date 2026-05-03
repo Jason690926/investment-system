@@ -23,6 +23,16 @@
 - 財經新聞來源（計畫用 Google News RSS）
 - 週報固定跑哪天（建議週六上午）
 
+## 費用速查
+
+| 情境 | 月費 |
+|------|------|
+| 個人使用（1人 × 15支）| 約 US$12（NT$384）|
+| 對外收費建議 | NT$300/人/月 |
+| 打平門檻 | 5人（NT$1,500 收入 vs NT$1,344 成本）|
+
+詳細估算見 `plan.md` 第零節。
+
 ## 專案基本資訊
 - GitHub：`https://github.com/Jason690926/investment-system`（私人）
 - 部署：Render `https://investment-system-lxq5.onrender.com`
