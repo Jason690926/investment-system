@@ -730,16 +730,60 @@ def api_list_contacts():
         db.close()
 
 
+def _smtp_send_ipv4(sender, password, recipients, msg_str):
+    """強制走 IPv4 連 Gmail SMTP（雲端容器常見 IPv6 outbound 障礙的解法）。
+    先試 587 STARTTLS，失敗再 fallback 到 465 SSL。"""
+    import socket as _sk
+    import smtplib
+
+    def _ipv4_socket(host, port, timeout):
+        addrs = _sk.getaddrinfo(host, port, _sk.AF_INET, _sk.SOCK_STREAM)
+        if not addrs:
+            raise OSError(f'無 IPv4 位址 for {host}')
+        s = _sk.socket(_sk.AF_INET, _sk.SOCK_STREAM)
+        s.settimeout(timeout)
+        s.connect(addrs[0][4])
+        return s
+
+    class _IPv4SMTP(smtplib.SMTP):
+        def _get_socket(self, host, port, timeout):
+            return _ipv4_socket(host, port, timeout)
+
+    class _IPv4SMTP_SSL(smtplib.SMTP_SSL):
+        def _get_socket(self, host, port, timeout):
+            sock = _ipv4_socket(host, port, timeout)
+            return self.context.wrap_socket(sock, server_hostname=host)
+
+    last_err = None
+    for attempt in (('STARTTLS', 587), ('SSL', 465)):
+        mode, port = attempt
+        try:
+            if mode == 'STARTTLS':
+                with _IPv4SMTP('smtp.gmail.com', port, timeout=20) as server:
+                    server.starttls()
+                    server.login(sender, password)
+                    server.sendmail(sender, recipients, msg_str)
+            else:
+                with _IPv4SMTP_SSL('smtp.gmail.com', port, timeout=20) as server:
+                    server.login(sender, password)
+                    server.sendmail(sender, recipients, msg_str)
+            return mode  # 成功
+        except Exception as e:
+            last_err = f'{mode}/{port}: {e}'
+            print(f"[smtp] {last_err}")
+    raise RuntimeError(last_err or '未知 SMTP 錯誤')
+
+
 @app.route('/api/share/dashboard-pdf', methods=['POST'])
 @login_required
 def api_share_dashboard_pdf():
-    """multipart：pdf 檔 + emails JSON list；用 SMTP 寄出附檔，BCC 隱藏多收件人"""
+    """multipart：pdf 檔 + emails JSON list；強制 IPv4 SMTP，BCC 隱藏多收件人"""
     import json as _json
-    import smtplib
     from datetime import datetime as _dt, date as _date
     from email.mime.text import MIMEText
     from email.mime.multipart import MIMEMultipart
     from email.mime.application import MIMEApplication
+    from email.utils import formataddr
     from modules.models import EmailContact
 
     pdf_file = request.files.get('pdf')
@@ -764,9 +808,9 @@ def api_share_dashboard_pdf():
     today = _date.today().strftime('%Y/%m/%d')
     fname_date = _date.today().strftime('%Y%m%d')
     msg = MIMEMultipart()
-    msg['From'] = sender
-    msg['To'] = sender              # 主要收件人放自己
-    msg['Bcc'] = ', '.join(emails)  # 朋友以 BCC 隱藏彼此
+    msg['From'] = formataddr((current_user.name, sender))
+    msg['To'] = sender              # 主要收件人放自己（自留一份）
+    # 不在 MIME header 放 Bcc（標準作法，避免外洩；改靠 sendmail 的 to_addrs）
     msg['Subject'] = f'【{current_user.name}】{today} 投資建議書'
     body = (
         f'您好，\n\n'
@@ -776,14 +820,12 @@ def api_share_dashboard_pdf():
     msg.attach(MIMEText(body, 'plain', 'utf-8'))
     pdf_part = MIMEApplication(pdf_bytes, _subtype='pdf')
     pdf_part.add_header('Content-Disposition', 'attachment',
-                        filename=f'投資建議書_{fname_date}.pdf')
+                        filename=('utf-8', '', f'投資建議書_{fname_date}.pdf'))
     msg.attach(pdf_part)
 
     try:
-        with smtplib.SMTP('smtp.gmail.com', 587, timeout=20) as server:
-            server.starttls()
-            server.login(sender, password)
-            server.sendmail(sender, [sender] + emails, msg.as_string())
+        mode = _smtp_send_ipv4(sender, password, [sender] + emails, msg.as_string())
+        print(f"[share] 寄送成功（{mode}），收件人 {len(emails)} 位")
     except Exception as e:
         return jsonify({'ok': False, 'error': f'寄送失敗: {e}'}), 500
 
