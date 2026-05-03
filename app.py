@@ -93,6 +93,33 @@ def api_market_info(symbol):
     return jsonify(info)
 
 
+@app.route('/api/market/search')
+@login_required
+def api_market_search():
+    """依股名（部分子字串）回傳候選清單，最多 10 筆。前端輸入名稱自動帶代號用。
+    排序：完全相符 > 開頭相符 > 包含；同類按代號長度（短的＝普通股優先於權證等）。"""
+    from modules.stock_names import STOCK_NAMES
+    q = (request.args.get('q') or '').strip()
+    if len(q) < 1:
+        return jsonify([])
+    matches = []
+    for code, name in STOCK_NAMES.items():
+        if q == name:
+            rank = 0
+        elif name.startswith(q):
+            rank = 1
+        elif q in name:
+            rank = 2
+        else:
+            continue
+        matches.append((rank, len(code), code, name))
+    matches.sort()  # rank ASC, code length ASC
+    return jsonify([
+        {'symbol': code + '.TW', 'name': name}
+        for _, _, code, name in matches[:10]
+    ])
+
+
 @app.route('/api/market/<symbol>/quote')
 @login_required
 def api_market_quote(symbol):

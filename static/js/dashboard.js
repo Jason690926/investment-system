@@ -322,6 +322,47 @@ document.getElementById('f-symbol').addEventListener('input', function () {
   }, 600);
 });
 
+/* ── Name 反查代號（部分子字串匹配，下拉建議）─────────── */
+let nameTimer = null;
+const nameInput = document.getElementById('f-name');
+const suggestBox = document.getElementById('name-suggest');
+
+nameInput.addEventListener('input', function () {
+  clearTimeout(nameTimer);
+  const q = this.value.trim();
+  if (!q) { suggestBox.style.display = 'none'; suggestBox.innerHTML = ''; return; }
+  nameTimer = setTimeout(async () => {
+    try {
+      const list = await api(`/api/market/search?q=${encodeURIComponent(q)}`);
+      if (!list.length) { suggestBox.style.display = 'none'; return; }
+      suggestBox.innerHTML = list.map(item =>
+        `<div class="suggest-item" data-symbol="${item.symbol}" data-name="${item.name}">
+           <span class="suggest-name">${item.name}</span>
+           <span class="suggest-symbol">${item.symbol.replace('.TW','')}</span>
+         </div>`).join('');
+      suggestBox.style.display = 'block';
+    } catch {
+      suggestBox.style.display = 'none';
+    }
+  }, 250);
+});
+
+suggestBox.addEventListener('click', function (e) {
+  const item = e.target.closest('.suggest-item');
+  if (!item) return;
+  document.getElementById('f-symbol').value = item.dataset.symbol;
+  document.getElementById('f-name').value = item.dataset.name;
+  suggestBox.style.display = 'none';
+  suggestBox.innerHTML = '';
+});
+
+// 點擊 modal 其他位置關掉建議下拉
+document.addEventListener('click', function (e) {
+  if (e.target !== nameInput && !suggestBox.contains(e.target)) {
+    suggestBox.style.display = 'none';
+  }
+});
+
 /* ── Add Modal ────────────────────────────────────────── */
 function openAddModal() {
   document.getElementById('add-modal').classList.add('open');
