@@ -6,30 +6,41 @@
 - **架構決策**：討論完方案後，先更新 `plan.md`，再開始寫程式
 - `plan.md` 只在需要查架構細節時才讀（節省 token）
 
-## 當前進度（2026-05-03 收工）
+## 當前進度（2026-05-03 第二次收工）
 
 **所在週次：週5（進行中）**
 
-**本次進度：**
-- ✅ 修復 bug：上櫃股名變英文（`.TW`/`.TWO` base 提取順序錯誤；4 處統一修正）
-- ✅ Server 端 `add_stock` 強制以 `STOCK_NAMES` 覆寫 name（不信前端）
-- ✅ `fix_stock_names.py` 一次性修 DB 既有英文名（已對 prod 執行）
-- ✅ 新功能：dashboard 卡片拖拉排序（`display_order` + SortableJS，1 人手動模式 OK）
-- ✅ 新功能：新增股票時輸入「股名」自動帶「代號」（`/api/market/search` + 下拉建議）
-- ✅ 費用估算更新：1 人 × 18 支基準，每月 ~$15（含週報、PDF）
-- ✅ 停用 GitHub Actions 自動排程（cron 註解、保留 workflow_dispatch）→ 改全手動
-- ✅ 新功能：📧 分享 PDF 報表給朋友（`EmailContact` + html2pdf.js + SMTP，含收件人記憶）
+**本次（接續上次後）進度：**
+- ✅ 修 bug：8064（上櫃股）看板偶爾不顯示股價
+  - 加 `QuoteCache` 表（OHLC + prev_close，跨 process 持久化）
+  - 前端 `fetchQuoteWithRetry` 失敗 1.5 秒 retry 一次
+  - 讀取順序：_quote_cache → QuoteCache → MarketDataCache → Yahoo
+  - 對 prod DB 已 migrate
+- ✅ 修 bug：週報只剩標題（AI markdown 包裝）+ 大盤週報空白（AI 寫巨大 CSS 被截斷、未閉合 `<style>` 吃掉內容）
+  - `_clean_html_output` 加強：未閉合 `<style>/<head>/<script>` 也砍
+  - 兩個週報函式 prompt 嚴禁輸出 `<head>/<style>` 等 document tag、嚴禁 markdown 包裝
+  - 已對重跑後的壞記錄做兩次刪除 + 重跑（共燒 ~$0.4）
+- ✅ CLAUDE.md 加入「**修改 AI 功能的紀律**」章節（避免下次再燒 token 試錯）
+  - 規則：修 AI 相關 bug 前必先撈 DB 真實 raw 輸出在本機推演
+- ✅ `/print-report` 加入大盤週報 + 產業指標股區塊（PDF 內容更完整）
+- ⏳ 部分修：分享 PDF 寄送
+  - 第一輪 `[Errno 101] Network is unreachable` → 已修（強制 IPv4 + 587/465 fallback）
+  - 第二輪 `SSL/465: timed out` → **未解**（Render → Gmail SMTP 通信不穩）
 
 **下一步（按優先順序）：**
-1. 實測新功能（拖拉排序、name→code、分享 PDF）
-2. 測試完成後清理遺留（測試中，勿提前修改）
+1. **🔴 修 PDF 寄送 timeout**：選一條走（已討論完不需再評估）
+   - A. 換 [Resend](https://resend.com) HTTP API（推薦；免費 100/日；改 ~30 行）
+   - B. 升級 Render Starter ($7/月；不保證能解）
+   - C. 加大 timeout 20s → 45s 試試（最低成本但賭運氣）
+2. 重新跑一次週報驗證 commit `c95d0dd` 修法（會燒 ~$0.20）
+3. 實測拖拉排序、name→code 下拉建議
+4. 測試完成後清理遺留（測試中，勿提前修改）
    - 還原時間鎖 `< 0` → `< 15`、冷卻 `< 0` → `< 4 * 3600`（`app.py`）
    - 移除「🗑 清快取」按鈕（`dashboard.html`、`dashboard.js`、`app.py`）
-3. （未做）「移除聯絡人」UI — v1 沒做，要刪要進 DB
-4. Render Free → Starter 升級暫緩（1 人手動，Free 足夠）
+5. （未做）「移除聯絡人」UI — v1 沒做，要刪要進 DB
 
 **待確認：**
-- 財經新聞來源（週報用，目前週報已轉手動所以非急迫）
+- 財經新聞來源（週報用；目前週報手動所以非急迫）
 
 ## 費用速查
 
