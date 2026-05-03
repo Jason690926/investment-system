@@ -6,7 +6,7 @@
   <div class="section-title">我的持股</div>
   <div style="display:flex;gap:8px;align-items:center;">
     <a href="/weekly-report" class="btn btn-ghost">📊 週報</a>
-    <a href="/export/pdf" class="btn btn-ghost hide-mobile">⬇ PDF</a>
+    <button class="btn btn-ghost hide-mobile" onclick="window.open('/print-report','_blank')">⬇ PDF</button>
     <button class="btn btn-ghost" id="btn-analyze-all" onclick="analyzeAll()">⚡ 一鍵分析</button>
     <button class="btn btn-ghost" id="btn-clear-cache" onclick="clearTodayCache()" style="color:var(--orange);border-color:var(--orange);" title="測試用：清除所有分析快取（含歷史）">🗑 清快取</button>
     <button class="btn btn-primary" onclick="openAddModal()">＋ 新增股票</button>
