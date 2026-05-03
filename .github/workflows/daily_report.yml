@@ -1,9 +1,10 @@
 name: Daily Investment Report
 
 on:
-  schedule:
-    - cron: '30 6 * * 1-5'  # UTC 06:30 = 台灣 14:30，週一到週五
-  workflow_dispatch:         # 支援手動觸發
+  # 自動排程已停用（2026-05-03，1 人手動模式）；要恢復把下方兩行取消註解即可
+  # schedule:
+  #   - cron: '30 6 * * 1-5'  # UTC 06:30 = 台灣 14:30，週一到週五
+  workflow_dispatch:         # 保留：GitHub UI 可一鍵手動觸發
 
 jobs:
   run-report:
