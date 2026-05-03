@@ -1,5 +1,5 @@
 # 投資建議書系統 — 重構計畫
-> 建立日期：2026-04-30｜更新日期：2026-05-02 20:30｜基於兩次訪談決策 + 實作後討論補充
+> 建立日期：2026-04-30｜更新日期：2026-05-03｜基於兩次訪談決策 + 實作後討論補充
 
 ---
 
@@ -341,6 +341,31 @@ jobs:
   - `/quote`：伺服器記憶體快取，當日有效，跨 user 共用
   - `/data`：Supabase DB 快取，當日有效，跨 user 共用，Render 重啟不失效
   - 效果：首次訪問股票詳情頁約 3 秒；同日第 2 位 user 訪問同一股票 → 瞬間回傳
+
+**Plan A + Plan B + Bug 修復（2026-05-03）：**
+- ✅ Plan A：快速結論卡（Quick Summary Card）— 分析報告頂部新增 pill badge 列
+  - 方向判斷（▲偏多 / ▼偏空 / —觀望）、風險等級（低/中/高 + 百分比）、撐/壓/目標價
+  - `buildQuickSummary()` 函式於 `stock.js`，顯示於 risk-summary 與分析內容之間
+  - CSS：`.quick-summary`、`.qs-pill`、`.qs-bull/bear/neutral`、`.qs-risk-low/mid/high`、`.qs-num`
+- ✅ Plan B：AI 分析 prompt 格式鐵律
+  - 嚴禁散文段落，所有分析以 `- ` bullet 輸出；每條 bullet ≤ 20 中文字
+  - 禁用詞：「然而/因此/綜合以上/由此可見/值得注意的是」
+  - 每 `###` 小節 3~5 條 bullet + 結尾 1 條 `<span class="key-point">` 結論（全文上限 4 個）
+  - 第二節（本間宗久 K 線）必須輸出 HTML table（週K 3根 + 日K 5根各一張）
+  - CSS：`#analysis-content table/th/td` 深色主題樣式
+- ✅ Bug：6741（上櫃股票）載入失敗
+  - 根因：系統一律補 `.TW`，但上櫃股 Yahoo Finance 代號為 `.TWO`
+  - 修法：`_resolve_tw_symbol()` — 先試 `.TW`，失敗自動換 `.TWO`；結果 cache 避免重複探測
+  - 套用範圍：`get_full_stock_data()`、`get_stock_quote()`、`get_stock_info()`
+- ✅ 功能：強制重新分析（`?force=1`）
+  - `POST /api/stocks/<id>/analyze?force=1` 跳過今日快取，強制重跑 AI
+  - 個股頁「重新分析」按鈕改傳 `force=1`（`runAnalysis(true)`）
+- ✅ 功能：重新分析費用保護機制
+  - 時間鎖：台灣時間 < 15:00，force 重新分析回傳 429 `CUTOFF|15:00`（盤後資料才有意義）
+  - 冷卻期：上次分析距今 < 4 小時，回傳 429 `COOLDOWN|HH:MM`
+  - 無今日快取（新股票）：不受時間鎖限制，隨時可分析
+  - UI：15:00 前「重新分析」按鈕 disabled 顯示「15:00 後可重新分析」；觸發限制時 toast 提示並恢復現有報告
+  - ⚠️ **測試模式中**：時間鎖 `< 0`、冷卻 `< 0`（測試完需還原 `< 15` 和 `< 4 * 3600`）
 
 **效能與 Bug 修復（2026-05-03）：**
 - ✅ Perf：一鍵分析改為 3 並行 worker pool（10 支：~250s → ~90s）；進度條同時顯示 3 支名稱 + 快取命中數
