@@ -595,7 +595,7 @@ def api_remove_stock():
 @app.route('/print-report')
 @login_required
 def print_report():
-    from modules.models import Stock, StockAnalysis
+    from modules.models import Stock, StockAnalysis, WeeklyReport
     from sqlalchemy import func
     from datetime import datetime, timezone, timedelta
     TW = timezone(timedelta(hours=8))
@@ -605,6 +605,11 @@ def print_report():
         stocks = db.query(Stock).filter_by(user_id=current_user.id).order_by(Stock.created_at).all()
         if not stocks:
             return '尚無持股資料', 404
+
+        # 最新一份週報（跨用戶共用）
+        weekly = db.query(WeeklyReport).order_by(WeeklyReport.week_start.desc()).first()
+        weekly_range = (f"{weekly.week_start.strftime('%Y/%m/%d')} ~ "
+                        f"{weekly.week_end.strftime('%Y/%m/%d')}") if weekly else ''
 
         symbols = [s.symbol for s in stocks]
         subq = (
@@ -673,6 +678,8 @@ def print_report():
             holding_count=holding_count,
             watching_count=watching_count,
             stocks_html=stocks_html,
+            weekly=weekly,
+            weekly_range=weekly_range,
         )
     finally:
         db.close()
