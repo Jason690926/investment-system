@@ -212,6 +212,13 @@ function updateChartData() {
 const _LS_KEY = `analyzing_${STOCK_ID}`;
 let _pollTimer = null;
 
+function _getTaiwanMinutes() {
+  const now = new Date();
+  const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
+  const tw    = new Date(utcMs + 8 * 3600000);
+  return tw.getHours() * 60 + tw.getMinutes();
+}
+
 async function loadCachedAnalysis() {
   try {
     const res = await api(`/api/stocks/${STOCK_ID}/analysis`);
@@ -278,7 +285,11 @@ function showAnalysis(res) {
       const dateLabel = res.is_today
         ? `今日分析 ${res.generated_at || ''}`
         : `<span style="color:var(--orange)">⚠ 分析日期：${res.analysis_date}（非今日，建議重新分析）</span>`;
-      return `<p style="font-size:12px;color:var(--muted);margin-bottom:12px;">${dateLabel} · <button class="btn btn-ghost btn-sm" onclick="runAnalysis()">重新分析</button></p>`;
+      const beforeCutoff = res.is_today && _getTaiwanMinutes() < 15 * 60;
+      const reBtn = beforeCutoff
+        ? `<button class="btn btn-ghost btn-sm" disabled title="盤後資料 15:00 後才更新">15:00 後可重新分析</button>`
+        : `<button class="btn btn-ghost btn-sm" onclick="runAnalysis(true)">重新分析</button>`;
+      return `<p style="font-size:12px;color:var(--muted);margin-bottom:12px;">${dateLabel} · ${reBtn}</p>`;
     })()}`;
   }
 
@@ -344,22 +355,34 @@ async function loadRecommendation() {
   }
 }
 
-async function runAnalysis() {
+async function runAnalysis(force = false) {
   const area = document.getElementById('analysis-area');
   area.innerHTML = '<div class="loading"><div class="spinner"></div> 三宗師分析中，約需 20-40 秒…</div>';
 
-  // 記錄啟動時間，讓回頁後能繼續等待
   localStorage.setItem(_LS_KEY, Date.now().toString());
 
+  const url = force
+    ? `/api/stocks/${STOCK_ID}/analyze?force=1`
+    : `/api/stocks/${STOCK_ID}/analyze`;
+
   try {
-    const res = await api(`/api/stocks/${STOCK_ID}/analyze?force=1`, { method: 'POST' });
+    const res = await api(url, { method: 'POST' });
     localStorage.removeItem(_LS_KEY);
     showAnalysis(res);
   } catch (e) {
     localStorage.removeItem(_LS_KEY);
-    area.innerHTML = `<div class="analysis-trigger">
-      <p style="color:var(--red)">分析失敗：${e.message}</p>
-      <button class="btn btn-ghost" onclick="runAnalysis()">重試</button></div>`;
+    const parts = (e.message || '').split('|');
+    if (parts[0] === 'CUTOFF') {
+      toast(`今日資料 ${parts[1]} 後才更新，屆時可重新分析`, 'error');
+      loadCachedAnalysis();
+    } else if (parts[0] === 'COOLDOWN') {
+      toast(`冷卻中，${parts[1]} 後可再次分析`, 'error');
+      loadCachedAnalysis();
+    } else {
+      area.innerHTML = `<div class="analysis-trigger">
+        <p style="color:var(--red)">分析失敗：${e.message}</p>
+        <button class="btn btn-ghost" onclick="runAnalysis(${force})">重試</button></div>`;
+    }
   }
 }
 
