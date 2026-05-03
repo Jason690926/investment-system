@@ -450,8 +450,8 @@ a:hover { text-decoration: underline; }
   border: 1px solid var(--border);
 }
 .info-item { }
-.info-label { font-size: 11px; color: var(--muted); margin-bottom: 3px; }
-.info-value { font-size: 15px; font-weight: 700; }
+.info-label { font-size: 13px; color: var(--muted); margin-bottom: 5px; }
+.info-value { font-size: 17px; font-weight: 700; }
 
 /* ── Chart ────────────────────────────────────────────── */
 .chart-toolbar {
@@ -715,15 +715,15 @@ a:hover { text-decoration: underline; }
 }
 .risk-box {
   flex: 1;
-  min-width: 130px;
+  min-width: 140px;
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 14px 18px;
+  padding: 18px 20px;
   text-align: center;
 }
-.risk-box .label { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
-.risk-box .value { font-size: 22px; font-weight: 800; }
+.risk-box .label { font-size: 13px; color: var(--muted); margin-bottom: 8px; font-weight: 500; }
+.risk-box .value { font-size: 28px; font-weight: 800; }
 
 /* ── Toast ────────────────────────────────────────────── */
 .toast-container {
