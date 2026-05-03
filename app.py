@@ -268,14 +268,14 @@ def api_analyze_stock(stock_id):
             })
 
         # force=1 且今日已有快取 → 檢查台灣時間（UTC+8）及冷卻期
+        # ⚠️ 測試模式：時間鎖與冷卻暫時停用，測試完請改回正常值
         if existing and existing.html_content and force:
             tw_now = _dt.datetime.utcnow() + _dt.timedelta(hours=8)
-            if tw_now.hour < 15:
+            if tw_now.hour < 0:  # TODO: 測試完改回 15
                 return jsonify({'error': 'CUTOFF|15:00'}), 429
             if existing.generated_at:
                 elapsed = (_dt.datetime.utcnow() - existing.generated_at).total_seconds()
-                if elapsed < 4 * 3600:
-                    # unlock = generated_at(UTC) + 4h冷卻 + 8h台灣時區
+                if elapsed < 0 * 3600:  # TODO: 測試完改回 4
                     unlock_tw = existing.generated_at + _dt.timedelta(hours=12)
                     return jsonify({'error': f'COOLDOWN|{unlock_tw.strftime("%H:%M")}'}), 429
 
