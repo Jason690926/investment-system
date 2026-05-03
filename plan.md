@@ -366,6 +366,16 @@ jobs:
   - 無今日快取（新股票）：不受時間鎖限制，隨時可分析
   - UI：15:00 前「重新分析」按鈕 disabled 顯示「15:00 後可重新分析」；觸發限制時 toast 提示並恢復現有報告
   - ⚠️ **測試模式中**：時間鎖 `< 0`、冷卻 `< 0`（測試完需還原 `< 15` 和 `< 4 * 3600`）
+- ✅ Fix：派發等威科夫階段字體過小
+  - 改用 `.risk-box-phase` CSS class（`flex:0 0 auto`、`font-size:22px`），不與數字 box 競爭寬度
+- ✅ Fix：操作建議顯示原始 Markdown 符號（`**`、`###`、`---`）
+  - 根因：`action_template` 用 Markdown 語法，AI 跟著輸出，CSS 無法渲染
+  - 修法：`action_template` 全改純 HTML（`<h3>`、`<ul><li>`、`<p>`、`<strong>`）
+  - prompt 明確禁止：`** / ### / ---` 等 Markdown，違者輸出無效
+- ✅ 測試工具：Dashboard 新增「🗑 清快取」按鈕（橘色，測試用）
+  - `POST /api/admin/clear-today-cache`：刪除今日所有 `StockAnalysis` 記錄
+  - 按後自動重整看板，再按一鍵分析即可全部重跑
+  - ⚠️ **測試完需移除**：`dashboard.html` 按鈕、`dashboard.js` 函式、`app.py` 端點
 
 **效能與 Bug 修復（2026-05-03）：**
 - ✅ Perf：一鍵分析改為 3 並行 worker pool（10 支：~250s → ~90s）；進度條同時顯示 3 支名稱 + 快取命中數
