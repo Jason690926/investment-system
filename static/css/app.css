@@ -499,7 +499,7 @@ a:hover { text-decoration: underline; }
   line-height: 1.9;
   background: var(--card);
   color: var(--text-dim);
-  padding: 8px 0 16px;
+  padding: 4px 0 24px;
   font-size: 15px;
 }
 
@@ -510,23 +510,44 @@ a:hover { text-decoration: underline; }
   border-color: var(--border) !important;
 }
 
-/* ── 標題 ── */
+/* ── 分節標題（h3）：藍色左邊框區塊，視覺明確分節 ── */
+#analysis-content h3 {
+  color: var(--blue) !important;
+  font-size: 14px !important;
+  font-weight: 800 !important;
+  margin: 32px 0 14px !important;
+  padding: 10px 14px !important;
+  background: rgba(88,166,255,.07) !important;
+  border-left: 3px solid var(--blue) !important;
+  border-radius: 0 6px 6px 0 !important;
+  letter-spacing: .02em !important;
+}
+#analysis-content h3:first-of-type { margin-top: 6px !important; }
+
+/* ── 小標題 h4 ── */
+#analysis-content h4 {
+  color: var(--blue) !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  margin: 18px 0 8px !important;
+  background-color: transparent !important;
+}
+
+/* ── 其他標題 ── */
 #analysis-content h1,
 #analysis-content h2,
-#analysis-content h3,
-#analysis-content h4,
 #analysis-content h5 {
   color: var(--blue) !important;
   margin: 20px 0 10px !important;
-  font-size: 16px !important;
+  font-size: 15px !important;
   background-color: transparent !important;
 }
 
 /* ── 段落/清單 ── */
-#analysis-content p  { margin-bottom: 10px; }
+#analysis-content p  { margin-bottom: 14px; line-height: 1.9; }
 #analysis-content ul,
-#analysis-content ol { padding-left: 20px; margin-bottom: 10px; }
-#analysis-content li { margin-bottom: 6px; }
+#analysis-content ol { padding-left: 22px; margin-bottom: 14px; }
+#analysis-content li { margin-bottom: 10px; line-height: 1.85; }
 
 /* ── 表格 ── */
 #analysis-content table {
@@ -635,20 +656,37 @@ a:hover { text-decoration: underline; }
   color: var(--text-dim) !important;
   border-color: var(--border) !important;
 }
+.recommend-content h3 {
+  color: var(--orange) !important;
+  font-size: 14px !important;
+  font-weight: 800 !important;
+  margin: 32px 0 14px !important;
+  padding: 10px 14px !important;
+  background: rgba(227,179,65,.08) !important;
+  border-left: 3px solid var(--orange) !important;
+  border-radius: 0 6px 6px 0 !important;
+  letter-spacing: .02em !important;
+}
+.recommend-content h3:first-of-type { margin-top: 6px !important; }
+.recommend-content h4 {
+  color: var(--orange) !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  margin: 18px 0 8px !important;
+  background-color: transparent !important;
+}
 .recommend-content h1,
 .recommend-content h2,
-.recommend-content h3,
-.recommend-content h4,
 .recommend-content h5 {
   color: var(--orange) !important;
   margin: 20px 0 10px !important;
-  font-size: 16px !important;
+  font-size: 15px !important;
   background-color: transparent !important;
 }
-.recommend-content p  { margin-bottom: 10px; }
+.recommend-content p  { margin-bottom: 14px; line-height: 1.9; }
 .recommend-content ul,
-.recommend-content ol { padding-left: 20px; margin-bottom: 10px; }
-.recommend-content li { margin-bottom: 6px; }
+.recommend-content ol { padding-left: 22px; margin-bottom: 14px; }
+.recommend-content li { margin-bottom: 10px; line-height: 1.85; }
 .recommend-content .short-term-title { color: var(--blue) !important; }
 .recommend-content .mid-term-title   { color: var(--orange) !important; }
 .recommend-content .target-price     { color: var(--purple) !important; }
