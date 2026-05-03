@@ -724,6 +724,8 @@ a:hover { text-decoration: underline; }
 }
 .risk-box .label { font-size: 13px; color: var(--muted); margin-bottom: 8px; font-weight: 500; }
 .risk-box .value { font-size: 28px; font-weight: 800; }
+.risk-box-phase { flex: 0 0 auto; min-width: 120px; }
+.phase-value { font-size: 22px !important; font-weight: 800; color: var(--blue); letter-spacing: .04em; }
 
 /* ── Quick Summary Card ──────────────────────────────── */
 .quick-summary {

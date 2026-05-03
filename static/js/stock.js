@@ -278,7 +278,7 @@ function showAnalysis(res) {
       ${res.support    ? `<div class="risk-box"><div class="label">關鍵支撐</div><div class="value up">${res.support} 元</div></div>` : ''}
       ${res.resistance ? `<div class="risk-box"><div class="label">關鍵壓力</div><div class="value down">${res.resistance} 元</div></div>` : ''}
       ${res.target_pnf ? `<div class="risk-box"><div class="label">P&F概念目標</div><div class="value" style="color:var(--purple)">${res.target_pnf} 元</div></div>` : ''}
-      ${res.wyckoff_phase ? `<div class="risk-box"><div class="label">威科夫階段</div><div class="value" style="font-size:16px;color:var(--blue)">${res.wyckoff_phase}</div></div>` : ''}
+      ${res.wyckoff_phase ? `<div class="risk-box risk-box-phase"><div class="label">威科夫階段</div><div class="value phase-value">${res.wyckoff_phase}</div></div>` : ''}
     </div>
     ${(() => {
       if (!res.analysis_date) return '';
