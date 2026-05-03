@@ -72,6 +72,30 @@ def _normalize_symbol(symbol: str) -> str:
     return s
 
 
+_two_symbol_cache: dict[str, str] = {}
+
+def _resolve_tw_symbol(symbol: str) -> str:
+    """
+    若 .TW 無法取得日K資料（上櫃股票），自動改用 .TWO。
+    結果會 cache 避免重複探測。
+    """
+    if symbol in _two_symbol_cache:
+        return _two_symbol_cache[symbol]
+    if not symbol.endswith('.TW'):
+        return symbol
+    # 快速探測：只抓 5 天確認是否有效
+    probe = _yahoo_ohlcv(symbol, '1d', '5d')
+    if probe is not None and len(probe) >= 1:
+        _two_symbol_cache[symbol] = symbol
+        return symbol
+    alt = symbol[:-3] + '.TWO'
+    probe2 = _yahoo_ohlcv(alt, '1d', '5d')
+    resolved = alt if (probe2 is not None and len(probe2) >= 1) else symbol
+    _two_symbol_cache[symbol] = resolved
+    print(f"[data_enricher] symbol resolve: {symbol} → {resolved}")
+    return resolved
+
+
 _tw_name_cache: dict[str, str] = {}
 
 def _get_tw_chinese_name(code: str) -> str | None:
@@ -123,7 +147,7 @@ def _get_tw_chinese_name(code: str) -> str | None:
 def get_stock_info(symbol: str) -> dict | None:
     """快速查詢股票名稱與現價（不抓 OHLCV，省時間）"""
     from modules.stock_names import STOCK_NAMES
-    symbol = _normalize_symbol(symbol)
+    symbol = _resolve_tw_symbol(_normalize_symbol(symbol))
     base = symbol.replace('.TW', '').replace('.TWO', '')
     try:
         r = requests.get(
@@ -148,6 +172,7 @@ def get_stock_info(symbol: str) -> dict | None:
 
 def get_stock_quote(symbol: str) -> dict | None:
     """輕量行情：只抓最近 10 日日K，用於看板快速顯示 OHLC + 漲跌幅"""
+    symbol = _resolve_tw_symbol(symbol)
     daily = _yahoo_ohlcv(symbol, '1d', '10d')
     if daily is None or len(daily) < 1:
         return None
@@ -170,6 +195,7 @@ def get_full_stock_data(symbol: str) -> dict | None:
     - weekly:  最近 26 週 OHLCV
     - monthly: 最近 12 月 OHLCV
     """
+    symbol  = _resolve_tw_symbol(symbol)
     daily   = _yahoo_ohlcv(symbol, '1d', '4mo')
     weekly  = _yahoo_ohlcv(symbol, '1wk', '6mo')
     monthly = _yahoo_ohlcv(symbol, '1mo', '2y')

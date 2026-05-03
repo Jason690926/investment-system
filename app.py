@@ -251,11 +251,12 @@ def api_analyze_stock(stock_id):
             return jsonify({'error': '股票不存在'}), 404
 
         today = dt_date.today()
-        # 已有今日快取直接回傳，不重複呼叫 AI
+        force = request.args.get('force', '0') == '1'
+        # 已有今日快取且非強制重分析，直接回傳
         existing = db.query(StockAnalysis).filter_by(
             symbol=stock.symbol, analysis_date=today, analysis_type='daily'
         ).first()
-        if existing and existing.html_content:
+        if existing and existing.html_content and not force:
             return jsonify({
                 'html':          existing.html_content,
                 'risk_pct':      existing.risk_pct,

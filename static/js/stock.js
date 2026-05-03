@@ -352,7 +352,7 @@ async function runAnalysis() {
   localStorage.setItem(_LS_KEY, Date.now().toString());
 
   try {
-    const res = await api(`/api/stocks/${STOCK_ID}/analyze`, { method: 'POST' });
+    const res = await api(`/api/stocks/${STOCK_ID}/analyze?force=1`, { method: 'POST' });
     localStorage.removeItem(_LS_KEY);
     showAnalysis(res);
   } catch (e) {
