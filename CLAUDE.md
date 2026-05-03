@@ -16,7 +16,8 @@
    - 移除「🗑 清快取」按鈕（`dashboard.html`、`dashboard.js`、`app.py`）
 2. ✅ 產業週報（每週六自動跑）— 已完成
 3. ✅ PDF 匯出 — 已完成（Dashboard「⬇ PDF」→ /export/pdf）
-4. Render Free → Starter 升級暫緩（目前 5 人以下，Free 方案足夠）
+4. ✅ Prompt Caching + max_tokens 優化 — 已完成（預估省 40-45% 費用）
+5. Render Free → Starter 升級暫緩（目前 5 人以下，Free 方案足夠）
 
 **待確認：**
 - 財經新聞來源（計畫用 Google News RSS）
