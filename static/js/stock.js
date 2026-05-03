@@ -273,7 +273,13 @@ function showAnalysis(res) {
       ${res.target_pnf ? `<div class="risk-box"><div class="label">P&F概念目標</div><div class="value" style="color:var(--purple)">${res.target_pnf} 元</div></div>` : ''}
       ${res.wyckoff_phase ? `<div class="risk-box"><div class="label">威科夫階段</div><div class="value" style="font-size:16px;color:var(--blue)">${res.wyckoff_phase}</div></div>` : ''}
     </div>
-    ${res.generated_at ? `<p style="font-size:12px;color:var(--muted);margin-bottom:12px;">今日分析 ${res.generated_at} · <button class="btn btn-ghost btn-sm" onclick="runAnalysis()">重新分析</button></p>` : ''}`;
+    ${(() => {
+      if (!res.analysis_date) return '';
+      const dateLabel = res.is_today
+        ? `今日分析 ${res.generated_at || ''}`
+        : `<span style="color:var(--orange)">⚠ 分析日期：${res.analysis_date}（非今日，建議重新分析）</span>`;
+      return `<p style="font-size:12px;color:var(--muted);margin-bottom:12px;">${dateLabel} · <button class="btn btn-ghost btn-sm" onclick="runAnalysis()">重新分析</button></p>`;
+    })()}`;
   }
 
   const recommendTitle = STOCK_STATUS === 'holding' ? '📌 持股操作建議' : '🎯 進場時機建議';

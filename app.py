@@ -183,7 +183,7 @@ def api_market_data(symbol):
 @app.route('/api/stocks/<int:stock_id>/analysis')
 @login_required
 def api_get_analysis(stock_id):
-    """讀取今日市場快取分析（若存在，不含個人建議）"""
+    """讀取市場快取分析：先找今日，找不到 fallback 最新一筆（不限日期）"""
     from datetime import date as dt_date
     from modules.models import Stock, StockAnalysis
     db = SessionLocal()
@@ -191,22 +191,43 @@ def api_get_analysis(stock_id):
         stock = db.query(Stock).filter_by(id=stock_id, user_id=current_user.id).first()
         if not stock:
             return jsonify({'error': '股票不存在'}), 404
+
         today = dt_date.today()
-        cached = db.query(StockAnalysis).filter_by(
+        # ① 今日快取
+        cached  = db.query(StockAnalysis).filter_by(
             symbol=stock.symbol, analysis_date=today, analysis_type='daily'
         ).first()
+        is_today = cached is not None
+
+        # ② fallback：最新一筆（歷史）
+        if not cached or not cached.html_content:
+            cached = (
+                db.query(StockAnalysis)
+                .filter(
+                    StockAnalysis.symbol == stock.symbol,
+                    StockAnalysis.analysis_type == 'daily',
+                    StockAnalysis.html_content.isnot(None),
+                )
+                .order_by(StockAnalysis.analysis_date.desc())
+                .first()
+            )
+            is_today = False
+
         if not cached or not cached.html_content:
             return jsonify({'cached': False})
+
         from modules.ai_analyzer_v2 import _clean_html_output
         return jsonify({
-            'cached':        True,
-            'html':          _clean_html_output(cached.html_content),
-            'risk_pct':      cached.risk_pct,
-            'support':       float(cached.support_price)    if cached.support_price    else None,
-            'resistance':    float(cached.resistance_price) if cached.resistance_price else None,
-            'target_pnf':    float(cached.target_price)     if cached.target_price     else None,
-            'wyckoff_phase': cached.wyckoff_phase,
-            'generated_at':  cached.generated_at.strftime('%H:%M') if cached.generated_at else None,
+            'cached':         True,
+            'is_today':       is_today,
+            'analysis_date':  cached.analysis_date.isoformat(),
+            'html':           _clean_html_output(cached.html_content),
+            'risk_pct':       cached.risk_pct,
+            'support':        float(cached.support_price)    if cached.support_price    else None,
+            'resistance':     float(cached.resistance_price) if cached.resistance_price else None,
+            'target_pnf':     float(cached.target_price)     if cached.target_price     else None,
+            'wyckoff_phase':  cached.wyckoff_phase,
+            'generated_at':   cached.generated_at.strftime('%H:%M') if cached.generated_at else None,
         })
     finally:
         db.close()
