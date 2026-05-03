@@ -4,7 +4,7 @@ from flask_login import login_required, current_user
 from dotenv import load_dotenv
 from modules.auth import init_auth
 from modules.database import SessionLocal
-from modules.stock_service import get_user_stocks, add_stock, add_trade, remove_stock, update_trade, delete_trade
+from modules.stock_service import get_user_stocks, add_stock, add_trade, remove_stock, update_trade, delete_trade, reorder_stocks
 
 from werkzeug.middleware.proxy_fix import ProxyFix
 load_dotenv()
@@ -409,6 +409,22 @@ def api_add_stock():
         return jsonify({'ok': True, 'id': stock.id})
     except ValueError as e:
         return jsonify({'ok': False, 'error': str(e)}), 400
+    finally:
+        db.close()
+
+
+@app.route('/api/stocks/reorder', methods=['PATCH'])
+@login_required
+def api_reorder_stocks():
+    """body: {"order": [stock_id, stock_id, ...]} — 依此順序寫 display_order"""
+    data = request.json or {}
+    ids = data.get('order') or []
+    if not isinstance(ids, list) or not all(isinstance(i, int) for i in ids):
+        return jsonify({'ok': False, 'error': 'order 須為 int 陣列'}), 400
+    db = SessionLocal()
+    try:
+        updated = reorder_stocks(db, current_user.id, ids)
+        return jsonify({'ok': True, 'updated': updated})
     finally:
         db.close()
 

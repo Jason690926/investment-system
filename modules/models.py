@@ -31,6 +31,7 @@ class Stock(Base):
     symbol     = Column(String(32), nullable=False)   # e.g. '2330.TW'
     name       = Column(String(64), nullable=False)   # e.g. '台積電'
     status     = Column(String(16), default='watching')  # 'holding' or 'watching'
+    display_order = Column(Integer, nullable=True)  # 自訂排序；NULL=未設定，撈單以 COALESCE 排在最後
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user   = relationship('User', back_populates='stocks')

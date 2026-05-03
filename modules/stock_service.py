@@ -1,12 +1,18 @@
 from decimal import Decimal
 from datetime import date
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, case
 from modules.models import Stock, Trade, User, StockAnalysis
 
 
 def get_user_stocks(db: Session, user_id: int) -> list:
-    stocks = db.query(Stock).filter_by(user_id=user_id).order_by(Stock.created_at).all()
+    # 自訂 display_order 在前（小到大），未設定者（NULL）排在最後並按 created_at
+    stocks = (db.query(Stock)
+              .filter_by(user_id=user_id)
+              .order_by(case((Stock.display_order.is_(None), 1), else_=0),
+                        Stock.display_order,
+                        Stock.created_at)
+              .all())
 
     # 一次查出所有 symbol 最新一筆分析（不限日期，顯示最近快取狀態）
     symbols = [s.symbol for s in stocks]
@@ -119,6 +125,21 @@ def add_trade(db: Session, user_id: int, stock_id: int,
     db.commit()
     db.refresh(trade)
     return trade
+
+
+def reorder_stocks(db: Session, user_id: int, ordered_ids: list[int]) -> int:
+    """依傳入 id 順序刷新 display_order = 0, 1, 2, ...
+    僅更新該 user 擁有的 stock；非自家 id 直接忽略。回傳實際更新筆數。"""
+    own_ids = {sid for (sid,) in db.query(Stock.id).filter_by(user_id=user_id).all()}
+    updated = 0
+    for idx, sid in enumerate(ordered_ids):
+        if sid in own_ids:
+            db.query(Stock).filter_by(id=sid, user_id=user_id).update(
+                {Stock.display_order: idx}, synchronize_session=False
+            )
+            updated += 1
+    db.commit()
+    return updated
 
 
 def remove_stock(db: Session, user_id: int, stock_id: int):

@@ -513,7 +513,50 @@ ORDER BY user_count DESC
 
 ---
 
-## 十二、待確認事項
+## 十二、Dashboard 自訂排序（2026-05-03）
+
+### 需求
+新加入的股票預設追加在最後，用戶想自訂順位（例如把新股拉到第 3 位置）。
+
+### 互動方式：拖拉
+- 卡片直接拖到想要的位置，一次到位（5-15 支特別順手）
+- 桌面：mouse drag
+- 手機：long-press 觸發 drag
+- 引入 SortableJS（CDN，~12KB gzipped）
+
+### 資料模型
+- `stocks` 表新增 `display_order INTEGER`（NULL = 用 created_at 排序）
+- 預設值 NULL；只有用戶手動重排後才寫入
+- 撈單 ORDER BY：`COALESCE(display_order, 999999), created_at`
+  - 沒設過順位的維持原本「按建立時間」行為
+  - 設過順位的排在最前，按 display_order 數字小到大
+
+### API
+- `PATCH /api/stocks/reorder`（body: `{order: [stock_id, stock_id, ...]}`）
+- Server 收完整新順序的 id list，依序寫 display_order = 0, 1, 2, ...
+- 只允許重排自己的股票（user_id 匹配）
+
+### 前端
+- `dashboard.html`：grid 引入 SortableJS init（CDN）
+- 拖拉結束（onEnd）→ 收集 DOM 順序的 stock_id → `PATCH /api/stocks/reorder`
+- 樂觀更新：先動 UI，失敗才 toast 提示（不 reload）
+- chip 過濾（holding/watching）切換時，順序仍按 display_order
+
+### 邊界情況
+- 跨類拖拉：同一 grid 內可任意排，分類過濾不影響底層順序（過濾只影響顯示）
+- 重整：依 display_order 持久化、F5 順序保留
+- 新增股票：display_order 不主動寫入，靠 COALESCE fallback 排在最後
+- 刪除股票：不重整其他人的 display_order（因為 ORDER BY 用的是相對大小，缺 id 無妨）
+
+### 測試重點
+- 桌面拖拉到不同位置 → 重整後順序保留
+- 手機 long-press → 拖到新位置 → 順序保留
+- 過濾 chip 切換不影響相對順序
+- 新加入股票排在最後
+
+---
+
+## 十三、待確認事項
 
 - [x] GitHub Repo 網址：`https://github.com/Jason690926/investment-system`（私人）
 - [ ] 財經新聞來源（計畫用 Google News RSS，待確認）

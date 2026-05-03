@@ -158,6 +158,12 @@ a:hover { text-decoration: underline; }
   transform: translateY(-2px);
   box-shadow: 0 4px 20px rgba(0,0,0,.3);
 }
+/* SortableJS 拖拉中：原位置的虛影；目標位置由 SortableJS 自動插入 */
+.card-drag-ghost {
+  opacity: .35;
+  border-style: dashed;
+  background: var(--card);
+}
 .card-row1 {
   display: flex;
   justify-content: space-between;

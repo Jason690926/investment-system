@@ -37,6 +37,40 @@ function renderGrid() {
   adjustGridLayout(grid, filtered.length);
   grid.innerHTML = filtered.map(buildCard).join('');
   loadCardPrices(filtered);
+  initSortable(grid);
+}
+
+/* ── 拖拉排序（SortableJS）────────────────────────────────
+ * 僅在「全部」chip 啟用：過濾子集做排序語意不清，故只允許整體重排。
+ * 桌面：滑鼠按下移動即拖拉；手機：long-press 250ms 再拖（避免吃掉 tap/scroll）。
+ */
+let sortableInstance = null;
+function initSortable(grid) {
+  if (sortableInstance) { sortableInstance.destroy(); sortableInstance = null; }
+  if (currentFilter !== 'all' || typeof Sortable === 'undefined') return;
+  sortableInstance = new Sortable(grid, {
+    animation: 150,
+    delay: 250,
+    delayOnTouchOnly: true,
+    ghostClass: 'card-drag-ghost',
+    onEnd: async () => {
+      const ids = [...grid.querySelectorAll('[data-stock-id]')]
+        .map(el => parseInt(el.dataset.stockId, 10))
+        .filter(Number.isFinite);
+      if (!ids.length) return;
+      // 樂觀更新本地 allStocks 順序，避免下次過濾切換時錯亂
+      const map = new Map(allStocks.map(s => [s.id, s]));
+      allStocks = ids.map(id => map.get(id)).filter(Boolean);
+      try {
+        await api('/api/stocks/reorder', {
+          method: 'PATCH',
+          body: JSON.stringify({ order: ids }),
+        });
+      } catch (e) {
+        toast('排序儲存失敗：' + e.message, 'error');
+      }
+    },
+  });
 }
 
 function adjustGridLayout(grid, count) {
