@@ -373,8 +373,10 @@ jobs:
   - 修法：`action_template` 全改純 HTML（`<h3>`、`<ul><li>`、`<p>`、`<strong>`）
   - prompt 明確禁止：`** / ### / ---` 等 Markdown，違者輸出無效
 - ✅ 測試工具：Dashboard 新增「🗑 清快取」按鈕（橘色，測試用）
-  - `POST /api/admin/clear-today-cache`：刪除今日所有 `StockAnalysis` 記錄
-  - 按後自動重整看板，再按一鍵分析即可全部重跑
+  - `POST /api/admin/clear-today-cache`：刪除**所有日期**的 `StockAnalysis` 記錄（含歷史）
+  - Bug fix：原本只刪今日 → 有歷史分析的股票因 fallback 仍顯示舊資料，看起來沒清乾淨
+  - 根因：`get_user_stocks()` 用 `func.max(analysis_date)` 不限日期；`api_get_analysis` 也有 fallback，清今日後舊資料自動補上
+  - 按後自動重整看板，再按一鍵分析才是真正從零開始
   - ⚠️ **測試完需移除**：`dashboard.html` 按鈕、`dashboard.js` 函式、`app.py` 端點
 
 **效能與 Bug 修復（2026-05-03）：**
