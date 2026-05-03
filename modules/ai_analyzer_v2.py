@@ -65,8 +65,9 @@ def _clean_html_output(raw: str) -> str:
     """
     清理 AI 回應：
     1. 移除完整 HTML document 結構（<head>/<style>/<body> 等），防止 CSS 注入污染頁面
-    2. 移除頂部結構化標記行（RISK_PCT: ... 等）
-    3. 剝除所有 inline style 屬性，讓 CSS 統一控制深色主題
+    2. 移除 markdown 代碼塊圍欄 ```html ... ```（AI 偶爾會把 HTML 包進去）
+    3. 移除頂部結構化標記行（RISK_PCT: ... 等）
+    4. 剝除所有 inline style 屬性，讓 CSS 統一控制深色主題
     """
     # ── 步驟1：剝除會污染頁面的 HTML document 結構 ──────────
     # <style> 最危險：注入後直接改變全頁背景/字色
@@ -76,7 +77,14 @@ def _clean_html_output(raw: str) -> str:
     raw = re.sub(r'<head\b[^>]*>.*?</head>', '', raw, flags=re.IGNORECASE | re.DOTALL)
     raw = re.sub(r'</?(?:html|body)\b[^>]*>', '', raw, flags=re.IGNORECASE)
 
-    # ── 步驟2：跳過頂部 metadata 行 ──────────────────────────
+    # ── 步驟2：剝除 markdown 代碼塊圍欄（任意位置） ─────────
+    # 整行 ```html / ```xml / ``` 都當分隔符移除（保留中間內容）
+    raw = re.sub(r'^\s*```\s*[a-zA-Z]*\s*$', '', raw, flags=re.MULTILINE)
+    raw = re.sub(r'^\s*```\s*$', '', raw, flags=re.MULTILINE)
+    # 移除頂部 markdown H1/H2 標題（AI 自加的 "# 台股週報..." 之類）
+    raw = re.sub(r'^\s*#{1,3}\s+.*$', '', raw, count=1, flags=re.MULTILINE)
+
+    # ── 步驟3：跳過頂部 metadata 行 ──────────────────────────
     lines = raw.split('\n')
     content_lines = []
     skip_header = True
@@ -95,7 +103,7 @@ def _clean_html_output(raw: str) -> str:
         content_lines.append(line)
     html = '\n'.join(content_lines).strip()
 
-    # ── 步驟3：剝除所有 inline style 屬性 ────────────────────
+    # ── 步驟4：剝除所有 inline style 屬性 ────────────────────
     html = re.sub(r'\s+style\s*=\s*(?:"[^"]*"|\'[^\']*\')', '', html, flags=re.IGNORECASE)
     return html
 
@@ -724,9 +732,11 @@ def get_industry_indicator_stocks(news: list, global_summary: str) -> str:
 - XXXX XXXX
 ...
 
-⚠️ 這些股票僅為產業代表，不代表推薦買進，請自行評估。"""
+⚠️ 這些股票僅為產業代表，不代表推薦買進，請自行評估。
 
-    return _generate(prompt, max_tokens=800)
+【嚴格輸出規定】直接輸出純 HTML 內容，禁止用 ```html ... ``` 之類 markdown 代碼塊包裝，禁止在開頭加 # 標題。"""
+
+    return _clean_html_output(_generate(prompt, max_tokens=800))
 
 
 # ── 週報：台股（簡化版）─────────────────────────────────────
@@ -777,6 +787,8 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
 ### 四、下週技術面展望
 偏多/中性/偏空，附出現條件（若突破XX點且量能...則...）
 
-重要提醒：以上為模擬分析，不構成實際投資建議。"""
+重要提醒：以上為模擬分析，不構成實際投資建議。
 
-    return _generate(prompt, max_tokens=1200)
+【嚴格輸出規定】直接輸出純 HTML 內容，禁止用 ```html ... ``` 之類 markdown 代碼塊包裝，禁止在開頭加 # 標題。"""
+
+    return _clean_html_output(_generate(prompt, max_tokens=1200))
