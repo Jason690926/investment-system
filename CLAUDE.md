@@ -6,22 +6,30 @@
 - **架構決策**：討論完方案後，先更新 `plan.md`，再開始寫程式
 - `plan.md` 只在需要查架構細節時才讀（節省 token）
 
-## 當前進度（2026-05-03）
+## 當前進度（2026-05-03 收工）
 
 **所在週次：週5（進行中）**
 
+**本次進度：**
+- ✅ 修復 bug：上櫃股名變英文（`.TW`/`.TWO` base 提取順序錯誤；4 處統一修正）
+- ✅ Server 端 `add_stock` 強制以 `STOCK_NAMES` 覆寫 name（不信前端）
+- ✅ `fix_stock_names.py` 一次性修 DB 既有英文名（已對 prod 執行）
+- ✅ 新功能：dashboard 卡片拖拉排序（`display_order` + SortableJS，1 人手動模式 OK）
+- ✅ 新功能：新增股票時輸入「股名」自動帶「代號」（`/api/market/search` + 下拉建議）
+- ✅ 費用估算更新：1 人 × 18 支基準，每月 ~$15（含週報、PDF）
+- ✅ 停用 GitHub Actions 自動排程（cron 註解、保留 workflow_dispatch）→ 改全手動
+- ✅ 新功能：📧 分享 PDF 報表給朋友（`EmailContact` + html2pdf.js + SMTP，含收件人記憶）
+
 **下一步（按優先順序）：**
-1. 測試完成後清理遺留（測試中，勿提前修改）
+1. 實測新功能（拖拉排序、name→code、分享 PDF）
+2. 測試完成後清理遺留（測試中，勿提前修改）
    - 還原時間鎖 `< 0` → `< 15`、冷卻 `< 0` → `< 4 * 3600`（`app.py`）
    - 移除「🗑 清快取」按鈕（`dashboard.html`、`dashboard.js`、`app.py`）
-2. ✅ 產業週報（每週六自動跑）— 已完成
-3. ✅ PDF 匯出 — 已完成（Dashboard「⬇ PDF」→ /export/pdf）
-4. ✅ Prompt Caching + max_tokens 優化 — 已完成（預估省 40-45% 費用）
-5. Render Free → Starter 升級暫緩（目前 5 人以下，Free 方案足夠）
+3. （未做）「移除聯絡人」UI — v1 沒做，要刪要進 DB
+4. Render Free → Starter 升級暫緩（1 人手動，Free 足夠）
 
 **待確認：**
-- 財經新聞來源（計畫用 Google News RSS）
-- 週報固定跑哪天（建議週六上午）
+- 財經新聞來源（週報用，目前週報已轉手動所以非急迫）
 
 ## 費用速查
 
