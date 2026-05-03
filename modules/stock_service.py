@@ -73,6 +73,12 @@ def add_stock(db: Session, user_id: int, symbol: str, name: str,
     if existing:
         raise ValueError(f"{symbol} 已在清單中")
 
+    # server-side 對照：本地表為單一事實來源，避免前端帶入英文名（yfinance fallback）
+    from modules.stock_names import STOCK_NAMES
+    base = symbol.replace('.TW', '').replace('.TWO', '')
+    if base in STOCK_NAMES:
+        name = STOCK_NAMES[base]
+
     stock = Stock(user_id=user_id, symbol=symbol, name=name, status=status)
     db.add(stock)
     db.flush()
