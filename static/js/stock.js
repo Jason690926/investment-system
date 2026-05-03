@@ -209,11 +209,53 @@ function updateChartData() {
 }
 
 /* ── Analysis ─────────────────────────────────────────── */
+const _LS_KEY = `analyzing_${STOCK_ID}`;
+let _pollTimer = null;
+
 async function loadCachedAnalysis() {
   try {
     const res = await api(`/api/stocks/${STOCK_ID}/analysis`);
-    if (res.cached) showAnalysis(res);
-  } catch (e) { /* 無快取，保持預設按鈕狀態 */ }
+    if (res.cached) {
+      localStorage.removeItem(_LS_KEY);
+      showAnalysis(res);
+      return;
+    }
+  } catch (e) { /* 無快取 */ }
+
+  // 若 localStorage 記錄了「分析已啟動且在 2 分鐘內」，顯示等待並輪詢
+  const startedAt = parseInt(localStorage.getItem(_LS_KEY) || '0');
+  if (startedAt && Date.now() - startedAt < 120_000) {
+    _startPolling();
+  }
+}
+
+function _startPolling() {
+  const area = document.getElementById('analysis-area');
+  area.innerHTML = `<div class="loading"><div class="spinner"></div>
+    分析進行中，請稍候（後台仍在運算，自動更新）…</div>`;
+
+  if (_pollTimer) return;
+  _pollTimer = setInterval(async () => {
+    try {
+      const res = await api(`/api/stocks/${STOCK_ID}/analysis`);
+      if (res.cached) {
+        clearInterval(_pollTimer); _pollTimer = null;
+        localStorage.removeItem(_LS_KEY);
+        showAnalysis(res);
+      }
+    } catch {}
+  }, 5000);
+
+  // 超過 3 分鐘放棄
+  setTimeout(() => {
+    if (!_pollTimer) return;
+    clearInterval(_pollTimer); _pollTimer = null;
+    localStorage.removeItem(_LS_KEY);
+    const area = document.getElementById('analysis-area');
+    if (area) area.innerHTML = `<div class="analysis-trigger">
+      <p style="color:var(--muted)">分析等待逾時，請重新產生。</p>
+      <button class="btn btn-green" onclick="runAnalysis()">🔍 重新分析</button></div>`;
+  }, 180_000);
 }
 
 function showAnalysis(res) {
@@ -267,27 +309,15 @@ async function runAnalysis() {
   const area = document.getElementById('analysis-area');
   area.innerHTML = '<div class="loading"><div class="spinner"></div> 三宗師分析中，約需 20-40 秒…</div>';
 
+  // 記錄啟動時間，讓回頁後能繼續等待
+  localStorage.setItem(_LS_KEY, Date.now().toString());
+
   try {
     const res = await api(`/api/stocks/${STOCK_ID}/analyze`, { method: 'POST' });
-
-    let riskHtml = '';
-    if (res.risk_pct != null) {
-      const rc = riskClass(res.risk_pct);
-      riskHtml = `
-      <div class="risk-summary">
-        <div class="risk-box">
-          <div class="label">風險係數</div>
-          <div class="value ${rc}">${res.risk_pct}%</div>
-        </div>
-        ${res.support    ? `<div class="risk-box"><div class="label">關鍵支撐</div><div class="value up">${res.support} 元</div></div>` : ''}
-        ${res.resistance ? `<div class="risk-box"><div class="label">關鍵壓力</div><div class="value down">${res.resistance} 元</div></div>` : ''}
-        ${res.target_pnf ? `<div class="risk-box"><div class="label">P&F概念目標</div><div class="value" style="color:var(--purple)">${res.target_pnf} 元</div></div>` : ''}
-        ${res.wyckoff_phase ? `<div class="risk-box"><div class="label">威科夫階段</div><div class="value" style="font-size:16px;color:var(--blue)">${res.wyckoff_phase}</div></div>` : ''}
-      </div>`;
-    }
-
+    localStorage.removeItem(_LS_KEY);
     showAnalysis(res);
   } catch (e) {
+    localStorage.removeItem(_LS_KEY);
     area.innerHTML = `<div class="analysis-trigger">
       <p style="color:var(--red)">分析失敗：${e.message}</p>
       <button class="btn btn-ghost" onclick="runAnalysis()">重試</button></div>`;
