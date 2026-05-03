@@ -152,13 +152,26 @@ function buildCard(s) {
   </div>`;
 }
 
-/* ── 非同步抓各卡片行情（輕量 /quote 端點）──────────────── */
+/* ── 非同步抓各卡片行情（輕量 /quote 端點）────────────────
+ * 失敗自動 retry 一次（延遲 1.5 秒），避免初次 Yahoo 探測 .TWO 失敗或網路 blip
+ * 導致該卡永遠顯示「—」。多支同時湧 Yahoo 時這種偶發 timing 問題會自動修正。
+ */
 async function loadCardPrices(stocks) {
-  await Promise.all(stocks.map(s =>
-    api(`/api/market/${encodeURIComponent(s.symbol)}/quote`)
-      .then(d => updateCardPrice(s.id, d))
-      .catch(() => {})
-  ));
+  await Promise.all(stocks.map(s => fetchQuoteWithRetry(s)));
+}
+
+async function fetchQuoteWithRetry(stock) {
+  const url = `/api/market/${encodeURIComponent(stock.symbol)}/quote`;
+  try {
+    const d = await api(url);
+    updateCardPrice(stock.id, d);
+  } catch {
+    await new Promise(r => setTimeout(r, 1500));
+    try {
+      const d = await api(url);
+      updateCardPrice(stock.id, d);
+    } catch { /* 兩次都失敗就放棄，卡片留「—」*/ }
+  }
 }
 
 function updateCardPrice(stockId, q) {

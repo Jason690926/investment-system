@@ -123,46 +123,83 @@ def api_market_search():
 @app.route('/api/market/<symbol>/quote')
 @login_required
 def api_market_quote(symbol):
-    """輕量行情（OHLC + 漲跌）：看板用，記憶體快取當日資料。
-    優先從 MarketDataCache 推導（分析時已存入），避免重複打 Yahoo Finance。"""
+    """輕量行情（OHLC + 漲跌）：看板用。讀取順序：
+       ① 記憶體 _quote_cache（同 process 同日命中即返回）
+       ② QuoteCache（DB，跨 process & Render 重啟有效）
+       ③ MarketDataCache（分析時寫入的完整資料，可推導 OHLC）
+       ④ Yahoo Finance；成功後寫入 QuoteCache 與 _quote_cache
+    """
     import json as _json
-    from datetime import date as dt_date
+    from datetime import date as dt_date, datetime as _dt
     from modules.data_enricher import get_stock_quote
-    from modules.models import MarketDataCache
+    from modules.models import MarketDataCache, QuoteCache
 
     today = dt_date.today()
     key = f'{symbol}_{today}'
 
     if key not in _quote_cache:
-        # ① 優先從 DB 快取推導（分析後即可用，速度快、不觸碰 Yahoo 速率）
         db = SessionLocal()
         try:
-            mkt = db.query(MarketDataCache).filter_by(
-                symbol=symbol, cache_date=today
-            ).first()
-            if mkt:
-                bars = _json.loads(mkt.data_json).get('daily_bars', [])
-                if len(bars) >= 2:
-                    last, prev = bars[-1], bars[-2]
-                    _quote_cache[key] = {
-                        'symbol':     symbol,
-                        'open':       last['open'],
-                        'high':       last['high'],
-                        'low':        last['low'],
-                        'close':      last['close'],
-                        'prev_close': prev['close'],
-                    }
+            # ② QuoteCache 命中
+            qc = db.query(QuoteCache).filter_by(symbol=symbol, cache_date=today).first()
+            if qc and qc.close is not None:
+                _quote_cache[key] = {
+                    'symbol':     symbol,
+                    'open':       float(qc.open) if qc.open is not None else None,
+                    'high':       float(qc.high) if qc.high is not None else None,
+                    'low':        float(qc.low) if qc.low is not None else None,
+                    'close':      float(qc.close),
+                    'prev_close': float(qc.prev_close) if qc.prev_close is not None else None,
+                }
+            else:
+                # ③ MarketDataCache 命中（分析跑過後）
+                mkt = db.query(MarketDataCache).filter_by(symbol=symbol, cache_date=today).first()
+                if mkt:
+                    bars = _json.loads(mkt.data_json).get('daily_bars', [])
+                    if len(bars) >= 2:
+                        last, prev = bars[-1], bars[-2]
+                        _quote_cache[key] = {
+                            'symbol':     symbol,
+                            'open':       last['open'],
+                            'high':       last['high'],
+                            'low':        last['low'],
+                            'close':      last['close'],
+                            'prev_close': prev['close'],
+                        }
         except Exception as e:
             print(f"[quote] DB 快取讀取失敗 {symbol}: {e}")
         finally:
             db.close()
 
-        # ② DB 沒有時才打 Yahoo Finance
+        # ④ 全部 miss → Yahoo
         if key not in _quote_cache:
             data = get_stock_quote(symbol)
             if data is None:
                 return jsonify({'error': f'無法取得 {symbol} 行情'}), 404
             _quote_cache[key] = data
+            # 寫 QuoteCache（下次同日 / Render 重啟後免再打 Yahoo）
+            db = SessionLocal()
+            try:
+                exists = db.query(QuoteCache).filter_by(symbol=symbol, cache_date=today).first()
+                if exists:
+                    exists.open = data.get('open')
+                    exists.high = data.get('high')
+                    exists.low  = data.get('low')
+                    exists.close = data.get('close')
+                    exists.prev_close = data.get('prev_close')
+                    exists.cached_at = _dt.utcnow()
+                else:
+                    db.add(QuoteCache(
+                        symbol=symbol, cache_date=today,
+                        open=data.get('open'), high=data.get('high'),
+                        low=data.get('low'), close=data.get('close'),
+                        prev_close=data.get('prev_close'),
+                    ))
+                db.commit()
+            except Exception as e:
+                print(f"[quote] QuoteCache 寫入失敗 {symbol}: {e}")
+            finally:
+                db.close()
 
     return jsonify(_quote_cache[key])
 

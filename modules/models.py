@@ -87,6 +87,27 @@ class MarketDataCache(Base):
     )
 
 
+class QuoteCache(Base):
+    """看板輕量行情快取（OHLC + 前日收）。
+    跟 MarketDataCache 分開以避免「quote 寫入半成品 → 分析路徑誤用」。
+    每日 1 筆/股票，寫滿即固化（盤中自動更新由前端 retry/refresh 控制）。"""
+    __tablename__ = 'quote_cache'
+
+    id         = Column(Integer, primary_key=True)
+    symbol     = Column(String(32), nullable=False)
+    cache_date = Column(Date, nullable=False)
+    open       = Column(Numeric(10, 2))
+    high       = Column(Numeric(10, 2))
+    low        = Column(Numeric(10, 2))
+    close      = Column(Numeric(10, 2))
+    prev_close = Column(Numeric(10, 2))
+    cached_at  = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint('symbol', 'cache_date', name='uq_quote_cache'),
+    )
+
+
 class StockAnalysis(Base):
     """每支股票的 AI 分析快取，跨用戶共用客觀市場面"""
     __tablename__ = 'stock_analyses'
