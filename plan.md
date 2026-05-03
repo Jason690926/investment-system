@@ -349,6 +349,16 @@ jobs:
 - ✅ Bug：一鍵分析後部分股票無股價（如 2891）
   - 根因：分析完大量 Yahoo Finance 請求後速率受限，後續 `/quote` 獨立呼叫失敗
   - 修法：`/quote` 端點優先從 `MarketDataCache`（分析時已存 DB）推導 OHLC，完全不再打 Yahoo Finance；僅冷啟動時才 fallback
+- ✅ Bug：個股分析中途離開再回來，顯示「點按鈕」而非等待狀態
+  - 根因：Flask Gunicorn 繼續執行分析寫 DB，但前端 JS context 已銷毀，回頁後 `loadCachedAnalysis` 在完成前回傳 `{cached:false}`
+  - 修法：`runAnalysis()` 啟動時寫 `localStorage`；回頁後偵測到記錄 < 2 分鐘則顯示「分析進行中」+ 每 5 秒輪詢，完成自動顯示；3 分鐘逾時顯示重試按鈕
+- ✅ Bug：看板顯示「已分析」藍框，進入個股卻無分析內容
+  - 根因：看板用「最新一筆（不限日期）」，詳情頁只查「今日」，日期不一致
+  - 修法：`api_get_analysis` 先查今日，找不到 fallback 最新一筆；回傳 `is_today` + `analysis_date`；非今日顯示橘色警示「⚠ 分析日期：YYYY-MM-DD（非今日，建議重新分析）」
+- ✅ UI：分析報表分節排版優化（`h3` 加藍色左邊框區塊 + 淡藍底色，margin-top 32px；`li` 行距 6→10px；`p` 間距 10→14px）
+- ✅ UI：個人建議區塊 `h3` 改為橘色左邊框區塊（與市場分析藍色區別）
+- ✅ UI：分析頁數字方塊放大（label 12→13px，value 22→28px，padding 加大）
+- ✅ UI：個股資訊列放大（MA5/MACD/量能 label 11→13px，value 15→17px）
 
 **AI 分析品質優化（2026-05-02）：**
 - ✅ 功能：K線型態強化 — `analyze_market_only()` 第二節強制要求逐根說出中文型態名稱（錘子/吞噬/早晨之星等），日K由15根增至20根，max_tokens 2800→3500
