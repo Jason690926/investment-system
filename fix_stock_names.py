@@ -22,7 +22,7 @@ try:
     skipped_no_match = 0
     already_correct = 0
     for s in rows:
-        base = s.symbol.replace('.TW', '').replace('.TWO', '')
+        base = s.symbol.replace('.TWO', '').replace('.TW', '')
         correct = STOCK_NAMES.get(base)
         if not correct:
             skipped_no_match += 1

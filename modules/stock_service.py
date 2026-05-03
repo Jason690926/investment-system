@@ -75,7 +75,7 @@ def add_stock(db: Session, user_id: int, symbol: str, name: str,
 
     # server-side 對照：本地表為單一事實來源，避免前端帶入英文名（yfinance fallback）
     from modules.stock_names import STOCK_NAMES
-    base = symbol.replace('.TW', '').replace('.TWO', '')
+    base = symbol.replace('.TWO', '').replace('.TW', '')
     if base in STOCK_NAMES:
         name = STOCK_NAMES[base]
 

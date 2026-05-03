@@ -68,7 +68,7 @@ if watchlist:
             hist = watchlist_stocks[name].get('history')
             patterns = detect_patterns(hist) if hist is not None else []
             stock_news = [n for n in news if name in n.get('title', '') or
-                         item['symbol'].replace('.TW', '') in n.get('title', '')]
+                         item['symbol'].replace('.TWO', '').replace('.TW', '') in n.get('title', '')]
             if TEST_MODE:
                 ai_advice = "【測試模式】AI分析已跳過"
             elif report_type == 'weekly':

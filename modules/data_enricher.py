@@ -148,7 +148,7 @@ def get_stock_info(symbol: str) -> dict | None:
     """快速查詢股票名稱與現價（不抓 OHLCV，省時間）"""
     from modules.stock_names import STOCK_NAMES
     symbol = _resolve_tw_symbol(_normalize_symbol(symbol))
-    base = symbol.replace('.TW', '').replace('.TWO', '')
+    base = symbol.replace('.TWO', '').replace('.TW', '')  # 先剝 .TWO，避免 .replace('.TW') 把 .TWO 中的 .TW 吃掉只留 'O'
     try:
         r = requests.get(
             f'https://query1.finance.yahoo.com/v8/finance/chart/{symbol}',
