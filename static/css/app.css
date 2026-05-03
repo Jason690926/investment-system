@@ -725,6 +725,70 @@ a:hover { text-decoration: underline; }
 .risk-box .label { font-size: 13px; color: var(--muted); margin-bottom: 8px; font-weight: 500; }
 .risk-box .value { font-size: 28px; font-weight: 800; }
 
+/* ── Quick Summary Card ──────────────────────────────── */
+.quick-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  background: rgba(88,166,255,.04);
+  border: 1px solid rgba(88,166,255,.15);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  margin-bottom: 20px;
+}
+.qs-label { font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; }
+.qs-sep { color: var(--border); }
+.qs-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.qs-bull     { background: rgba(63,185,80,.15);  color: var(--green);  border: 1px solid rgba(63,185,80,.35); }
+.qs-bear     { background: rgba(248,81,73,.15);   color: var(--red);    border: 1px solid rgba(248,81,73,.35); }
+.qs-neutral  { background: rgba(139,148,158,.12); color: var(--muted);  border: 1px solid rgba(139,148,158,.25); }
+.qs-risk-low  { background: rgba(63,185,80,.12);  color: var(--green);  border: 1px solid rgba(63,185,80,.3); }
+.qs-risk-mid  { background: rgba(227,179,65,.12); color: var(--orange); border: 1px solid rgba(227,179,65,.3); }
+.qs-risk-high { background: rgba(248,81,73,.12);  color: var(--red);    border: 1px solid rgba(248,81,73,.3); }
+.qs-num {
+  padding: 4px 11px;
+  border-radius: 14px;
+  font-size: 13px;
+  font-weight: 600;
+  background: rgba(88,166,255,.1);
+  color: var(--blue);
+  border: 1px solid rgba(88,166,255,.2);
+}
+
+/* ── Analysis Content Table ──────────────────────────── */
+#analysis-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 14px 0 18px;
+  font-size: 13px;
+}
+#analysis-content th {
+  background: rgba(88,166,255,.08) !important;
+  color: var(--blue) !important;
+  padding: 8px 10px !important;
+  text-align: left !important;
+  border: 1px solid var(--border) !important;
+  font-weight: 600 !important;
+  white-space: nowrap;
+}
+#analysis-content td {
+  padding: 7px 10px !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text-dim) !important;
+  background: transparent !important;
+  vertical-align: middle;
+}
+#analysis-content tr:nth-child(even) td { background: rgba(255,255,255,.02) !important; }
+
 /* ── Toast ────────────────────────────────────────────── */
 .toast-container {
   position: fixed;

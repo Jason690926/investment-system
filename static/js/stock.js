@@ -284,6 +284,7 @@ function showAnalysis(res) {
 
   const recommendTitle = STOCK_STATUS === 'holding' ? '📌 持股操作建議' : '🎯 進場時機建議';
   area.innerHTML = riskHtml +
+    buildQuickSummary(res) +
     `<div id="analysis-content">${res.html}</div>` +
     `<div class="recommend-section">
        <div class="recommend-header">
@@ -295,6 +296,38 @@ function showAnalysis(res) {
      </div>`;
 
   loadRecommendation();
+}
+
+function buildQuickSummary(res) {
+  const phase   = res.wyckoff_phase || '';
+  const riskPct = res.risk_pct;
+  if (riskPct == null && !phase && !res.support && !res.resistance) return '';
+
+  const bullPhases = ['上漲', '積累', '再積累'];
+  const bearPhases = ['派發', '下跌', '再派發'];
+  let dirCls, dirText;
+  if (bullPhases.some(p => phase.includes(p)))      { dirCls = 'qs-bull';    dirText = '▲ 偏多'; }
+  else if (bearPhases.some(p => phase.includes(p))) { dirCls = 'qs-bear';    dirText = '▼ 偏空'; }
+  else                                               { dirCls = 'qs-neutral'; dirText = '— 觀望'; }
+
+  let riskCls, riskText;
+  if (riskPct == null)   { riskCls = 'qs-neutral';   riskText = '未評分'; }
+  else if (riskPct < 35) { riskCls = 'qs-risk-low';  riskText = `低風險 ${riskPct}%`; }
+  else if (riskPct < 65) { riskCls = 'qs-risk-mid';  riskText = `中風險 ${riskPct}%`; }
+  else                   { riskCls = 'qs-risk-high';  riskText = `高風險 ${riskPct}%`; }
+
+  const nums = [];
+  if (res.support)    nums.push(`撐 ${res.support}`);
+  if (res.resistance) nums.push(`壓 ${res.resistance}`);
+  if (res.target_pnf) nums.push(`目標 ${res.target_pnf}`);
+
+  return `<div class="quick-summary">
+    <span class="qs-label">快速結論</span>
+    <span class="qs-sep">│</span>
+    <span class="qs-pill ${dirCls}">${dirText}</span>
+    <span class="qs-pill ${riskCls}">${riskText}</span>
+    ${nums.map(n => `<span class="qs-num">${n}</span>`).join('')}
+  </div>`;
 }
 
 async function loadRecommendation() {
