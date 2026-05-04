@@ -22,6 +22,24 @@ except Exception as e:
 init_auth(app)
 
 
+# ── /print-report 用的 helpers ──────────────────────────────
+import re
+
+_INLINE_STYLE_RE = re.compile(
+    r'\s+style\s*=\s*(?:"[^"]*"|\'[^\']*\')',
+    re.IGNORECASE,
+)
+
+
+def _strip_inline_styles(html):
+    """剝除 HTML 內所有 inline style 屬性。
+    對既有 DB 殘留 inline style 做 render-time 第二道防禦
+    （第一道在 _clean_html_output:113 已做於寫入時）。"""
+    if not html:
+        return ''
+    return _INLINE_STYLE_RE.sub('', html)
+
+
 # ── 偵錯（找完問題後移除）───────────────────────���────────
 @app.route('/debug-oauth')
 def debug_oauth():
