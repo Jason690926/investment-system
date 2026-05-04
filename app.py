@@ -730,14 +730,15 @@ def api_remove_stock():
 @app.route('/print-report')
 @login_required
 def print_report():
-    from modules.models import Stock, StockAnalysis, WeeklyReport
+    from modules.models import StockAnalysis, WeeklyReport, QuoteCache
     from sqlalchemy import func
-    from datetime import datetime, timezone, timedelta
+    from datetime import datetime, timezone, timedelta, date
     TW = timezone(timedelta(hours=8))
 
     db = SessionLocal()
     try:
-        stocks = db.query(Stock).filter_by(user_id=current_user.id).order_by(Stock.created_at).all()
+        # 用既有 helper：display_order 已正確（NULL 排最後）
+        stocks = get_user_stocks(db, current_user.id)
         if not stocks:
             return '尚無持股資料', 404
 
@@ -747,6 +748,8 @@ def print_report():
                         f"{weekly.week_end.strftime('%Y/%m/%d')}") if weekly else ''
 
         symbols = [s.symbol for s in stocks]
+
+        # 最新 daily 分析（每支股一筆）
         subq = (
             db.query(StockAnalysis.symbol,
                      func.max(StockAnalysis.analysis_date).label('max_date'))
@@ -764,55 +767,31 @@ def print_report():
         )
         analyses = {r.symbol: r for r in rows}
 
-        stocks_html = ''
-        for s in stocks:
-            a = analyses.get(s.symbol)
-            status_cls = 'badge-holding' if s.status == 'holding' else 'badge-watching'
-            status_label = '已持有' if s.status == 'holding' else '觀察中'
+        # 當日 quote 批次撈（沒命中就 fallback 顯示 —，不打 Yahoo）
+        today_tw = datetime.now(TW).date()
+        quote_rows = (
+            db.query(QuoteCache)
+            .filter(QuoteCache.symbol.in_(symbols),
+                    QuoteCache.cache_date == today_tw)
+            .all()
+        )
+        quotes = {q.symbol: q for q in quote_rows}
 
-            pills = [f'<span class="meta-pill {status_cls}">{status_label}</span>']
-            if s.status == 'holding' and s.trades:
-                pills.append(f'<span class="meta-pill">均成本 {float(s.avg_cost):.2f} 元</span>')
-                pills.append(f'<span class="meta-pill">持有 {float(s.total_zhang):.1f} 張</span>')
-            if a:
-                pills.append(f'<span class="meta-pill">風險 {a.risk_pct}%</span>')
-                if a.wyckoff_phase:
-                    pills.append(f'<span class="meta-pill">威科夫：{a.wyckoff_phase}</span>')
-                if a.support_price:
-                    pills.append(f'<span class="meta-pill support-level">撐 {float(a.support_price):.1f}</span>')
-                if a.resistance_price:
-                    pills.append(f'<span class="meta-pill resistance-level">壓 {float(a.resistance_price):.1f}</span>')
-                if a.target_price:
-                    pills.append(f'<span class="meta-pill target-price">目標 {float(a.target_price):.1f}</span>')
-
-            body = (f'<div class="analysis-wrap">{a.html_content}</div>'
-                    if a and a.html_content
-                    else '<div class="no-analysis">尚無分析資料</div>')
-            date_note = a.analysis_date.strftime('%Y/%m/%d') if a else ''
-
-            stocks_html += f"""
-<div class="stock-block">
-  <div class="stock-block-header">
-    <div>
-      <div class="stock-block-name">{s.name}</div>
-      <div class="stock-block-symbol">{s.symbol}</div>
-    </div>
-    <div class="stock-block-meta">{date_note}</div>
-  </div>
-  <div class="stock-meta-row">{''.join(pills)}</div>
-  {body}
-</div>"""
+        # 拆 holdings / watching
+        holdings = [s for s in stocks if s.status == 'holding']
+        watching = [s for s in stocks if s.status == 'watching']
+        holdings_html = _render_stock_blocks(holdings, analyses, quotes, mode='holding')
+        watching_html = _render_stock_blocks(watching, analyses, quotes, mode='watching')
 
         now_tw = datetime.now(TW)
-        holding_count  = sum(1 for s in stocks if s.status == 'holding')
-        watching_count = len(stocks) - holding_count
-
-        return render_template('print_report.html',
+        return render_template(
+            'print_report.html',
             date_str=now_tw.strftime('%Y/%m/%d %H:%M'),
             user_name=current_user.name,
-            holding_count=holding_count,
-            watching_count=watching_count,
-            stocks_html=stocks_html,
+            holding_count=len(holdings),
+            watching_count=len(watching),
+            holdings_html=holdings_html,
+            watching_html=watching_html,
             weekly=weekly,
             weekly_range=weekly_range,
         )
