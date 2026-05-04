@@ -6,34 +6,37 @@
 - **架構決策**：討論完方案後，先更新 `plan.md`，再開始寫程式
 - `plan.md` 只在需要查架構細節時才讀（節省 token）
 
-## 當前進度（2026-05-03 第二次收工）
+## 當前進度（2026-05-04）
 
 **所在週次：週5（進行中）**
 
-**本次（接續上次後）進度：**
-- ✅ 修 bug：8064（上櫃股）看板偶爾不顯示股價
-  - 加 `QuoteCache` 表（OHLC + prev_close，跨 process 持久化）
-  - 前端 `fetchQuoteWithRetry` 失敗 1.5 秒 retry 一次
-  - 讀取順序：_quote_cache → QuoteCache → MarketDataCache → Yahoo
-  - 對 prod DB 已 migrate
-- ✅ 修 bug：週報只剩標題（AI markdown 包裝）+ 大盤週報空白（AI 寫巨大 CSS 被截斷、未閉合 `<style>` 吃掉內容）
-  - `_clean_html_output` 加強：未閉合 `<style>/<head>/<script>` 也砍
-  - 兩個週報函式 prompt 嚴禁輸出 `<head>/<style>` 等 document tag、嚴禁 markdown 包裝
-  - 已對重跑後的壞記錄做兩次刪除 + 重跑（共燒 ~$0.4）
-- ✅ CLAUDE.md 加入「**修改 AI 功能的紀律**」章節（避免下次再燒 token 試錯）
-  - 規則：修 AI 相關 bug 前必先撈 DB 真實 raw 輸出在本機推演
-- ✅ `/print-report` 加入大盤週報 + 產業指標股區塊（PDF 內容更完整）
-- ⏳ 部分修：分享 PDF 寄送
-  - 第一輪 `[Errno 101] Network is unreachable` → 已修（強制 IPv4 + 587/465 fallback）
-  - 第二輪 `SSL/465: timed out` → **未解**（Render → Gmail SMTP 通信不穩）
+**本次（2026-05-04）進度 — 持股 PDF 報表大改版：**
+- ✅ 視覺改版：終端機印刷風（IBM Plex Mono/Sans + Noto Sans TC + 象牙紙 + 琥珀強調）
+  - 脫離 Material Indigo 範本感、台股慣例紅漲綠跌、設計 token 抽到 `:root`
+  - 章節結構：封面 → 大盤週報 → 產業指標股 → § HOLDINGS · 持股 → § WATCHLIST · 觀察 → 免責
+- ✅ 修排序 bug：原本 `order_by(created_at)`，改成走 `display_order`（與 dashboard 一致）
+  - 注意：`get_user_stocks` 回 dict 不是 ORM；route 直接 query Stock 並複製 service 的排序邏輯
+- ✅ 新增當日收盤 + 漲跌百分比：批次撈 `QuoteCache`（不打 Yahoo）
+- ✅ 拆 holdings vs watchlist 兩節：持有版多顯示 COST/QTY/P/L/RISK 數據列
+- ✅ `_strip_inline_styles` render-time 防禦（防 DB 既有殘留蓋過 token）
+- ✅ AI markdown 渲染：mistune 進 pipeline（`### → <h3>`、`- → <ul>`、`**bold**`）
+- ✅ K 線表格緊縮：shrink-to-fit、tabular-nums、緊 padding、數字欄右對齊
+- ✅ key-point 改 block-level callout（▶ 前綴、獨立橫條，不再 inline 半截話）
+- ✅ 螢幕版加 `max-width:820px` 置中（瀏覽器預覽不再撐到 1920px；PDF 不受影響）
+- ✅ pytest 骨架 + 28 cases 單元測試（`tests/test_print_report.py`）
+- 📄 spec：`docs/superpowers/specs/2026-05-04-print-report-redesign-design.md`
+- 📄 plan：`docs/superpowers/plans/2026-05-04-print-report-redesign.md`
+
+**先前未解（仍待）：**
+- ⏳ 分享 PDF 寄送 timeout：第二輪 `SSL/465: timed out`（Render → Gmail SMTP 不穩）
+  - 已討論方案：A. 換 Resend HTTP API（推薦） / B. Render Starter / C. 加 timeout
 
 **下一步（按優先順序）：**
-1. **🔴 修 PDF 寄送 timeout**：選一條走（已討論完不需再評估）
-   - A. 換 [Resend](https://resend.com) HTTP API（推薦；免費 100/日；改 ~30 行）
-   - B. 升級 Render Starter ($7/月；不保證能解）
-   - C. 加大 timeout 20s → 45s 試試（最低成本但賭運氣）
-2. 重新跑一次週報驗證 commit `c95d0dd` 修法（會燒 ~$0.20）
-3. 實測拖拉排序、name→code 下拉建議
+1. **🔴 修 PDF 寄送 timeout**：A/B/C 擇一（前次討論結論未動工）
+2. **K 線多日型態識別（第二輪 PDF 改版，會燒 token）**：
+   - 改 prompt 讓 AI 識別十字星 / 黃昏之星 / 三白兵 / 烏雲罩頂 / 看漲/看跌吞噬 / 早晨之星
+   - 估每跑 ~$0.6/股、整批 ~$1.5；要重跑驗證
+3. 重新跑一次週報驗證 commit `c95d0dd` 修法（會燒 ~$0.20）
 4. 測試完成後清理遺留（測試中，勿提前修改）
    - 還原時間鎖 `< 0` → `< 15`、冷卻 `< 0` → `< 4 * 3600`（`app.py`）
    - 移除「🗑 清快取」按鈕（`dashboard.html`、`dashboard.js`、`app.py`）
