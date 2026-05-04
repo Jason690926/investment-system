@@ -40,6 +40,114 @@ def _strip_inline_styles(html):
     return _INLINE_STYLE_RE.sub('', html)
 
 
+def _format_price(value):
+    """價格格式：>=100 用整數千分位，<100 顯示 2 位小數。"""
+    if value is None:
+        return '—'
+    v = float(value)
+    return f'{v:,.0f}' if v >= 100 else f'{v:,.2f}'
+
+
+def _render_one_block(s, a, q, idx, mode):
+    """產出單一持股/觀察區塊 HTML。
+
+    s: Stock 物件（symbol, name, status, avg_cost, total_zhang, trades）
+    a: StockAnalysis 物件 or None
+    q: QuoteCache 物件 or None
+    idx: 1-based 章節內序號
+    mode: 'holding' or 'watching'
+    """
+    status_label = 'HOLD' if mode == 'holding' else 'WATCH'
+
+    # 標頭：股價 + 漲跌
+    if q and q.close is not None and q.prev_close:
+        close = float(q.close)
+        prev = float(q.prev_close)
+        change = close - prev
+        pct = (change / prev * 100) if prev else 0
+        direction = 'bull' if change >= 0 else 'bear'
+        arrow = '▲' if change >= 0 else '▼'
+        price_str = _format_price(close)
+        change_html = (
+            f'<span class="change {direction}">'
+            f'{arrow} {change:+.0f} / {pct:+.1f}%'
+            f'</span>'
+        )
+        close_date_str = (
+            f'close {q.cache_date.strftime("%Y-%m-%d")}'
+            if hasattr(q, 'cache_date') and q.cache_date else 'close —'
+        )
+    else:
+        price_str = '—'
+        change_html = ''
+        close_date_str = 'close —'
+
+    # 數據列（僅 holding）
+    data_row_html = ''
+    if mode == 'holding' and s.status == 'holding' and s.trades:
+        avg_cost = float(s.avg_cost) if s.avg_cost else 0.0
+        qty = float(s.total_zhang) if s.total_zhang else 0.0
+        if q and q.close is not None and avg_cost > 0:
+            pnl_pct = (float(q.close) - avg_cost) / avg_cost * 100
+            pnl_dir = 'bull' if pnl_pct >= 0 else 'bear'
+            pnl_html = f'<strong class="{pnl_dir}">{pnl_pct:+.1f}%</strong>'
+        else:
+            pnl_html = '<strong class="muted">—</strong>'
+        risk_str = f'{a.risk_pct}%' if a and a.risk_pct is not None else '—'
+        data_row_html = f"""
+  <div class="data-row">
+    <div><span class="label">COST</span><br><strong>{avg_cost:,.2f}</strong></div>
+    <div><span class="label">QTY</span><br><strong>{qty:.1f} 張</strong></div>
+    <div><span class="label">P/L</span><br>{pnl_html}</div>
+    <div><span class="label">RISK</span><br><strong class="amber">{risk_str}</strong></div>
+  </div>"""
+
+    # Pills 列
+    pills = []
+    if a:
+        if a.support_price is not None:
+            pills.append(f'<span class="pill pill-support"><span class="lbl">撐 </span>{_format_price(a.support_price)}</span>')
+        if a.resistance_price is not None:
+            pills.append(f'<span class="pill pill-bull"><span class="lbl">壓 </span>{_format_price(a.resistance_price)}</span>')
+        if a.target_price is not None:
+            pills.append(f'<span class="pill pill-amber"><span class="lbl">目標 </span>{_format_price(a.target_price)}</span>')
+        if a.wyckoff_phase:
+            pills.append(f'<span class="pill pill-ink"><span class="lbl">威科夫 </span>{a.wyckoff_phase}</span>')
+    # 觀察版把風險合進 pills
+    if mode == 'watching' and a and a.risk_pct is not None:
+        pills.append(f'<span class="pill pill-amber-outline"><span class="lbl">風險 </span>{a.risk_pct}%</span>')
+    pills_html = f'<div class="pills">{"".join(pills)}</div>' if pills else ''
+
+    # 分析內容（剝 inline style）
+    if a and a.html_content:
+        body_html = f'<div class="analysis-wrap">{_strip_inline_styles(a.html_content)}</div>'
+    else:
+        body_html = '<div class="no-analysis">尚無分析資料</div>'
+
+    # 組裝
+    return f"""
+<div class="stock-block">
+  <div class="stock-block-header">
+    <div class="stock-ident">
+      <div class="stock-name-row">
+        <span class="stock-name">{s.name}</span>
+        <span class="stock-symbol">{s.symbol}</span>
+      </div>
+      <div class="stock-price-row">
+        <span class="price-num">{price_str}</span>
+        {change_html}
+      </div>
+    </div>
+    <div class="stock-meta-right">
+      <div class="idx-tag">[{idx:02d} · {status_label}]</div>
+      <div class="close-date">{close_date_str}</div>
+    </div>
+  </div>{data_row_html}
+  {pills_html}
+  {body_html}
+</div>"""
+
+
 # ── 偵錯（找完問題後移除）───────────────────────���────────
 @app.route('/debug-oauth')
 def debug_oauth():
