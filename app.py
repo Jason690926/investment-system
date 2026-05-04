@@ -148,6 +148,15 @@ def _render_one_block(s, a, q, idx, mode):
 </div>"""
 
 
+def _render_stock_blocks(stocks, analyses, quotes, mode):
+    parts = []
+    for idx, s in enumerate(stocks, start=1):
+        a = analyses.get(s.symbol)
+        q = quotes.get(s.symbol)
+        parts.append(_render_one_block(s, a, q, idx=idx, mode=mode))
+    return ''.join(parts)
+
+
 # ── 偵錯（找完問題後移除）───────────────────────���────────
 @app.route('/debug-oauth')
 def debug_oauth():

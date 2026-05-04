@@ -143,3 +143,35 @@ def test_render_block_strips_inline_styles_from_analysis():
 def test_render_block_no_analysis_shows_placeholder():
     html = _render_one_block(_make_stock(), None, None, idx=1, mode='holding')
     assert 'no-analysis' in html or '尚無分析資料' in html
+
+
+from app import _render_stock_blocks
+
+
+def test_render_stock_blocks_empty_list_returns_empty_string():
+    assert _render_stock_blocks([], {}, {}, mode='holding') == ''
+
+
+def test_render_stock_blocks_iterates_with_correct_index():
+    stocks = [_make_stock(symbol='2330', name='台積電'),
+              _make_stock(symbol='2317', name='鴻海')]
+    html = _render_stock_blocks(stocks, {}, {}, mode='holding')
+    assert '[01 · HOLD]' in html
+    assert '[02 · HOLD]' in html
+
+
+def test_render_stock_blocks_passes_analysis_and_quote_by_symbol():
+    stocks = [_make_stock(symbol='2330', name='台積電')]
+    analyses = {'2330': _make_analysis()}
+    quotes = {'2330': _make_quote()}
+    html = _render_stock_blocks(stocks, analyses, quotes, mode='holding')
+    assert '台積電' in html
+    assert '1,085' in html
+    assert 'Markup' in html
+
+
+def test_render_stock_blocks_handles_missing_quote_or_analysis():
+    stocks = [_make_stock(symbol='2330', name='台積電')]
+    html = _render_stock_blocks(stocks, {}, {}, mode='holding')
+    assert '台積電' in html
+    assert '尚無分析資料' in html
