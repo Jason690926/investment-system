@@ -175,3 +175,78 @@ def test_render_stock_blocks_handles_missing_quote_or_analysis():
     html = _render_stock_blocks(stocks, {}, {}, mode='holding')
     assert '台積電' in html
     assert '尚無分析資料' in html
+
+
+# ── markdown 轉換測試（mistune 進 pipeline 後新增） ──────────
+
+def test_render_block_converts_markdown_heading_to_h3():
+    a = _make_analysis(html_content='### 一、威科夫骨幹分析\n\n內文')
+    html = _render_one_block(_make_stock(), a, None, idx=1, mode='holding')
+    assert '<h3>一、威科夫骨幹分析</h3>' in html
+    assert '###' not in html  # 原始 markdown 不應殘留
+
+
+def test_render_block_converts_markdown_bullets_to_ul():
+    a = _make_analysis(html_content='- 第一點\n- 第二點\n- 第三點')
+    html = _render_one_block(_make_stock(), a, None, idx=1, mode='holding')
+    assert '<ul>' in html
+    assert '<li>第一點</li>' in html
+    assert '<li>第二點</li>' in html
+
+
+def test_render_block_converts_markdown_bold_to_strong():
+    a = _make_analysis(html_content='今日時機：**等待確認**')
+    html = _render_one_block(_make_stock(), a, None, idx=1, mode='holding')
+    assert '<strong>等待確認</strong>' in html
+    assert '**' not in html
+
+
+def test_render_block_preserves_raw_html_table():
+    raw_table = (
+        '<table><thead><tr><th>日期</th><th>型態</th></tr></thead>'
+        '<tbody><tr><td>2026-04-12</td><td>長紅K</td></tr></tbody></table>'
+    )
+    a = _make_analysis(html_content=raw_table)
+    html = _render_one_block(_make_stock(), a, None, idx=1, mode='holding')
+    assert '<table>' in html
+    assert '<th>日期</th>' in html
+    assert '長紅K' in html
+
+
+def test_render_block_preserves_raw_html_key_point_span():
+    a = _make_analysis(html_content='內文\n\n<span class="key-point">重點摘要</span>')
+    html = _render_one_block(_make_stock(), a, None, idx=1, mode='holding')
+    assert '<span class="key-point">重點摘要</span>' in html
+
+
+def test_render_block_converts_markdown_hr():
+    a = _make_analysis(html_content='前段\n\n---\n\n後段')
+    html = _render_one_block(_make_stock(), a, None, idx=1, mode='holding')
+    assert '<hr' in html  # mistune 輸出 <hr /> 或 <hr>
+
+
+def test_render_block_handles_real_world_mixed_content():
+    """整合測試：完整一段真實 AI 輸出（markdown + HTML 混合）。"""
+    raw = """### 一、威科夫骨幹分析
+
+- 月K走勢：再積累
+- <span class="support-level">支撐：211元</span>
+
+<span class="key-point">縮量整理，等待量能</span>
+
+---
+
+### 二、本間宗久K線
+
+<table><tbody><tr><td>2026-04-12</td><td>長紅K</td><td class="bull">看漲</td></tr></tbody></table>
+"""
+    a = _make_analysis(html_content=raw)
+    html = _render_one_block(_make_stock(), a, None, idx=1, mode='holding')
+    assert '<h3>一、威科夫骨幹分析</h3>' in html
+    assert '<h3>二、本間宗久K線</h3>' in html
+    assert '<ul>' in html
+    assert '<span class="support-level">' in html
+    assert '<span class="key-point">' in html
+    assert '<table>' in html
+    assert '<td class="bull">看漲</td>' in html
+    assert '###' not in html

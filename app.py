@@ -24,11 +24,16 @@ init_auth(app)
 
 # ── /print-report 用的 helpers ──────────────────────────────
 import re
+import mistune
 
 _INLINE_STYLE_RE = re.compile(
     r'\s+style\s*=\s*(?:"[^"]*"|\'[^\']*\')',
     re.IGNORECASE,
 )
+
+# AI 輸出是 markdown + HTML 混合（### 標題、- bullet、**bold** + <table>/<span>）
+# escape=False 保留原 HTML（table、span class 等）；plugins=['table'] 支援 GFM 表格
+_MARKDOWN = mistune.create_markdown(escape=False, plugins=['table'])
 
 
 def _strip_inline_styles(html):
@@ -38,6 +43,14 @@ def _strip_inline_styles(html):
     if not html:
         return ''
     return _INLINE_STYLE_RE.sub('', html)
+
+
+def _markdown_to_html(content):
+    """把 AI 輸出的 markdown+HTML 混合內容轉成乾淨 HTML。
+    後續再過 _strip_inline_styles 防舊資料殘留。"""
+    if not content:
+        return ''
+    return _MARKDOWN(content)
 
 
 def _format_price(value):
@@ -118,9 +131,11 @@ def _render_one_block(s, a, q, idx, mode):
         pills.append(f'<span class="pill pill-amber-outline"><span class="lbl">風險 </span>{a.risk_pct}%</span>')
     pills_html = f'<div class="pills">{"".join(pills)}</div>' if pills else ''
 
-    # 分析內容（剝 inline style）
+    # 分析內容：markdown→HTML 後再剝 inline style
     if a and a.html_content:
-        body_html = f'<div class="analysis-wrap">{_strip_inline_styles(a.html_content)}</div>'
+        rendered = _markdown_to_html(a.html_content)
+        rendered = _strip_inline_styles(rendered)
+        body_html = f'<div class="analysis-wrap">{rendered}</div>'
     else:
         body_html = '<div class="no-analysis">尚無分析資料</div>'
 
@@ -730,15 +745,22 @@ def api_remove_stock():
 @app.route('/print-report')
 @login_required
 def print_report():
-    from modules.models import StockAnalysis, WeeklyReport, QuoteCache
-    from sqlalchemy import func
+    from modules.models import Stock, StockAnalysis, WeeklyReport, QuoteCache
+    from sqlalchemy import func, case
     from datetime import datetime, timezone, timedelta, date
     TW = timezone(timedelta(hours=8))
 
     db = SessionLocal()
     try:
-        # 用既有 helper：display_order 已正確（NULL 排最後）
-        stocks = get_user_stocks(db, current_user.id)
+        # 排序與 dashboard 看板一致：display_order 升冪、NULL 排最後
+        # （複製 stock_service.get_user_stocks 的排序邏輯，但保留 ORM 物件
+        #  以便取用 s.trades / s.avg_cost / s.total_zhang 等 property）
+        stocks = (db.query(Stock)
+                  .filter_by(user_id=current_user.id)
+                  .order_by(case((Stock.display_order.is_(None), 1), else_=0),
+                            Stock.display_order,
+                            Stock.created_at)
+                  .all())
         if not stocks:
             return '尚無持股資料', 404
 
