@@ -4,126 +4,322 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>持股分析報告 — {{ date_str }}</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700&family=IBM+Plex+Sans:wght@400;700&family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
+
   <style>
-    * { box-sizing: border-box; }
-    body {
-      font-family: "Microsoft JhengHei", "PingFang TC", "Heiti TC", Arial, sans-serif;
-      font-size: 13px; color: #1a1a2e; background: #fff;
-      margin: 0; padding: 24px 28px; line-height: 1.7;
+    :root {
+      --font-sans: "IBM Plex Sans", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+      --font-mono: "IBM Plex Mono", "Consolas", monospace;
+
+      --paper:        #fbf8f1;
+      --ink:          #1a1a1a;
+      --amber:        #b8860b;
+      --bull:         #c0392b;
+      --bear:         #2e7d32;
+      --support:      #1565c0;
+      --amber-soft:   #fff8dc;
+      --bull-soft:    #fef0f0;
+      --support-soft: #e8f4ff;
+      --rule-soft:    #e5e0d0;
+
+      --space-xs: 4px;
+      --space-sm: 8px;
+      --space-md: 12px;
+      --space-lg: 20px;
+      --space-xl: 32px;
+
+      --fs-display:    24px;
+      --fs-section:    14px;
+      --fs-stock-name: 16px;
+      --fs-body:       11px;
+      --fs-label:      9px;
+      --fs-mini:       8px;
     }
 
+    * { box-sizing: border-box; }
+    body {
+      font-family: var(--font-sans);
+      font-size: var(--fs-body);
+      color: var(--ink);
+      background: var(--paper);
+      margin: 0; padding: 24px 28px;
+      line-height: 1.7;
+    }
+
+    /* 列印工具列（螢幕用，列印時隱藏） */
     .print-toolbar {
       position: fixed; top: 0; left: 0; right: 0;
-      background: #1a237e; color: #fff;
+      background: var(--ink); color: var(--paper);
       padding: 10px 24px; display: flex; align-items: center; gap: 12px;
-      z-index: 100; font-size: 14px;
+      z-index: 100; font-size: 13px;
+      font-family: var(--font-mono);
     }
-    .print-toolbar strong { flex: 1; }
+    .print-toolbar strong { flex: 1; font-weight: 700; }
     .print-toolbar button {
-      background: #fff; color: #1a237e; border: none;
-      padding: 6px 18px; border-radius: 6px; font-size: 13px;
+      background: var(--paper); color: var(--ink); border: none;
+      padding: 6px 18px; border-radius: 0; font-size: 12px;
       cursor: pointer; font-weight: 700;
+      font-family: var(--font-mono);
     }
-    .print-toolbar button:hover { background: #e8eaf6; }
+    .print-toolbar button:hover { background: var(--amber); color: var(--paper); }
 
     .report-body { padding-top: 52px; }
 
+    /* 封面 */
     .report-header {
-      background: linear-gradient(135deg, #1a237e 0%, #283593 100%);
-      color: #fff; padding: 20px 24px; border-radius: 8px; margin-bottom: 24px;
+      border-bottom: 2px solid var(--ink);
+      padding: 0 0 var(--space-md);
+      margin-bottom: var(--space-xl);
+      display: flex; justify-content: space-between; align-items: flex-end;
     }
-    .report-header h1 { margin: 0 0 4px; font-size: 20px; }
-    .report-header p  { margin: 0; font-size: 12px; opacity: .8; }
-
-    .stock-block {
-      border: 1px solid #dde3f0; border-radius: 8px;
-      margin-bottom: 24px; overflow: hidden;
+    .report-header h1 {
+      margin: 0;
+      font-size: var(--fs-display);
+      font-weight: 700;
+      letter-spacing: -.5px;
+      font-family: var(--font-sans);
     }
-    .stock-block-header {
-      background: #e8eaf6; padding: 12px 16px;
-      display: flex; justify-content: space-between; align-items: center;
+    .report-header .meta {
+      text-align: right;
+      font-family: var(--font-mono);
+      font-size: var(--fs-mini);
+      letter-spacing: 1px;
+      opacity: .65;
+      line-height: 1.7;
     }
-    .stock-block-name   { font-size: 16px; font-weight: 700; color: #1a237e; }
-    .stock-block-symbol { font-size: 12px; color: #666; margin-top: 2px; }
-    .stock-block-meta   { text-align: right; font-size: 12px; color: #555; line-height: 1.6; }
-
-    .stock-meta-row {
-      display: flex; flex-wrap: wrap; gap: 8px;
-      padding: 10px 16px; background: #f8f9ff;
-      border-bottom: 1px solid #dde3f0; font-size: 12px;
+    .report-header .label {
+      display: block;
+      font-family: var(--font-mono);
+      font-size: var(--fs-mini);
+      letter-spacing: 3px;
+      opacity: .55;
+      text-transform: uppercase;
+      margin-bottom: 4px;
     }
-    .meta-pill {
-      background: #fff; border: 1px solid #c5cae9;
-      border-radius: 20px; padding: 3px 10px; color: #444;
+
+    /* 章節分隔（§ HOLDINGS / § WATCHLIST） */
+    .section-divider {
+      font-family: var(--font-sans);
+      font-size: var(--fs-section);
+      font-weight: 700;
+      letter-spacing: 1px;
+      border-bottom: 1px solid var(--ink);
+      padding-bottom: var(--space-sm);
+      margin: var(--space-xl) 0 var(--space-lg);
     }
-    .badge-holding  { background: #e8f5e9; color: #2e7d32; border-color: #a5d6a7; }
-    .badge-watching { background: #e3f2fd; color: #1565c0; border-color: #90caf9; }
 
-    .analysis-wrap { padding: 16px; }
-    .no-analysis   { padding: 20px 16px; color: #999; font-style: italic; text-align: center; }
-
-    .analysis-wrap h3 {
-      font-size: 13px; font-weight: 700; color: #1a237e;
-      border-left: 4px solid #1a237e; padding: 6px 10px;
-      background: #e8eaf6; border-radius: 0 4px 4px 0;
-      margin: 18px 0 8px;
-    }
-    .analysis-wrap ul { padding-left: 18px; margin: 4px 0; }
-    .analysis-wrap li { margin: 4px 0; }
-    .analysis-wrap p  { margin: 6px 0; }
-
-    .key-point {
-      display: inline-block; color: #7c5e00; font-weight: 700;
-      background: #fff8e1; border-left: 3px solid #f9a825;
-      padding: 2px 8px; border-radius: 0 4px 4px 0; margin: 2px 0;
-    }
-    .support-level    { color: #1565c0; font-weight: 700; background: #e3f2fd; padding: 1px 6px; border-radius: 4px; }
-    .resistance-level { color: #c62828; font-weight: 700; background: #ffebee; padding: 1px 6px; border-radius: 4px; }
-    .target-price     { color: #2e7d32; font-weight: 700; background: #e8f5e9; padding: 1px 6px; border-radius: 4px; }
-    .stop-loss        { color: #b71c1c; font-weight: 700; background: #ffebee; padding: 1px 6px; border-radius: 4px; }
-    .short-term-title { color: #d84315; font-weight: 700; }
-    .mid-term-title   { color: #1565c0; font-weight: 700; }
-
-    .analysis-wrap table { width: 100%; border-collapse: collapse; font-size: 12px; margin: 8px 0; }
-    .analysis-wrap th { background: #e8eaf6; padding: 6px 8px; text-align: left; font-weight: 600; color: #333; }
-    .analysis-wrap td { padding: 5px 8px; border-bottom: 1px solid #f0f0f0; }
-    .bull { color: #e53935; font-weight: 600; }
-    .bear { color: #43a047; font-weight: 600; }
-
-    .recommend-section h3 { border-left-color: #e65100; background: #fff3e0; color: #e65100; }
-
-    /* 週報區塊（大盤週報 + 產業指標股） */
+    /* 週報區塊 */
     .weekly-section {
-      border: 1px solid #c5cae9; border-radius: 8px;
-      margin-bottom: 24px; overflow: hidden;
+      border: 1px solid var(--ink);
+      margin-bottom: var(--space-lg);
       page-break-inside: avoid;
     }
     .weekly-section-header {
-      background: #1a237e; color: #fff;
-      padding: 10px 16px; font-weight: 700; font-size: 14px;
+      background: var(--ink); color: var(--paper);
+      padding: var(--space-sm) var(--space-md);
+      font-weight: 700; font-size: 13px;
       display: flex; justify-content: space-between; align-items: center;
+      font-family: var(--font-mono);
+      letter-spacing: 1px;
     }
-    .weekly-section-header .range { font-weight: 400; font-size: 12px; opacity: .85; }
-    .weekly-section-body { padding: 14px 16px; font-size: 12.5px; line-height: 1.75; }
-    .weekly-section-body h3, .weekly-section-body h4 {
-      color: #1a237e; font-size: 13px; font-weight: 700; margin: 12px 0 6px;
-      border-left: 3px solid #1a237e; padding: 4px 8px; background: #e8eaf6;
-      border-radius: 0 4px 4px 0;
+    .weekly-section-header .range { font-weight: 400; font-size: var(--fs-mini); opacity: .7; }
+    .weekly-section-body {
+      padding: var(--space-md);
+      font-size: var(--fs-body);
+      line-height: 1.75;
+      background: #fff;
     }
-    .weekly-section-body ul { padding-left: 18px; margin: 4px 0; }
+    .weekly-section-body h3,
+    .weekly-section-body h4 {
+      color: var(--ink); font-size: 13px; font-weight: 700;
+      margin: var(--space-md) 0 var(--space-xs);
+      border-left: 3px solid var(--amber);
+      padding: var(--space-xs) var(--space-sm);
+      background: var(--amber-soft);
+    }
+    .weekly-section-body ul { padding-left: 18px; margin: var(--space-xs) 0; }
     .weekly-section-body li { margin: 3px 0; }
     .weekly-section-body p  { margin: 5px 0; }
 
-    .disclaimer {
-      background: #fff3e0; border: 1px solid #ffe0b2;
-      border-radius: 6px; padding: 10px 14px;
-      font-size: 11px; color: #e65100; margin-top: 24px;
+    /* 持股 / 觀察 區塊 */
+    .stock-block {
+      background: #fff;
+      border: 1px solid var(--ink);
+      margin-bottom: var(--space-lg);
+      page-break-inside: avoid;
+    }
+    .stock-block-header {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      padding: var(--space-md);
+      border-bottom: 1px solid var(--ink);
+    }
+    .stock-name-row {
+      display: flex; align-items: baseline; gap: var(--space-sm);
+    }
+    .stock-name {
+      font-family: var(--font-sans);
+      font-size: var(--fs-stock-name);
+      font-weight: 700;
+      line-height: 1.1;
+    }
+    .stock-symbol {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      opacity: .55;
+    }
+    .stock-price-row {
+      display: flex; align-items: baseline; gap: 10px;
+      margin-top: 5px;
+    }
+    .price-num {
+      font-family: var(--font-mono);
+      font-size: var(--fs-display);
+      font-weight: 700;
+      color: var(--ink);
+      letter-spacing: -1px;
+      line-height: 1;
+    }
+    .change {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .change.bull { color: var(--bull); }
+    .change.bear { color: var(--bear); }
+
+    .stock-meta-right {
+      text-align: right;
+      font-family: var(--font-mono);
+      font-size: var(--fs-mini);
+      opacity: .55;
+      line-height: 1.7;
+    }
+    .idx-tag { letter-spacing: 2px; }
+
+    .data-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0;
+      padding: var(--space-sm) var(--space-md);
+      background: var(--paper);
+      border-bottom: 1px dashed var(--ink);
+      font-family: var(--font-mono);
+      font-size: var(--fs-label);
+    }
+    .data-row .label {
+      opacity: .5;
+      letter-spacing: 1px;
+    }
+    .data-row strong {
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .data-row .bull { color: var(--bull); }
+    .data-row .bear { color: var(--bear); }
+    .data-row .amber { color: var(--amber); }
+    .data-row .muted { opacity: .5; }
+
+    .pills {
+      display: flex; flex-wrap: wrap; gap: 5px;
+      padding: var(--space-sm) var(--space-md);
+      background: var(--paper);
+      border-bottom: 1px solid var(--rule-soft);
+      font-family: var(--font-mono);
+      font-size: var(--fs-label);
+    }
+    .pill {
+      padding: 2px 7px;
+      letter-spacing: 0;
+    }
+    .pill .lbl { opacity: .6; letter-spacing: 1px; }
+    .pill-support { background: var(--support-soft); border-left: 3px solid var(--support); }
+    .pill-bull    { background: var(--bull-soft);    border-left: 3px solid var(--bull); }
+    .pill-amber   { background: var(--amber-soft);   border-left: 3px solid var(--amber); }
+    .pill-ink     { background: var(--ink); color: var(--paper); }
+    .pill-ink .lbl { opacity: .7; }
+    .pill-amber-outline { background: var(--paper); border: 1px solid var(--amber); }
+
+    /* AI 分析區塊（吃 token 統一控制） */
+    .analysis-wrap {
+      padding: var(--space-md);
+      font-family: var(--font-sans);
+      font-size: var(--fs-body);
+      line-height: 1.75;
+    }
+    .analysis-wrap h3,
+    .analysis-wrap h4 {
+      font-size: 13px; font-weight: 700;
+      border-left: 3px solid var(--amber);
+      padding: var(--space-xs) var(--space-sm);
+      background: var(--amber-soft);
+      margin: var(--space-md) 0 var(--space-xs);
+      color: var(--ink);
+    }
+    .analysis-wrap ul { padding-left: 18px; margin: var(--space-xs) 0; }
+    .analysis-wrap li { margin: 3px 0; }
+    .analysis-wrap p  { margin: 5px 0; }
+    .analysis-wrap table {
+      width: 100%; border-collapse: collapse; font-size: 10px; margin: var(--space-sm) 0;
+    }
+    .analysis-wrap th {
+      background: var(--paper); padding: 5px 7px; text-align: left;
+      font-weight: 700; border-bottom: 1px solid var(--ink);
+    }
+    .analysis-wrap td { padding: 4px 7px; border-bottom: 1px solid var(--rule-soft); }
+
+    /* AI 既有 class 對應 */
+    .analysis-wrap .key-point {
+      display: inline-block; color: var(--amber); font-weight: 700;
+      background: var(--amber-soft); border-left: 3px solid var(--amber);
+      padding: 2px 8px; margin: 2px 0;
+    }
+    .analysis-wrap .support-level    { color: var(--support); font-weight: 700; background: var(--support-soft); padding: 1px 6px; }
+    .analysis-wrap .resistance-level { color: var(--bull); font-weight: 700; background: var(--bull-soft); padding: 1px 6px; }
+    .analysis-wrap .target-price     { color: var(--amber); font-weight: 700; background: var(--amber-soft); padding: 1px 6px; }
+    .analysis-wrap .stop-loss        { color: var(--bull); font-weight: 700; background: var(--bull-soft); padding: 1px 6px; }
+    .analysis-wrap .short-term-title { color: var(--amber); font-weight: 700; }
+    .analysis-wrap .mid-term-title   { color: var(--support); font-weight: 700; }
+    .analysis-wrap .bull             { color: var(--bull); font-weight: 700; }
+    .analysis-wrap .bear             { color: var(--bear); font-weight: 700; }
+
+    .no-analysis {
+      padding: var(--space-lg) var(--space-md);
+      color: var(--ink);
+      opacity: .4;
+      font-style: italic;
+      text-align: center;
+      font-family: var(--font-mono);
+      font-size: 10px;
     }
 
+    .disclaimer {
+      background: var(--amber-soft);
+      border-left: 3px solid var(--amber);
+      padding: var(--space-md);
+      font-size: 10px;
+      color: var(--ink);
+      margin-top: var(--space-xl);
+      font-family: var(--font-sans);
+    }
+
+    /* 列印規則 */
+    @page {
+      size: A4;
+      margin: 18mm 14mm;
+      @bottom-right {
+        content: counter(page) " / " counter(pages);
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 9px;
+        color: #888;
+      }
+    }
     @media print {
       .print-toolbar { display: none !important; }
       .report-body   { padding-top: 0; }
-      .stock-block   { page-break-inside: avoid; }
+      body           { background: var(--paper); }
     }
   </style>
 </head>
@@ -137,14 +333,21 @@
 
 <div class="report-body">
   <div class="report-header">
-    <h1>📊 股海導航 — 持股分析報告</h1>
-    <p>{{ user_name }} ｜ 產生時間：{{ date_str }}（台灣時間）｜ 已持有 {{ holding_count }} 支 · 觀察中 {{ watching_count }} 支</p>
+    <div>
+      <span class="label">PORTFOLIO_BRIEF</span>
+      <h1>持股分析報告</h1>
+    </div>
+    <div class="meta">
+      {{ user_name }}<br>
+      {{ date_str }} (TW)<br>
+      hold {{ holding_count }} · watch {{ watching_count }}
+    </div>
   </div>
 
   {% if weekly and weekly.html_market %}
   <div class="weekly-section">
     <div class="weekly-section-header">
-      <span>🌏 大盤週報</span>
+      <span>§ MARKET · 大盤週報</span>
       <span class="range">{{ weekly_range }}</span>
     </div>
     <div class="weekly-section-body">
@@ -156,7 +359,7 @@
   {% if weekly and weekly.html_industry %}
   <div class="weekly-section">
     <div class="weekly-section-header">
-      <span>🏭 產業指標股</span>
+      <span>§ INDUSTRY · 產業指標股</span>
       <span class="range">{{ weekly_range }}</span>
     </div>
     <div class="weekly-section-body">
@@ -165,7 +368,15 @@
   </div>
   {% endif %}
 
-  {{ stocks_html | safe }}
+  {% if holdings_html %}
+  <div class="section-divider">§ HOLDINGS · 持股</div>
+  {{ holdings_html | safe }}
+  {% endif %}
+
+  {% if watching_html %}
+  <div class="section-divider">§ WATCHLIST · 觀察</div>
+  {{ watching_html | safe }}
+  {% endif %}
 
   <div class="disclaimer">
     ⚠️ 免責聲明：本報表由 AI 自動分析產生，所有分析與建議僅供學習參考，不構成實際投資建議。投資有風險，請自行評估後謹慎決策。
