@@ -159,12 +159,16 @@
       background: #fff;
       border: 1px solid var(--ink);
       margin-bottom: var(--space-lg);
-      page-break-inside: avoid;
+      /* page-break-inside: avoid 移除：analysis-wrap 超過一頁時 Chrome 仍會分頁，
+         但同時在前頁留下大整頁空白，導致 PDF 頁數暴增。
+         改為對各子區塊個別控制 break，讓 Chrome 自然分頁。 */
     }
     .stock-block-header {
       display: flex; justify-content: space-between; align-items: flex-start;
       padding: var(--space-md);
       border-bottom: 1px solid var(--ink);
+      break-inside: avoid;
+      break-after: avoid;
     }
     .stock-name-row {
       display: flex; align-items: baseline; gap: var(--space-sm);
@@ -218,6 +222,8 @@
       border-bottom: 1px dashed var(--ink);
       font-family: var(--font-mono);
       font-size: var(--fs-label);
+      break-inside: avoid;
+      break-after: avoid;
     }
     .data-row .label {
       opacity: .5;
@@ -239,6 +245,8 @@
       border-bottom: 1px solid var(--rule-soft);
       font-family: var(--font-mono);
       font-size: var(--fs-label);
+      break-inside: avoid;
+      break-after: avoid;  /* 關鍵：避免在 pills 與 analysis-wrap 之間插入分頁 */
     }
     .pill {
       padding: 2px 7px;
@@ -278,6 +286,7 @@
       margin: var(--space-sm) 0;
       font-family: var(--font-mono);
       font-variant-numeric: tabular-nums;
+      break-inside: avoid;
     }
     .analysis-wrap th,
     .analysis-wrap td {
