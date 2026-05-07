@@ -1,5 +1,5 @@
 # 投資建議書系統 — 重構計畫
-> 建立日期：2026-04-30｜更新日期：2026-05-03｜基於兩次訪談決策 + 實作後討論補充
+> 建立日期：2026-04-30｜更新日期：2026-05-07｜基於兩次訪談決策 + 實作後討論補充
 
 ---
 
@@ -634,6 +634,46 @@ UNIQUE (user_id, email) 防止同一 email 重複入庫。
 - PDF 太大（>10MB）：先 client-side 限制每次最多 20 支股票（dashboard 本來就 1-15 支左右，極端情況才會超）
 - SMTP 失敗：toast 顯示失敗的收件人 email
 - 朋友未回信：通訊錄保留無妨，使用者自己手動移除（v1 不做「移除聯絡人」UI，下版加）
+
+---
+
+## 十五、K線型態識別 + 平日新聞報表（2026-05-07）
+
+### 功能概述
+
+**K線型態 Rule-based 偵測（`candlestick.py`）**
+
+- `detect_from_bars(daily_bars)` 將 enriched data 格式轉 DataFrame 後呼叫 `detect_patterns()`
+- 偵測型態清單（單K：錘子/吊人/射擊之星/倒錘子線/墓碑十字/十字星/大陽線/大陰線；雙K：多/空頭吞噬/烏雲蓋頂/曙光初現；三K：早晨之星/黃昏之星/三白兵/三黑鴉；多K：三山頂/三川底）
+- 跳空（gap_up/gap_down）優先判斷
+- 每個 pattern 含 `name`, `type`, `desc`, `strength`, `candle_count`
+- `_MULTI_CANDLE` 為模組層級常數（不在函式內重建）
+
+**批次儲存型態歷史（`run_daily_report.py`）**
+
+- `_save_patterns(db, symbol, detected_patterns, close_price, today)`
+  - 預取既有 pattern_name 為 set，避免 N+1，使用 UniqueConstraint 防重複
+- `_backfill_patterns(db, symbol, daily_bars, today)`
+  - 回填 return_3d/5d/10d（bisect.bisect_right，O(log N)）
+  - 條件：detected_date <= today - 3天 且 return_10d IS NULL
+
+**DB 新資料表**
+
+| 表名 | 用途 |
+|------|------|
+| `daily_market_summary` | 每日財經新聞摘要 + 明日方向 HTML，PK = summary_date（TW 時區）|
+| `pattern_history` | K線型態偵測歷史，含 return_3/5/10d 事後回填，UQ (symbol, detected_date, pattern_name) |
+
+**平日/週末報表切換（`app.py` + `print_report.html`）**
+
+- `now_tw.weekday() >= 5`（週六=5/週日=6）→ 顯示最新週報
+- 平日 → 查 `DailyMarketSummary.summary_date = now_tw.date()` → 顯示「§ NEWS · 今日財經新聞」
+- 儲存時用 `datetime.now(TW).date()`（非 `date.today()` UTC），與查詢側時區一致
+
+### 成本影響
+
+- 每日批次多1次 `analyze_daily_news()` 呼叫（max_tokens=600）≈ +$0.01/日
+- `analyze_market_only()` 日K從20→30根，token 略增，估計 +5-8%
 
 ---
 

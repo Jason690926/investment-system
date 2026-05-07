@@ -6,49 +6,34 @@
 - **架構決策**：討論完方案後，先更新 `plan.md`，再開始寫程式
 - `plan.md` 只在需要查架構細節時才讀（節省 token）
 
-## 當前進度（2026-05-04 收工）
+## 當前進度（2026-05-07 收工）
 
 **所在週次：週5（進行中）**
 
-**狀態：本次 10 個 commit 已 push origin/main（HEAD = `0ff235e`）**
+**狀態：HEAD = `c4e07eb`（已 push origin/main）**
 
-**本次（2026-05-04）進度 — 持股 PDF 報表大改版：**
-- ✅ 視覺改版：終端機印刷風（IBM Plex Mono/Sans + Noto Sans TC + 象牙紙 + 琥珀強調）
-  - 脫離 Material Indigo 範本感、台股慣例紅漲綠跌、設計 token 抽到 `:root`
-  - 章節結構：封面 → 大盤週報 → 產業指標股 → § HOLDINGS · 持股 → § WATCHLIST · 觀察 → 免責
-- ✅ 修排序 bug：原本 `order_by(created_at)`，改成走 `display_order`（與 dashboard 一致）
-  - 注意：`get_user_stocks` 回 dict 不是 ORM；route 直接 query Stock 並複製 service 的排序邏輯
-- ✅ 新增當日收盤 + 漲跌百分比：批次撈 `QuoteCache`（不打 Yahoo）
-- ✅ 拆 holdings vs watchlist 兩節：持有版多顯示 COST/QTY/P/L/RISK 數據列
-- ✅ `_strip_inline_styles` render-time 防禦（防 DB 既有殘留蓋過 token）
-- ✅ AI markdown 渲染：mistune 進 pipeline（`### → <h3>`、`- → <ul>`、`**bold**`）
-- ✅ K 線表格緊縮：shrink-to-fit、tabular-nums、緊 padding、數字欄右對齊
-- ✅ key-point 改 block-level callout（▶ 前綴、獨立橫條，不再 inline 半截話）
-- ✅ 螢幕版加 `max-width:820px` 置中（瀏覽器預覽不再撐到 1920px；PDF 不受影響）
-- ✅ pytest 骨架 + 28 cases 單元測試（`tests/test_print_report.py`）
-- 📄 spec：`docs/superpowers/specs/2026-05-04-print-report-redesign-design.md`
-- 📄 plan：`docs/superpowers/plans/2026-05-04-print-report-redesign.md`
+**本次（2026-05-07）進度 — K線型態識別 + 平日新聞報表：**
+- ✅ `candlestick.py`：新增 `detect_from_bars()`（轉換 enriched data → DataFrame）；`_MULTI_CANDLE` 移至模組層級
+- ✅ `ai_analyzer_v2.py`：`analyze_market_only()` 加入 rule-based 型態偵測（最多5個）並傳入 AI prompt；新增 `analyze_daily_news()` 產生今日新聞 + 明日方向 HTML；日K從20根擴至30根
+- ✅ `models.py`：新增 `DailyMarketSummary`（每日財經新聞摘要）、`PatternHistory`（K線型態歷史 + return_3/5/10d 回填）
+- ✅ `run_daily_report.py`：批次儲存型態至 `PatternHistory`；回填 return_3/5/10d（bisect O(log N)）；每日財經新聞摘要以 TW 時區存檔（修 TZ mismatch bug）
+- ✅ `app.py` + `print_report.html`：週末顯示週報，平日顯示「§ NEWS · 今日財經新聞」
+- ✅ 修 Windows cp950 emoji print 崩潰（✅/⚠ → [OK]/[!]）
+- ✅ 批次成功跑完（16支全分析，新聞摘要已入 DB）
 
 **先前未解（仍待）：**
-- ⏳ 分享 PDF 寄送 timeout：第二輪 `SSL/465: timed out`（Render → Gmail SMTP 不穩）
-  - 已討論方案：A. 換 Resend HTTP API（推薦） / B. Render Starter / C. 加 timeout
+- ⏳ 分享 PDF 寄送 timeout：`SSL/465: timed out`（Render → Gmail SMTP 不穩）
+  - 決策：暫緩，改手動存 PDF 轉傳給親友
+  - 已討論方案供日後參考：A. 換 Resend HTTP API（推薦） / B. Render Starter / C. 加 timeout
 
 **下一步（按優先順序）：**
-1. **🔴 修 PDF 寄送 timeout**：A/B/C 擇一（前次討論結論未動工）
-2. **K 線多日型態識別（第二輪 PDF 改版，會燒 token）**：
-   - 改 prompt 讓 AI 識別十字星 / 黃昏之星 / 三白兵 / 烏雲罩頂 / 看漲/看跌吞噬 / 早晨之星
-   - **估算：3-4 小時工時 + $13-15 token**（試點 5 支 ~$2-3 + 全跑 18 支 ~$11）
-   - 流程：(a) 設計 + 列型態清單 30 分（$0）→ (b) 改 prompt + 本機驗證 1-2 hr（$0）→ (c) 試點 3-5 支 → (d) 看 PDF 微調（每輪 +$2-3）→ (e) 全跑 18 支 ~$11
-   - 風險：AI 識別精度（臨界 case 可能誤判）、prompt 變長可能擠到 max_tokens（之前週報空白 bug 那種風險）
-   - 開工建議：先做 (a)+(b) 0 成本，看本機推演滿不滿意再決定要不要燒 token 試點
-3. 重新跑一次週報驗證 commit `c95d0dd` 修法（會燒 ~$0.20）
-4. 測試完成後清理遺留（測試中，勿提前修改）
+1. **測試 `/print-report`**：週四平日邏輯 → 確認「§ NEWS · 今日財經新聞」顯示正常
+2. **K線型態歷史累積**：目前第一批資料已入 DB，待 1-2 個月後查看 return_3/5/10d 回填結果
+3. 測試完成後清理遺留
    - 還原時間鎖 `< 0` → `< 15`、冷卻 `< 0` → `< 4 * 3600`（`app.py`）
    - 移除「🗑 清快取」按鈕（`dashboard.html`、`dashboard.js`、`app.py`）
+4. 重新跑一次週報驗證 commit `c95d0dd` 修法（會燒 ~$0.20）
 5. （未做）「移除聯絡人」UI — v1 沒做，要刪要進 DB
-
-**待確認：**
-- 財經新聞來源（週報用；目前週報手動所以非急迫）
 
 ## 費用速查
 

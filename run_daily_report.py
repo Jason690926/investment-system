@@ -100,7 +100,7 @@ def is_cached_today(db, symbol: str) -> bool:
 def cache_market_analysis(db, symbol: str, name: str) -> bool:
     enriched = get_full_stock_data(symbol)
     if enriched is None:
-        print(f"[batch] ⚠ 無法取得 {symbol} 資料，跳過")
+        print(f"[batch] [!] 無法取得 {symbol} 資料，跳過")
         return False
 
     today = date.today()
@@ -216,9 +216,9 @@ def main():
                 html_news = analyze_daily_news(news)
                 db.add(DailyMarketSummary(summary_date=today, html_content=html_news))
                 db.commit()
-                print("[batch] ✅ 今日財經新聞摘要已儲存")
+                print("[batch] [OK] 今日財經新聞摘要已儲存")
             except Exception as e:
-                print(f"[batch] ⚠ 財經新聞摘要產生失敗: {e}")
+                print(f"[batch] [!] 財經新聞摘要產生失敗: {e}")
         else:
             print("[batch] 今日財經新聞摘要已存在，跳過")
 
