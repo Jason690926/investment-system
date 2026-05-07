@@ -355,6 +355,27 @@ def label_bars(bars: list) -> dict:
     return result
 
 
+def calc_pnf_target(bars: list, lookback: int = 12) -> float | None:
+    """P&F 水平計數概念目標（等幅量度 Measured Move）
+    公式：target = base_high + (base_high - base_low)
+    base = 最近 lookback 根K棒代表的整理箱體。
+    lookback=12 週K ≈ 3個月整理區；lookback=20 日K ≈ 1個月整理區（備援）。
+    """
+    if not bars or len(bars) < 5:
+        return None
+    try:
+        recent    = bars[-min(lookback, len(bars)):]
+        base_high = max(float(b['high']) for b in recent)
+        base_low  = min(float(b['low'])  for b in recent)
+        if base_high <= base_low:
+            return None
+        target = base_high + (base_high - base_low)
+        return round(target) if target >= 100 else round(target, 1)
+    except Exception as e:
+        print(f'[candlestick] calc_pnf_target 失敗: {e}')
+        return None
+
+
 def get_pattern_summary(patterns):
     if not patterns:
         return '無明顯K線型態', 'neutral'
