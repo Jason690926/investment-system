@@ -5,6 +5,7 @@ GitHub Actions 每日 14:30（UTC 06:30）執行。
 2. 逐支分析：今日快取存在則跳過，否則呼叫 AI（第一段：客觀市場分析）
 3. 通知有開啟 email_notify 的用戶
 """
+import bisect
 import os
 import time
 import smtplib
@@ -18,11 +19,65 @@ load_dotenv()
 
 from sqlalchemy import func
 from modules.database import SessionLocal, init_db
-from modules.models import User, Stock, StockAnalysis
+from modules.models import User, Stock, StockAnalysis, PatternHistory, DailyMarketSummary
 from modules.data_enricher import get_full_stock_data
-from modules.ai_analyzer_v2 import analyze_market_only
+from modules.ai_analyzer_v2 import analyze_market_only, analyze_daily_news
+from modules.data_fetcher import get_tw_news_rss
 
 TW = timezone(timedelta(hours=8))
+
+
+def _save_patterns(db, symbol: str, detected_patterns: list, close_price, today: date):
+    existing_names = {
+        row.pattern_name
+        for row in db.query(PatternHistory.pattern_name).filter_by(
+            symbol=symbol, detected_date=today
+        ).all()
+    }
+    for p in detected_patterns:
+        if p['name'] in existing_names:
+            continue
+        db.add(PatternHistory(
+            symbol=symbol,
+            detected_date=today,
+            pattern_name=p['name'],
+            direction=p['type'],
+            candle_count=p.get('candle_count', 1),
+            close_price=float(close_price) if close_price else None,
+        ))
+    db.commit()
+
+
+def _backfill_patterns(db, symbol: str, daily_bars: list, today: date):
+    pending = db.query(PatternHistory).filter(
+        PatternHistory.symbol == symbol,
+        PatternHistory.return_10d.is_(None),
+        PatternHistory.detected_date <= today - timedelta(days=3),
+    ).all()
+    if not pending:
+        return
+
+    price_by_date = {}
+    for b in daily_bars:
+        try:
+            price_by_date[date.fromisoformat(b['date'])] = float(b['close'])
+        except Exception:
+            pass
+    sorted_dates = sorted(price_by_date.keys())
+
+    for p in pending:
+        idx = bisect.bisect_right(sorted_dates, p.detected_date)
+        future = sorted_dates[idx:]
+        base = float(p.close_price) if p.close_price else None
+        if not base:
+            continue
+        if p.return_3d is None and len(future) >= 3:
+            p.return_3d = round((price_by_date[future[2]] - base) / base * 100, 2)
+        if p.return_5d is None and len(future) >= 5:
+            p.return_5d = round((price_by_date[future[4]] - base) / base * 100, 2)
+        if p.return_10d is None and len(future) >= 10:
+            p.return_10d = round((price_by_date[future[9]] - base) / base * 100, 2)
+    db.commit()
 
 
 def get_symbols_by_overlap(db) -> list[tuple[str, str, int]]:
@@ -48,9 +103,11 @@ def cache_market_analysis(db, symbol: str, name: str) -> bool:
         print(f"[batch] ⚠ 無法取得 {symbol} 資料，跳過")
         return False
 
-    result = analyze_market_only(name=name, symbol=symbol, enriched_data=enriched)
-
     today = date.today()
+    daily_bars = enriched.get('daily_bars', [])
+    _backfill_patterns(db, symbol, daily_bars, today)
+
+    result = analyze_market_only(name=name, symbol=symbol, enriched_data=enriched)
     existing = db.query(StockAnalysis).filter_by(
         symbol=symbol, analysis_date=today, analysis_type='daily'
     ).first()
@@ -74,6 +131,11 @@ def cache_market_analysis(db, symbol: str, name: str) -> bool:
             wyckoff_phase=result['wyckoff_phase'],
         ))
     db.commit()
+
+    detected = result.get('detected_patterns', [])
+    if detected:
+        _save_patterns(db, symbol, detected, enriched.get('price'), today)
+
     return True
 
 
@@ -143,6 +205,22 @@ def main():
                 time.sleep(3)
 
         print(f"[batch] 完成：分析 {analyzed} 支，快取命中 {skipped} 支，共 {total} 支")
+
+        # 每日財經新聞摘要（平日印表報表用）
+        today = datetime.now(TW).date()
+        news_exists = db.query(DailyMarketSummary).filter_by(summary_date=today).first()
+        if not news_exists:
+            print("[batch] 產生今日財經新聞摘要...")
+            try:
+                news = get_tw_news_rss(15)
+                html_news = analyze_daily_news(news)
+                db.add(DailyMarketSummary(summary_date=today, html_content=html_news))
+                db.commit()
+                print("[batch] ✅ 今日財經新聞摘要已儲存")
+            except Exception as e:
+                print(f"[batch] ⚠ 財經新聞摘要產生失敗: {e}")
+        else:
+            print("[batch] 今日財經新聞摘要已存在，跳過")
 
         # Email 通知
         app_url = os.getenv('APP_URL', 'https://investment-system-lxq5.onrender.com')

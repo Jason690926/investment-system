@@ -161,3 +161,35 @@ class WeeklyReport(Base):
     __table_args__ = (
         UniqueConstraint('week_start', name='uq_weekly_report'),
     )
+
+
+class DailyMarketSummary(Base):
+    """每日財經新聞摘要 + 明日方向，平日印表報表用"""
+    __tablename__ = 'daily_market_summary'
+
+    id           = Column(Integer, primary_key=True)
+    summary_date = Column(Date, nullable=False, unique=True)
+    html_content = Column(Text)   # 今日重大財經新聞 + 明日需關注方向 HTML
+    generated_at = Column(DateTime, default=datetime.utcnow)
+
+
+class PatternHistory(Base):
+    """K線型態歷史紀錄，含事後漲跌回填"""
+    __tablename__ = 'pattern_history'
+
+    id            = Column(Integer, primary_key=True)
+    symbol        = Column(String(32), nullable=False)
+    detected_date = Column(Date, nullable=False)
+    pattern_name  = Column(String(64), nullable=False)
+    direction     = Column(String(16))   # 'bullish', 'bearish', 'neutral'
+    candle_count  = Column(Integer)      # 型態涉及K棒數
+    close_price   = Column(Numeric(10, 2))
+    return_3d     = Column(Numeric(6, 2))   # 3交易日後漲跌%，事後回填
+    return_5d     = Column(Numeric(6, 2))
+    return_10d    = Column(Numeric(6, 2))
+    created_at    = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint('symbol', 'detected_date', 'pattern_name',
+                         name='uq_pattern_history'),
+    )

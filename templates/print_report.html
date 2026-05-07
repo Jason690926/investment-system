@@ -397,6 +397,16 @@
       {{ weekly.html_market | safe }}
     </div>
   </div>
+  {% elif daily_news and daily_news.html_content %}
+  <div class="weekly-section">
+    <div class="weekly-section-header">
+      <span>§ NEWS · 今日財經新聞</span>
+      <span class="range">{{ date_str[:10] }}</span>
+    </div>
+    <div class="weekly-section-body">
+      {{ daily_news.html_content | safe }}
+    </div>
+  </div>
   {% endif %}
 
   {% if weekly and weekly.html_industry %}

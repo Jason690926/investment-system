@@ -745,7 +745,7 @@ def api_remove_stock():
 @app.route('/print-report')
 @login_required
 def print_report():
-    from modules.models import Stock, StockAnalysis, WeeklyReport, QuoteCache
+    from modules.models import Stock, StockAnalysis, WeeklyReport, QuoteCache, DailyMarketSummary
     from sqlalchemy import func, case
     from datetime import datetime, timezone, timedelta, date
     TW = timezone(timedelta(hours=8))
@@ -764,10 +764,20 @@ def print_report():
         if not stocks:
             return '尚無持股資料', 404
 
-        # 最新一份週報（跨用戶共用）
-        weekly = db.query(WeeklyReport).order_by(WeeklyReport.week_start.desc()).first()
-        weekly_range = (f"{weekly.week_start.strftime('%Y/%m/%d')} ~ "
-                        f"{weekly.week_end.strftime('%Y/%m/%d')}") if weekly else ''
+        # 週末顯示週報，平日顯示每日新聞摘要
+        now_tw = datetime.now(TW)
+        is_weekend = now_tw.weekday() >= 5
+        if is_weekend:
+            weekly = db.query(WeeklyReport).order_by(WeeklyReport.week_start.desc()).first()
+            weekly_range = (f"{weekly.week_start.strftime('%Y/%m/%d')} ~ "
+                            f"{weekly.week_end.strftime('%Y/%m/%d')}") if weekly else ''
+            daily_news = None
+        else:
+            weekly = None
+            weekly_range = ''
+            daily_news = db.query(DailyMarketSummary).filter_by(
+                summary_date=now_tw.date()
+            ).first()
 
         symbols = [s.symbol for s in stocks]
 
@@ -805,7 +815,6 @@ def print_report():
         holdings_html = _render_stock_blocks(holdings, analyses, quotes, mode='holding')
         watching_html = _render_stock_blocks(watching, analyses, quotes, mode='watching')
 
-        now_tw = datetime.now(TW)
         return render_template(
             'print_report.html',
             date_str=now_tw.strftime('%Y/%m/%d %H:%M'),
@@ -816,6 +825,7 @@ def print_report():
             watching_html=watching_html,
             weekly=weekly,
             weekly_range=weekly_range,
+            daily_news=daily_news,
         )
     finally:
         db.close()

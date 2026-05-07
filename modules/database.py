@@ -34,6 +34,6 @@ def get_db():
         db.close()
 
 def init_db():
-    from modules.models import User, Stock, Trade, StockAnalysis, MarketDataCache, WeeklyReport
+    from modules.models import User, Stock, Trade, StockAnalysis, MarketDataCache, WeeklyReport, DailyMarketSummary, PatternHistory
     Base.metadata.create_all(bind=engine)
     print("[DB] 資料庫初始化完成")

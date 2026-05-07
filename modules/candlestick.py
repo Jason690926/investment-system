@@ -1,6 +1,12 @@
 import pandas as pd
 import numpy as np
 
+_MULTI_CANDLE = {
+    '多頭吞噬': 2, '空頭吞噬': 2, '烏雲蓋頂': 2, '曙光初現': 2,
+    '早晨之星': 3, '黃昏之星': 3, '三白兵': 3, '三黑鴉': 3,
+    '三山頂（酒田）': 10, '三川底（酒田）': 10,
+}
+
 def detect_patterns(hist):
     """
     偵測K線型態，回傳發現的型態清單
@@ -281,7 +287,27 @@ def detect_patterns(hist):
                 'strength': 'strong'
             })
 
+    for p in patterns:
+        p['candle_count'] = _MULTI_CANDLE.get(p['name'], 1)
     return patterns
+
+
+def detect_from_bars(daily_bars: list) -> list:
+    """將 data_enricher 格式的 daily_bars 轉換後呼叫 detect_patterns()"""
+    if not daily_bars or len(daily_bars) < 5:
+        return []
+    try:
+        df = pd.DataFrame([{
+            'Open':   float(b['open']),
+            'High':   float(b['high']),
+            'Low':    float(b['low']),
+            'Close':  float(b['close']),
+            'Volume': float(b.get('volume_zhang', 0)),
+        } for b in daily_bars])
+        return detect_patterns(df)
+    except Exception as e:
+        print(f'[candlestick] detect_from_bars 失敗: {e}')
+        return []
 
 
 def get_pattern_summary(patterns):

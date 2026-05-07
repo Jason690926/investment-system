@@ -9,6 +9,7 @@ import re
 import time
 import anthropic
 from dotenv import load_dotenv
+from modules.candlestick import detect_from_bars
 
 load_dotenv()
 
@@ -312,6 +313,49 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
     return result
 
 
+# ── 每日財經新聞摘要 + 明日方向 ────────────────────────────────
+
+def analyze_daily_news(news_list: list) -> str:
+    """
+    今日重大財經新聞摘要 + 明日需關注方向。
+    供平日印表報表頂部替代週報區塊使用。
+    """
+    from datetime import datetime, timezone, timedelta
+    TW = timezone(timedelta(hours=8))
+    now_tw = datetime.now(TW)
+    today = now_tw.strftime('%Y/%m/%d')
+    tomorrow = (now_tw + timedelta(days=1)).strftime('%m/%d')
+
+    news_text = '\n'.join([
+        f"- {n['title']} （{n.get('source', '')}）"
+        for n in (news_list or [])[:15]
+    ]) or '今日無財經新聞資料'
+
+    prompt = f"""你是台股財經分析師。根據以下今日財經新聞標題，輸出兩個區塊。
+分析日期：{today}
+
+【今日財經新聞標題】
+{news_text}
+
+請用繁體中文純 HTML 格式輸出：
+
+<h3>今日重大財經新聞</h3>
+挑選 3-5 條最重要的新聞，每條一句話說明對台股的影響方向。
+<ul><li>...</li></ul>
+
+<h3>{tomorrow} 明日需關注</h3>
+根據今日新聞，列出明日 2-3 個具體關注點，包含可能受影響族群、關鍵價位或需驗證的條件。
+<ul><li>...</li></ul>
+
+輸出格式鐵律：
+- 只輸出純 HTML 片段，禁止 <head>/<style>/<html>/<body>
+- 禁止 markdown 語法與 ``` 代碼塊
+- 每條 bullet 不超過 30 字
+- 若無法判斷影響，說明「需觀察」而非憑空杜撰"""
+
+    return _clean_html_output(_generate(prompt, max_tokens=600))
+
+
 # ── 第一段：客觀市場分析（跨用戶共用快取）──────────────────────
 
 def analyze_market_only(
@@ -339,12 +383,22 @@ def analyze_market_only(
 
     monthly_text = _fmt_bars(enriched_data.get('monthly_bars', []), "月K", 6)
     weekly_text  = _fmt_bars(enriched_data.get('weekly_bars',  []), "週K", 8)
-    daily_text   = _fmt_bars(enriched_data.get('daily_bars',   []), "日K", 20)
+    daily_text   = _fmt_bars(enriched_data.get('daily_bars',   []), "日K", 30)
 
     news_text = (
         '\n'.join([f"- {n['title']}" for n in (news_list or [])[:5]])
         or '暫無相關新聞'
     )
+
+    detected_patterns = detect_from_bars(enriched_data.get('daily_bars', []))
+    _header = "【Rule-based K線型態偵測結果】\n"
+    if detected_patterns:
+        _body = '\n'.join(f"- {p['name']}（{p['type']}）：{p['desc']}" for p in detected_patterns[:5])
+        _footer = "（AI 請確認以上偵測並補充判斷，含三山/三川等中期結構）"
+    else:
+        _body = "- 近期無明顯短期型態"
+        _footer = "（AI 請自行從30根K棒資料判斷是否有中期結構型態）"
+    pattern_block = f"{_header}{_body}\n{_footer}"
 
     static_block = f"""你是融合三大宗師智慧的台股分析師。分析日期：{today}
 
@@ -435,6 +489,8 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
 
 {daily_text}
 
+{pattern_block}
+
 【近期相關新聞】
 {news_text}"""
 
@@ -447,11 +503,12 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
     )
 
     result = {
-        'html':          _clean_html_output(raw),
-        'risk_pct':      50,
-        'support':       None,
-        'resistance':    None,
-        'target_pnf':    None,
+        'html':              _clean_html_output(raw),
+        'risk_pct':          50,
+        'support':           None,
+        'resistance':        None,
+        'target_pnf':        None,
+        'detected_patterns': detected_patterns,
         'wyckoff_phase': '未知',
     }
     try:
