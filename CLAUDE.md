@@ -10,9 +10,9 @@
 
 **所在週次：週5（進行中）**
 
-**狀態：HEAD = `61db043`（已 push origin/main）**
+**狀態：HEAD = `e0c67f9`（已 push origin/main）**
 
-**本次（2026-05-07）進度 — 報表三大 Bug 修復 + PDF 空白 Bug 修復：**
+**本次（2026-05-07）進度 — 報表三大 Bug 修復 + PDF 空白 Bug 修復 + P&F 計算修正：**
 
 **Bug 1 & 2（財經新聞引用錯誤大盤數值）**
 - ✅ `data_fetcher.py`：`get_tw_news_rss()` 加 pubDate 48 小時過濾，排除舊文章混入（根因：無日期篩選導致 Google News 回傳歷史舊文，如「台股破3萬點」「大漲1778點」）
@@ -30,13 +30,23 @@
   - 根因：analysis-wrap 超過一頁時 Chrome 仍分頁，但先把整塊推到下一頁，前頁留下大整頁空白
   - 修法：對各子區塊個別控制 — `.stock-block-header` / `.data-row` / `.pills` 加 `break-inside: avoid` + `break-after: avoid`，讓 analysis 緊接 pills 自然展開；`.analysis-wrap table` 加 `break-inside: avoid` 防 K棒表格被切斷
 
+**Bug 5（P&F 概念目標 AI 自行估算，無固定公式）**
+- ✅ 根因：`TARGET_PNF:` 完全由 AI 自由輸出，每次結果不同，HTML span 與結構化標記可能不一致
+- ✅ `candlestick.py`：新增 `calc_pnf_target(bars, lookback=12) -> float | None`，公式 = `base_high + (base_high - base_low)`（等幅量度），優先用週K（12根≈3個月），備援日K（20根）
+- ✅ `ai_analyzer_v2.py`（`analyze_market_only` + `analyze_stock_three_masters`）：
+  - 移除 `TARGET_PNF:` 結構化標記（不再需要 AI 輸出）
+  - dynamic_block 注入程式計算值 + 鐵律「禁止更改」
+  - result dict 直接用 `_pnf`，不再解析 AI 輸出
+- ✅ 驗證：base_high=250, base_low=175 → 目標 325（與手算一致）
+- 注意：**支撐壓力維持 AI 推斷**（從真實 OHLCV 推斷，非純幻想；支撐壓力本身主觀，AI 推斷可接受）
+
 **先前未解（仍待）：**
 - ⏳ 分享 PDF 寄送 timeout：`SSL/465: timed out`（Render → Gmail SMTP 不穩）
   - 決策：暫緩，改手動存 PDF 轉傳給親友
   - 已討論方案供日後參考：A. 換 Resend HTTP API（推薦） / B. Render Starter / C. 加 timeout
 
 **下一步（按優先順序）：**
-1. **明日觀察報表**：確認財經新聞不再出現錯誤大盤數值；K線型態欄顯示程式計算標籤；PDF 空白已消除
+1. **明日觀察報表**：確認財經新聞不再出現錯誤大盤數值；K線型態欄顯示程式計算標籤；PDF 空白已消除；P&F目標為程式計算值
 2. **K線型態歷史累積**：目前第一批資料已入 DB，待 1-2 個月後查看 return_3/5/10d 回填結果
 3. 清理遺留
    - 還原時間鎖 `< 0` → `< 15`、冷卻 `< 0` → `< 4 * 3600`（`app.py`）
