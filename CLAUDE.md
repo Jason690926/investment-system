@@ -10,16 +10,20 @@
 
 **所在週次：週5（進行中）**
 
-**狀態：HEAD = `c4e07eb`（已 push origin/main）**
+**狀態：HEAD = `0cc9611`（已 push origin/main）**
 
-**本次（2026-05-07）進度 — K線型態識別 + 平日新聞報表：**
-- ✅ `candlestick.py`：新增 `detect_from_bars()`（轉換 enriched data → DataFrame）；`_MULTI_CANDLE` 移至模組層級
-- ✅ `ai_analyzer_v2.py`：`analyze_market_only()` 加入 rule-based 型態偵測（最多5個）並傳入 AI prompt；新增 `analyze_daily_news()` 產生今日新聞 + 明日方向 HTML；日K從20根擴至30根
-- ✅ `models.py`：新增 `DailyMarketSummary`（每日財經新聞摘要）、`PatternHistory`（K線型態歷史 + return_3/5/10d 回填）
-- ✅ `run_daily_report.py`：批次儲存型態至 `PatternHistory`；回填 return_3/5/10d（bisect O(log N)）；每日財經新聞摘要以 TW 時區存檔（修 TZ mismatch bug）
-- ✅ `app.py` + `print_report.html`：週末顯示週報，平日顯示「§ NEWS · 今日財經新聞」
-- ✅ 修 Windows cp950 emoji print 崩潰（✅/⚠ → [OK]/[!]）
-- ✅ 批次成功跑完（16支全分析，新聞摘要已入 DB）
+**本次（2026-05-07）進度 — 報表三大 Bug 修復：**
+
+**Bug 1 & 2（財經新聞引用錯誤大盤數值）**
+- ✅ `data_fetcher.py`：`get_tw_news_rss()` 加 pubDate 48 小時過濾，排除舊文章混入（根因：無日期篩選導致 Google News 回傳歷史舊文，如「台股破3萬點」「大漲1778點」）
+- ✅ `ai_analyzer_v2.py`：`analyze_daily_news()` 新增 `twii_price` / `twii_change_pct` 參數，注入 prompt 並加鐵律「若提及大盤點位必須使用此數值，嚴禁訓練資料歷史數值」
+- ✅ `run_daily_report.py`：呼叫 `get_global_markets()` 取 TWII 今日收盤與漲跌幅，傳入 `analyze_daily_news()`
+
+**Bug 3（K線型態 AI 自行命名錯誤）**
+- ✅ `candlestick.py`：新增 `label_bars(bars) -> dict`，對每根 K 棒以數學公式計算型態標籤（`{date: 型態名稱}`），日K/週K/月K 三個時間框架均適用
+- ✅ `ai_analyzer_v2.py`：`_fmt_bars()` 加 `pattern_labels` 參數，每根K棒後附加 `▶大陰線` 等程式計算標籤；`analyze_market_only()`、`analyze_stock_three_masters()`、`analyze_taiwan_market_v2()`、`analyze_weekly_taiwan_v2()` 全部套用
+- ✅ 所有分析 prompt 加鐵律：「▶型態名稱 為程式精確計算，禁止更改，只解讀含意」
+- ✅ 驗證：晶心科 2026/05/06 → `▶大陰線`（正確）、2026/05/07 → `▶陽線(11%)`（正確）
 
 **先前未解（仍待）：**
 - ⏳ 分享 PDF 寄送 timeout：`SSL/465: timed out`（Render → Gmail SMTP 不穩）
@@ -27,9 +31,9 @@
   - 已討論方案供日後參考：A. 換 Resend HTTP API（推薦） / B. Render Starter / C. 加 timeout
 
 **下一步（按優先順序）：**
-1. **測試 `/print-report`**：週四平日邏輯 → 確認「§ NEWS · 今日財經新聞」顯示正常
+1. **明日觀察報表**：確認財經新聞不再出現錯誤大盤數值；K線型態欄顯示程式計算標籤
 2. **K線型態歷史累積**：目前第一批資料已入 DB，待 1-2 個月後查看 return_3/5/10d 回填結果
-3. 測試完成後清理遺留
+3. 清理遺留
    - 還原時間鎖 `< 0` → `< 15`、冷卻 `< 0` → `< 4 * 3600`（`app.py`）
    - 移除「🗑 清快取」按鈕（`dashboard.html`、`dashboard.js`、`app.py`）
 4. 重新跑一次週報驗證 commit `c95d0dd` 修法（會燒 ~$0.20）
