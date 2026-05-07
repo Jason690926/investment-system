@@ -9,7 +9,7 @@ import re
 import time
 import anthropic
 from dotenv import load_dotenv
-from modules.candlestick import detect_from_bars
+from modules.candlestick import detect_from_bars, label_bars
 
 load_dotenv()
 
@@ -50,15 +50,17 @@ def _generate(content, max_tokens: int = 2500, retries: int = 1) -> str:
                 return f"AI分析失敗: {err}"
 
 
-def _fmt_bars(bars: list, label: str, n: int) -> str:
+def _fmt_bars(bars: list, label: str, n: int, pattern_labels: dict = None) -> str:
     if not bars:
         return f"【{label}】：資料不足"
     rows = bars[-n:]
-    lines = [
-        f"{b['date']}  O={b['open']} H={b['high']} L={b['low']} C={b['close']}  "
-        f"量={b['volume_zhang']}張"
-        for b in rows
-    ]
+    lines = []
+    for b in rows:
+        line = (f"{b['date']}  O={b['open']} H={b['high']} L={b['low']} C={b['close']}  "
+                f"量={b['volume_zhang']}張")
+        if pattern_labels and b['date'] in pattern_labels:
+            line += f"  ▶{pattern_labels[b['date']]}"
+        lines.append(line)
     return f"【{label}（最近{len(rows)}根）】\n" + "\n".join(lines)
 
 
@@ -175,9 +177,12 @@ def analyze_stock_three_masters(
     else:
         position_block = "持倉狀態：已持有"
 
-    monthly_text = _fmt_bars(enriched_data.get('monthly_bars', []), "月K", 6)
-    weekly_text  = _fmt_bars(enriched_data.get('weekly_bars',  []), "週K", 8)
-    daily_text   = _fmt_bars(enriched_data.get('daily_bars',   []), "日K", 15)
+    _monthly_labels = label_bars(enriched_data.get('monthly_bars', []))
+    _weekly_labels  = label_bars(enriched_data.get('weekly_bars', []))
+    _daily_labels   = label_bars(enriched_data.get('daily_bars', []))
+    monthly_text = _fmt_bars(enriched_data.get('monthly_bars', []), "月K", 6, _monthly_labels)
+    weekly_text  = _fmt_bars(enriched_data.get('weekly_bars',  []), "週K", 8, _weekly_labels)
+    daily_text   = _fmt_bars(enriched_data.get('daily_bars',   []), "日K", 15, _daily_labels)
 
     news_text = (
         '\n'.join([f"- {n['title']}" for n in (news_list or [])[:5]])
@@ -235,8 +240,9 @@ WYCKOFF_PHASE: [積累|上漲|派發|下跌|再積累|再派發|不明]
 - 從月K/日K推導：<span class="support-level">關鍵支撐：XX 元</span> 與 <span class="resistance-level">關鍵壓力：XX 元</span>
 
 ### 二、本間宗久K線確認
-- 週K型態（最近3根）：形態名稱與多空含意
-- 日K型態（最近5根）：形態名稱與多空含意
+⚠️ K棒資料中 ▶型態名稱 為程式依數學公式精確計算，禁止更改或自行重新命名。請直接使用標注的型態並解讀其在當前趨勢下的含意。
+- 週K型態（最近3根）：引用 ▶標注 的型態名稱，說明多空含意
+- 日K型態（最近5根）：引用 ▶標注 的型態名稱，說明多空含意
 - 週K ↔ 日K 方向是否一致確認？
 
 ### 三、李佛摩時機判斷
@@ -315,10 +321,12 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
 
 # ── 每日財經新聞摘要 + 明日方向 ────────────────────────────────
 
-def analyze_daily_news(news_list: list) -> str:
+def analyze_daily_news(news_list: list, twii_price=None, twii_change_pct=None) -> str:
     """
     今日重大財經新聞摘要 + 明日需關注方向。
     供平日印表報表頂部替代週報區塊使用。
+    twii_price: 今日收盤點位（float）
+    twii_change_pct: 今日漲跌幅百分比（float，如 +2.01 或 -1.30）
     """
     from datetime import datetime, timezone, timedelta
     TW = timezone(timedelta(hours=8))
@@ -331,9 +339,17 @@ def analyze_daily_news(news_list: list) -> str:
         for n in (news_list or [])[:15]
     ]) or '今日無財經新聞資料'
 
-    prompt = f"""你是台股財經分析師。根據以下今日財經新聞標題，輸出兩個區塊。
-分析日期：{today}
+    if twii_price and twii_change_pct is not None:
+        direction = '上漲' if twii_change_pct >= 0 else '下跌'
+        twii_block = (
+            f"\n【今日大盤資訊（必須依此數值描述，嚴禁使用訓練資料中的歷史數值）】\n"
+            f"台灣加權指數收盤：{twii_price:.0f} 點，{direction} {abs(twii_change_pct):.2f}%\n"
+        )
+    else:
+        twii_block = ''
 
+    prompt = f"""你是台股財經分析師。根據以下今日財經新聞標題，輸出兩個區塊。
+分析日期：{today}{twii_block}
 【今日財經新聞標題】
 {news_text}
 
@@ -351,6 +367,7 @@ def analyze_daily_news(news_list: list) -> str:
 - 只輸出純 HTML 片段，禁止 <head>/<style>/<html>/<body>
 - 禁止 markdown 語法與 ``` 代碼塊
 - 每條 bullet 不超過 30 字
+- 若提及大盤點位或漲跌幅，必須使用上方【今日大盤資訊】的數值
 - 若無法判斷影響，說明「需觀察」而非憑空杜撰"""
 
     return _clean_html_output(_generate(prompt, max_tokens=600))
@@ -381,9 +398,12 @@ def analyze_market_only(
     vol_today = enriched_data.get('volume_zhang', '--')
     vol_5avg  = enriched_data.get('volume_5d_avg_zhang', '--')
 
-    monthly_text = _fmt_bars(enriched_data.get('monthly_bars', []), "月K", 6)
-    weekly_text  = _fmt_bars(enriched_data.get('weekly_bars',  []), "週K", 8)
-    daily_text   = _fmt_bars(enriched_data.get('daily_bars',   []), "日K", 30)
+    _monthly_labels = label_bars(enriched_data.get('monthly_bars', []))
+    _weekly_labels  = label_bars(enriched_data.get('weekly_bars', []))
+    _daily_labels   = label_bars(enriched_data.get('daily_bars', []))
+    monthly_text = _fmt_bars(enriched_data.get('monthly_bars', []), "月K", 6, _monthly_labels)
+    weekly_text  = _fmt_bars(enriched_data.get('weekly_bars',  []), "週K", 8, _weekly_labels)
+    daily_text   = _fmt_bars(enriched_data.get('daily_bars',   []), "日K", 30, _daily_labels)
 
     news_text = (
         '\n'.join([f"- {n['title']}" for n in (news_list or [])[:5]])
@@ -391,13 +411,13 @@ def analyze_market_only(
     )
 
     detected_patterns = detect_from_bars(enriched_data.get('daily_bars', []))
-    _header = "【Rule-based K線型態偵測結果】\n"
+    _header = "【Rule-based K線型態偵測結果（最新一根）】\n"
     if detected_patterns:
         _body = '\n'.join(f"- {p['name']}（{p['type']}）：{p['desc']}" for p in detected_patterns[:5])
-        _footer = "（AI 請確認以上偵測並補充判斷，含三山/三川等中期結構）"
+        _footer = "（上方K棒資料中 ▶型態 已標注各根，此為最新一根的詳細說明，供補充解讀）"
     else:
-        _body = "- 近期無明顯短期型態"
-        _footer = "（AI 請自行從30根K棒資料判斷是否有中期結構型態）"
+        _body = "- 最新一根無明顯單根/雙根/三根型態"
+        _footer = "（各根歷史型態請參閱上方K棒資料的 ▶標注）"
     pattern_block = f"{_header}{_body}\n{_footer}"
 
     static_block = f"""你是融合三大宗師智慧的台股分析師。分析日期：{today}
@@ -450,9 +470,10 @@ WYCKOFF_PHASE: [積累|上漲|派發|下跌|再積累|再派發|不明]
 <span class="key-point">威科夫核心結論（≤15字）</span>
 
 ### 二、本間宗久K線確認（⚠️ 必須輸出 HTML table）
-K棒型態速查：錘子（下影≥實體2倍/底部看漲）、吊人（錘子型/高位看跌）、射擊之星（上影≥實體2倍/頂部看跌）、
+⚠️ 【K線型態命名鐵律】K棒資料中 ▶型態名稱 為程式依數學公式精確計算，禁止更改或自行重新命名。table 的「型態」欄必須直接使用 ▶標注 的名稱，你的任務是解讀含意，不是命名型態。
+K棒型態含意速查（僅供解讀參考）：錘子（下影≥實體2倍/底部看漲）、吊人（錘子型/高位看跌）、射擊之星（上影≥實體2倍/頂部看跌）、
 早晨之星（長黑+小K+長紅/底部反轉）、黃昏之星（長紅+小K+長黑/頂部反轉）、
-多頭吞噬（陽線吞陰線）、空頭吞噬（陰線吞陽線）、十字星（開收相等/猶豫）、長紅K（陽/強勢）、長黑K（陰/弱勢）
+多頭吞噬（陽線吞陰線）、空頭吞噬（陰線吞陽線）、十字星（開收相等/猶豫）、陽線（收>開）、陰線（收<開）
 
 【週K最近3根 table】（輸出如範例格式）
 【日K最近5根 table】（輸出如範例格式）
@@ -723,8 +744,10 @@ def analyze_taiwan_market_v2(twii_enriched: dict, global_summary: str) -> str:
     vol   = twii_enriched.get('volume_zhang', '--')
     vol5  = twii_enriched.get('volume_5d_avg_zhang', '--')
 
-    daily_text   = _fmt_bars(twii_enriched.get('daily_bars',   []), "加權指數日K", 10)
-    weekly_text  = _fmt_bars(twii_enriched.get('weekly_bars',  []), "加權指數週K",  5)
+    _daily_labels  = label_bars(twii_enriched.get('daily_bars', []))
+    _weekly_labels = label_bars(twii_enriched.get('weekly_bars', []))
+    daily_text   = _fmt_bars(twii_enriched.get('daily_bars',   []), "加權指數日K", 10, _daily_labels)
+    weekly_text  = _fmt_bars(twii_enriched.get('weekly_bars',  []), "加權指數週K",  5, _weekly_labels)
 
     prompt = f"""你是台股技術分析師。請根據以下數據提供今日台股簡要分析，風格精練、重點明確。
 
@@ -820,8 +843,10 @@ def analyze_weekly_taiwan_v2(twii_enriched: dict, global_weekly_summary: str, we
     vol   = twii_enriched.get('volume_zhang', '--')
     vol5  = twii_enriched.get('volume_5d_avg_zhang', '--')
 
-    weekly_text  = _fmt_bars(twii_enriched.get('weekly_bars',  []), "加權指數週K",  8)
-    monthly_text = _fmt_bars(twii_enriched.get('monthly_bars', []), "加權指數月K",  4)
+    _weekly_labels  = label_bars(twii_enriched.get('weekly_bars', []))
+    _monthly_labels = label_bars(twii_enriched.get('monthly_bars', []))
+    weekly_text  = _fmt_bars(twii_enriched.get('weekly_bars',  []), "加權指數週K",  8, _weekly_labels)
+    monthly_text = _fmt_bars(twii_enriched.get('monthly_bars', []), "加權指數月K",  4, _monthly_labels)
 
     prompt = f"""你是台股週報技術分析師。分析週期：{week_range}
 

@@ -22,7 +22,7 @@ from modules.database import SessionLocal, init_db
 from modules.models import User, Stock, StockAnalysis, PatternHistory, DailyMarketSummary
 from modules.data_enricher import get_full_stock_data
 from modules.ai_analyzer_v2 import analyze_market_only, analyze_daily_news
-from modules.data_fetcher import get_tw_news_rss
+from modules.data_fetcher import get_tw_news_rss, get_global_markets
 
 TW = timezone(timedelta(hours=8))
 
@@ -213,7 +213,15 @@ def main():
             print("[batch] 產生今日財經新聞摘要...")
             try:
                 news = get_tw_news_rss(15)
-                html_news = analyze_daily_news(news)
+                twii_price, twii_change_pct = None, None
+                try:
+                    markets = get_global_markets()
+                    twii_data = markets.get('台灣加權', {})
+                    twii_price = twii_data.get('price')
+                    twii_change_pct = twii_data.get('change')
+                except Exception as _e:
+                    print(f"[batch] TWII 資料抓取失敗，新聞摘要將無大盤數值: {_e}")
+                html_news = analyze_daily_news(news, twii_price=twii_price, twii_change_pct=twii_change_pct)
                 db.add(DailyMarketSummary(summary_date=today, html_content=html_news))
                 db.commit()
                 print("[batch] [OK] 今日財經新聞摘要已儲存")

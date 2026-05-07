@@ -225,10 +225,16 @@ def get_taiwan_stocks(symbols=None):
     return result
 
 def get_tw_news_rss(n: int = 15) -> list:
-    """Google News RSS 抓台股財經新聞（免費，無需 API Key）"""
+    """Google News RSS 抓台股財經新聞（免費，無需 API Key）。
+    只保留 48 小時內的新聞，避免舊文章混入導致 AI 引用過期市場數據。
+    """
     import urllib.request
     import xml.etree.ElementTree as ET
     import urllib.parse
+    from email.utils import parsedate_to_datetime
+    from datetime import datetime, timezone, timedelta
+
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=48)
     query = urllib.parse.quote('台股 投資 財經 科技股 半導體')
     url = f'https://news.google.com/rss/search?q={query}&hl=zh-TW&gl=TW&ceid=TW:zh-TW'
     try:
@@ -238,13 +244,24 @@ def get_tw_news_rss(n: int = 15) -> list:
         root = ET.fromstring(xml_data)
         items = root.findall('.//item')
         result = []
-        for item in items[:n]:
-            title_el = item.find('title')
+        for item in items:
+            if len(result) >= n:
+                break
+            title_el  = item.find('title')
             source_el = item.find('source')
-            title = title_el.text if title_el is not None else ''
+            pub_el    = item.find('pubDate')
+            title  = title_el.text  if title_el  is not None else ''
             source = source_el.text if source_el is not None else ''
-            if title:
-                result.append({'title': title, 'source': source})
+            if not title:
+                continue
+            if pub_el is not None:
+                try:
+                    pub_dt = parsedate_to_datetime(pub_el.text)
+                    if pub_dt < cutoff:
+                        continue
+                except Exception:
+                    pass  # pubDate 解析失敗則保留該筆
+            result.append({'title': title, 'source': source})
         return result
     except Exception as e:
         print(f'[news_rss] 抓取失敗: {e}')

@@ -310,6 +310,51 @@ def detect_from_bars(daily_bars: list) -> list:
         return []
 
 
+def label_bars(bars: list) -> dict:
+    """
+    為 bars 中每根 K 棒計算型態標籤，回傳 {date: 型態名稱} dict。
+    供 _fmt_bars() 使用，讓 AI 不需自行命名型態。
+    bars 需與 data_enricher 的 daily_bars / weekly_bars / monthly_bars 同格式。
+    """
+    if not bars or len(bars) < 5:
+        return {}
+    result = {}
+    try:
+        df = pd.DataFrame([{
+            'Open':   float(b['open']),
+            'High':   float(b['high']),
+            'Low':    float(b['low']),
+            'Close':  float(b['close']),
+            'Volume': float(b.get('volume_zhang', 0)),
+        } for b in bars])
+        for i in range(4, len(df)):
+            patterns = detect_patterns(df.iloc[:i + 1].copy())
+            date = bars[i]['date']
+            if patterns:
+                strong = [p for p in patterns if p['strength'] == 'strong']
+                chosen = strong[0] if strong else patterns[0]
+                result[date] = chosen['name']
+            else:
+                o = float(bars[i]['open'])
+                c = float(bars[i]['close'])
+                h = float(bars[i]['high'])
+                lv = float(bars[i]['low'])
+                total = h - lv
+                if total > 0:
+                    br = abs(c - o) / total
+                    if c > o:
+                        result[date] = f'陽線({br:.0%})'
+                    elif c < o:
+                        result[date] = f'陰線({br:.0%})'
+                    else:
+                        result[date] = '平盤'
+                else:
+                    result[date] = '平盤'
+    except Exception as e:
+        print(f'[candlestick] label_bars 失敗: {e}')
+    return result
+
+
 def get_pattern_summary(patterns):
     if not patterns:
         return '無明顯K線型態', 'neutral'
