@@ -775,9 +775,10 @@ def print_report():
         else:
             weekly = None
             weekly_range = ''
-            daily_news = db.query(DailyMarketSummary).filter_by(
-                summary_date=now_tw.date()
-            ).first()
+            # 取最近一筆（不限今天）：批次 14:30 才跑，早上開報表昨天的仍有效
+            daily_news = (db.query(DailyMarketSummary)
+                          .order_by(DailyMarketSummary.summary_date.desc())
+                          .first())
 
         symbols = [s.symbol for s in stocks]
 

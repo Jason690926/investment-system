@@ -351,19 +351,23 @@ def analyze_daily_news(news_list: list, twii_price=None, twii_change_pct=None) -
     else:
         twii_block = ''
 
-    prompt = f"""你是台股財經分析師。根據以下今日財經新聞標題，輸出兩個區塊。
+    prompt = f"""你是台股財經分析師。根據以下今日財經新聞標題，輸出三個區塊。
 分析日期：{today}{twii_block}
 【今日財經新聞標題】
 {news_text}
 
 請用繁體中文純 HTML 格式輸出：
 
-<h3>今日重大財經新聞</h3>
+<h3>今日重大財經重點</h3>
 挑選 3-5 條最重要的新聞，每條一句話說明對台股的影響方向。
 <ul><li>...</li></ul>
 
-<h3>{tomorrow} 明日需關注</h3>
-根據今日新聞，列出明日 2-3 個具體關注點，包含可能受影響族群、關鍵價位或需驗證的條件。
+<h3>{tomorrow} 隔日方向注意</h3>
+根據今日新聞，列出隔日 2-3 個具體關注點，包含可能受影響族群、關鍵價位或需驗證的條件。
+<ul><li>...</li></ul>
+
+<h3>操作建議（依新聞評估）</h3>
+根據今日新聞評估，給出 2-3 條具體觀點：哪些族群或方向適合觀察布局、哪些需要迴避或減碼、整體市場偏多/偏空/觀望。
 <ul><li>...</li></ul>
 
 輸出格式鐵律：
@@ -373,7 +377,7 @@ def analyze_daily_news(news_list: list, twii_price=None, twii_change_pct=None) -
 - 若提及大盤點位或漲跌幅，必須使用上方【今日大盤資訊】的數值
 - 若無法判斷影響，說明「需觀察」而非憑空杜撰"""
 
-    return _clean_html_output(_generate(prompt, max_tokens=600))
+    return _clean_html_output(_generate(prompt, max_tokens=800))
 
 
 # ── 第一段：客觀市場分析（跨用戶共用快取）──────────────────────
