@@ -241,6 +241,15 @@ def main():
     finally:
         db.close()
 
+    # 週五：日報完成後接著產生週報（共用同一批次流程）
+    if datetime.now(TW).weekday() == 4:
+        print("[batch] 週五偵測 → 接著產生本週週報...")
+        try:
+            import run_weekly_report
+            run_weekly_report.main()
+        except Exception as e:
+            print(f"[batch] [!] 週報產生失敗: {e}")
+
     print(f"[batch] 結束 — {datetime.now(TW).strftime('%Y-%m-%d %H:%M')} 台灣時間")
 
 

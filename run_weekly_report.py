@@ -77,7 +77,10 @@ def main():
 
     today = date.today()
     week_start = today - timedelta(days=today.weekday())  # 本週一
-    week_end = today
+    # week_end = 本週最後交易日（週五）：(weekday - 4) % 7 天前
+    # Friday=0, Saturday=1, Sunday=2, Monday=3 ... 均指向最近的週五
+    days_to_friday = (today.weekday() - 4) % 7
+    week_end = today - timedelta(days=days_to_friday)
     week_range = f"{week_start.strftime('%Y/%m/%d')} ~ {week_end.strftime('%Y/%m/%d')}"
 
     db = SessionLocal()
