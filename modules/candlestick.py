@@ -4,18 +4,36 @@ import numpy as np
 _MULTI_CANDLE = {
     '多頭吞噬': 2, '空頭吞噬': 2, '烏雲蓋頂': 2, '曙光初現': 2,
     '早晨之星': 3, '黃昏之星': 3, '三白兵': 3, '三黑鴉': 3,
-    '三山頂（酒田）': 10, '三川底（酒田）': 10,
+    '三空上升（酒田）': 3, '三空下降（酒田）': 3,
+    '上升三法（酒田）': 5, '下降三法（酒田）': 5,
+    '三山頂（酒田）': 40, '三川底（酒田）': 40,
 }
 
+
+def _find_local_peaks(arr, min_gap: int = 3) -> list:
+    """局部高點：左右各 min_gap 根都不超過它才算真實峰頂"""
+    peaks = []
+    n = len(arr)
+    for k in range(min_gap, n - min_gap):
+        if (arr[k] >= max(arr[k - min_gap:k]) and
+                arr[k] >= max(arr[k + 1:k + min_gap + 1])):
+            peaks.append((k, arr[k]))
+    return peaks
+
+
+def _find_local_troughs(arr, min_gap: int = 3) -> list:
+    """局部低點：左右各 min_gap 根都不低於它才算真實谷底"""
+    troughs = []
+    n = len(arr)
+    for k in range(min_gap, n - min_gap):
+        if (arr[k] <= min(arr[k - min_gap:k]) and
+                arr[k] <= min(arr[k + 1:k + min_gap + 1])):
+            troughs.append((k, arr[k]))
+    return troughs
+
+
 def detect_patterns(hist):
-    """
-    偵測K線型態，回傳發現的型態清單
-    修正項目：
-    1. 大陽線/大陰線加入跳空偵測
-    2. 倒錘子線與射擊之星互斥（用漲跌區分）
-    3. 三白兵條件放寬（只要收盤遞增即可）
-    4. 跳空型態獨立判斷
-    """
+    """偵測K線型態，回傳發現的型態清單（酒田五法強化版）"""
     if len(hist) < 5:
         return []
 
@@ -141,10 +159,10 @@ def detect_patterns(hist):
             'strength': 'strong'
         })
 
-    # 十字星（市場猶豫）- 排除墓碑十字（上影極長的情況）
+    # 十字星（市場猶豫）- 排除墓碑十字
     if (not gap_up and not gap_down and
         body_ratio < 0.1 and total > 0 and
-        upper_shadow <= total * 0.7):  # 墓碑十字: upper_shadow > total*0.7，排除
+        upper_shadow <= total * 0.7):
         patterns.append({
             'name': '十字星',
             'type': 'neutral',
@@ -162,7 +180,7 @@ def detect_patterns(hist):
             'strength': 'medium'
         })
 
-    # 大陰線（強勢空頭）- 非跳空才顯示（跳空高開後急跌也不算大陰線，是「跳空高開拉回」）
+    # 大陰線（強勢空頭）- 非跳空才顯示
     if (not gap_up and not gap_down and
         c[i] < o[i] and body_ratio > 0.7):
         patterns.append({
@@ -219,23 +237,31 @@ def detect_patterns(hist):
 
     # ===== 三K線型態 =====
     if i >= 2:
-        # 三白兵（強烈看多）- 放寬條件：只要連三根陽線且收盤遞增
+        # 三白兵（酒田正規）：連三陽線 + 每根開盤在前根實體內（不跳空） + 上影線短
         if (c[i-2] > o[i-2] and c[i-1] > o[i-1] and c[i] > o[i] and
-            c[i-1] > c[i-2] and c[i] > c[i-1]):
+                c[i-1] > c[i-2] and c[i] > c[i-1] and
+                o[i-1] >= o[i-2] and o[i-1] <= c[i-2] and
+                o[i]   >= o[i-1] and o[i]   <= c[i-1] and
+                (h[i-1] - c[i-1]) <= abs(c[i-1] - o[i-1]) * 0.3 and
+                (h[i]   - c[i])   <= abs(c[i]   - o[i])   * 0.3):
             patterns.append({
                 'name': '三白兵',
                 'type': 'bullish',
-                'desc': '連續三根陽線，每日收盤都比前日高，多方氣勢如虹，強烈買進訊號',
+                'desc': '酒田戰法：連三根陽線穩步上攻，每根開盤收斂於前根實體內，無頭部阻力，多方意志堅定，強烈買進訊號',
                 'strength': 'strong'
             })
 
-        # 三黑鴉（強烈看空）- 放寬條件：只要連三根陰線且收盤遞減
+        # 三黑鴉（酒田正規）：連三陰線 + 每根開盤在前根實體內（不跳空） + 下影線短
         if (c[i-2] < o[i-2] and c[i-1] < o[i-1] and c[i] < o[i] and
-            c[i-1] < c[i-2] and c[i] < c[i-1]):
+                c[i-1] < c[i-2] and c[i] < c[i-1] and
+                o[i-1] <= o[i-2] and o[i-1] >= c[i-2] and
+                o[i]   <= o[i-1] and o[i]   >= c[i-1] and
+                (c[i-1] - l[i-1]) <= abs(c[i-1] - o[i-1]) * 0.3 and
+                (c[i]   - l[i])   <= abs(c[i]   - o[i])   * 0.3):
             patterns.append({
                 'name': '三黑鴉',
                 'type': 'bearish',
-                'desc': '連續三根陰線，每日收盤都比前日低，空方氣勢如虹，強烈賣出訊號',
+                'desc': '酒田戰法：連三根陰線穩步下跌，每根開盤收斂於前根實體內，無底部支撐，空方意志堅定，強烈賣出訊號',
                 'strength': 'strong'
             })
 
@@ -261,31 +287,100 @@ def detect_patterns(hist):
                 'strength': 'strong'
             })
 
-    # ===== 酒田戰法：三山/三川 =====
-    if i >= 9:
-        recent_high = max(h[i-9:i])
-        recent_low = min(l[i-9:i])
-        curr_price = c[i]
-
-        highs = h[i-9:i]
-        if (highs[2] >= highs[0] * 0.98 and highs[6] >= highs[0] * 0.98 and
-            highs[4] < highs[2] * 0.97 and curr_price < recent_high * 0.97):
+    # ===== 酒田戰法：三空 =====
+    if i >= 3:
+        # 三空上升：連三根跳空上漲 → 追漲已竭，逢高賣出
+        if all(l[j] > h[j - 1] for j in [i - 2, i - 1, i]):
             patterns.append({
-                'name': '三山頂（酒田）',
+                'name': '三空上升（酒田）',
                 'type': 'bearish',
-                'desc': '酒田戰法：三次到達高點後無法突破，頂部確認，建議賣出或停損',
+                'desc': '酒田戰法：連續三根跳空上漲，追漲力道過度，缺口遲早回補，逢高宜減碼',
+                'strength': 'strong'
+            })
+        # 三空下降：連三根跳空下跌 → 恐慌已竭，逢低買進
+        if all(h[j] < l[j - 1] for j in [i - 2, i - 1, i]):
+            patterns.append({
+                'name': '三空下降（酒田）',
+                'type': 'bullish',
+                'desc': '酒田戰法：連續三根跳空下跌，恐慌殺盤過度，缺口遲早回補，逢低可留意',
                 'strength': 'strong'
             })
 
-        lows = l[i-9:i]
-        if (lows[2] <= lows[0] * 1.02 and lows[6] <= lows[0] * 1.02 and
-            lows[4] > lows[2] * 1.03 and curr_price > recent_low * 1.03):
+    # ===== 酒田戰法：三法（趨勢持續確認）=====
+    if i >= 4:
+        # 上升三法：大陽線 → 3根小K棒整理在範圍內 → 大陽線突破
+        first_bull = c[i-4] - o[i-4]
+        if (first_bull > 0 and
+                first_bull / max(h[i-4] - l[i-4], 1e-9) > 0.5 and
+                all(l[j] >= l[i-4] and h[j] <= h[i-4] for j in range(i-3, i)) and
+                c[i] > o[i] and c[i] > c[i-4] and
+                (c[i] - o[i]) / max(h[i] - l[i], 1e-9) > 0.5):
             patterns.append({
-                'name': '三川底（酒田）',
+                'name': '上升三法（酒田）',
                 'type': 'bullish',
-                'desc': '酒田戰法：三次到達低點後止跌，底部確認，建議買進或加碼',
+                'desc': '酒田戰法：大陽線後小幅回調整理，再以大陽線突破前高，多頭趨勢確認，可持股或加碼',
                 'strength': 'strong'
             })
+
+        # 下降三法：大陰線 → 3根小K棒整理在範圍內 → 大陰線跌破
+        first_bear = o[i-4] - c[i-4]
+        if (first_bear > 0 and
+                first_bear / max(h[i-4] - l[i-4], 1e-9) > 0.5 and
+                all(l[j] >= l[i-4] and h[j] <= h[i-4] for j in range(i-3, i)) and
+                c[i] < o[i] and c[i] < c[i-4] and
+                (o[i] - c[i]) / max(h[i] - l[i], 1e-9) > 0.5):
+            patterns.append({
+                'name': '下降三法（酒田）',
+                'type': 'bearish',
+                'desc': '酒田戰法：大陰線後小幅反彈整理，再以大陰線跌破前低，空頭趨勢確認，可出清或觀望',
+                'strength': 'strong'
+            })
+
+    # ===== 酒田戰法：三山/三川（真實局部高低點偵測，40根窗口）=====
+    if i >= 19:
+        win_start = max(0, i - 39)
+        h_win = h[win_start:i + 1]
+        l_win = l[win_start:i + 1]
+
+        # 三山頂：3個局部高點在相近水平（±3%），且當前價格已從高點回落
+        raw_peaks = _find_local_peaks(h_win, min_gap=3)
+        spaced_peaks: list = []
+        for pk in raw_peaks:
+            if not spaced_peaks or pk[0] - spaced_peaks[-1][0] >= 5:
+                spaced_peaks.append(pk)
+        if len(spaced_peaks) >= 3:
+            p1_h, p2_h, p3_h = (spaced_peaks[-3][1],
+                                 spaced_peaks[-2][1],
+                                 spaced_peaks[-1][1])
+            avg_h = (p1_h + p2_h + p3_h) / 3
+            if (all(abs(px - avg_h) / avg_h <= 0.03 for px in (p1_h, p2_h, p3_h)) and
+                    c[i] < avg_h * 0.97):
+                patterns.append({
+                    'name': '三山頂（酒田）',
+                    'type': 'bearish',
+                    'desc': f'酒田戰法：三次攻頂 {round(avg_h, 1)} 元均受壓回落，頂部確認，建議賣出或停損',
+                    'strength': 'strong'
+                })
+
+        # 三川底：3個局部低點在相近水平（±3%），且當前價格已從低點反彈
+        raw_troughs = _find_local_troughs(l_win, min_gap=3)
+        spaced_troughs: list = []
+        for tr in raw_troughs:
+            if not spaced_troughs or tr[0] - spaced_troughs[-1][0] >= 5:
+                spaced_troughs.append(tr)
+        if len(spaced_troughs) >= 3:
+            t1_l, t2_l, t3_l = (spaced_troughs[-3][1],
+                                 spaced_troughs[-2][1],
+                                 spaced_troughs[-1][1])
+            avg_l = (t1_l + t2_l + t3_l) / 3
+            if (all(abs(tx - avg_l) / avg_l <= 0.03 for tx in (t1_l, t2_l, t3_l)) and
+                    c[i] > avg_l * 1.03):
+                patterns.append({
+                    'name': '三川底（酒田）',
+                    'type': 'bullish',
+                    'desc': f'酒田戰法：三次探底 {round(avg_l, 1)} 元均獲支撐反彈，底部確認，建議買進或加碼',
+                    'strength': 'strong'
+                })
 
     for p in patterns:
         p['candle_count'] = _MULTI_CANDLE.get(p['name'], 1)
