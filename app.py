@@ -22,6 +22,23 @@ except Exception as e:
 init_auth(app)
 
 
+# ── 分析日計算（台灣時間，14:30 後才算當日收盤）─────────────
+def _analysis_day_tw():
+    """最近有效的分析日：14:30 後才算今日；週末/假日往回找最近工作日。"""
+    from datetime import datetime, timezone, timedelta
+    TW = timezone(timedelta(hours=8))
+    now_tw = datetime.now(TW)
+    wd = now_tw.weekday()       # 0=Mon … 4=Fri 5=Sat 6=Sun
+    after_close = now_tw.hour > 14 or (now_tw.hour == 14 and now_tw.minute >= 30)
+    if wd < 5 and after_close:  # 平日 14:30 後 → 今天
+        return now_tw.date()
+    # 其他：往前找最近工作日
+    day = now_tw.date() - timedelta(days=1)
+    while day.weekday() >= 5:
+        day -= timedelta(days=1)
+    return day
+
+
 # ── /print-report 用的 helpers ──────────────────────────────
 import re
 import mistune
@@ -406,7 +423,7 @@ def api_get_analysis(stock_id):
         if not stock:
             return jsonify({'error': '股票不存在'}), 404
 
-        today = dt_date.today()
+        today = _analysis_day_tw()
         # ① 今日快取
         cached  = db.query(StockAnalysis).filter_by(
             symbol=stock.symbol, analysis_date=today, analysis_type='daily'
@@ -464,7 +481,7 @@ def api_analyze_stock(stock_id):
         if not stock:
             return jsonify({'error': '股票不存在'}), 404
 
-        today = dt_date.today()
+        today = _analysis_day_tw()
         force = request.args.get('force', '0') == '1'
         # 已有今日快取且非強制重分析，直接回傳
         existing = db.query(StockAnalysis).filter_by(
@@ -549,7 +566,7 @@ def api_recommend_stock(stock_id):
         if not stock:
             return jsonify({'error': '股票不存在'}), 404
 
-        today = dt_date.today()
+        today = _analysis_day_tw()
         cached = db.query(StockAnalysis).filter_by(
             symbol=stock.symbol, analysis_date=today, analysis_type='daily'
         ).first()

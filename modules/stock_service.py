@@ -1,8 +1,22 @@
 from decimal import Decimal
-from datetime import date
+from datetime import date, datetime, timezone, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case
 from modules.models import Stock, Trade, User, StockAnalysis
+
+
+def _analysis_day_tw():
+    """最近有效的分析日（14:30 後才算今日；週末往回找最近工作日）"""
+    TW = timezone(timedelta(hours=8))
+    now_tw = datetime.now(TW)
+    wd = now_tw.weekday()
+    after_close = now_tw.hour > 14 or (now_tw.hour == 14 and now_tw.minute >= 30)
+    if wd < 5 and after_close:
+        return now_tw.date()
+    day = now_tw.date() - timedelta(days=1)
+    while day.weekday() >= 5:
+        day -= timedelta(days=1)
+    return day
 
 
 def get_user_stocks(db: Session, user_id: int) -> list:
@@ -14,23 +28,17 @@ def get_user_stocks(db: Session, user_id: int) -> list:
                         Stock.created_at)
               .all())
 
-    # 一次查出所有 symbol 最新一筆分析（不限日期，顯示最近快取狀態）
+    # 只取「當前分析日」的快取；14:30 前算昨日，14:30 後算今日
+    analysis_day = _analysis_day_tw()
     symbols = [s.symbol for s in stocks]
     analyses = {}
     if symbols:
-        subq = (
-            db.query(StockAnalysis.symbol,
-                     func.max(StockAnalysis.analysis_date).label('max_date'))
-            .filter(StockAnalysis.symbol.in_(symbols),
-                    StockAnalysis.analysis_type == 'daily',
-                    StockAnalysis.html_content.isnot(None))
-            .group_by(StockAnalysis.symbol)
-            .subquery()
-        )
         rows = (
             db.query(StockAnalysis)
-            .join(subq, (StockAnalysis.symbol == subq.c.symbol) &
-                        (StockAnalysis.analysis_date == subq.c.max_date))
+            .filter(StockAnalysis.symbol.in_(symbols),
+                    StockAnalysis.analysis_type == 'daily',
+                    StockAnalysis.analysis_date == analysis_day,
+                    StockAnalysis.html_content.isnot(None))
             .all()
         )
         analyses = {r.symbol: r for r in rows}

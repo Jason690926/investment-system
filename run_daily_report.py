@@ -91,9 +91,16 @@ def get_symbols_by_overlap(db) -> list[tuple[str, str, int]]:
     return [(r.symbol, r.name, r.cnt) for r in rows]
 
 
+def _analysis_day_tw():
+    day = datetime.now(TW).date()
+    # 批次固定 14:30 後執行，直接用台灣今日日期即可
+    # 保留此函式與 app.py / stock_service.py 命名一致，方便日後統一
+    return day
+
+
 def is_cached_today(db, symbol: str) -> bool:
     return db.query(StockAnalysis).filter_by(
-        symbol=symbol, analysis_date=date.today(), analysis_type='daily'
+        symbol=symbol, analysis_date=_analysis_day_tw(), analysis_type='daily'
     ).count() > 0
 
 
@@ -103,7 +110,7 @@ def cache_market_analysis(db, symbol: str, name: str) -> bool:
         print(f"[batch] [!] 無法取得 {symbol} 資料，跳過")
         return False
 
-    today = date.today()
+    today = _analysis_day_tw()
     daily_bars = enriched.get('daily_bars', [])
     _backfill_patterns(db, symbol, daily_bars, today)
 
