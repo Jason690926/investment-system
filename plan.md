@@ -753,6 +753,40 @@ week_end = today - timedelta(days=days_to_friday)
 
 任何執行日均算出本週五（Friday=0天, Saturday=1天, Sunday=2天, Monday=3天偏移）。
 
+### 分析日邊界統一（`_analysis_day_tw()`）
+
+三個檔案共用同一邏輯（平日 14:30 後 → 今日；其他 → 往前找最近工作日）：
+
+```python
+def _analysis_day_tw():
+    TW = timezone(timedelta(hours=8))
+    now_tw = datetime.now(TW)
+    wd = now_tw.weekday()
+    after_close = now_tw.hour > 14 or (now_tw.hour == 14 and now_tw.minute >= 30)
+    if wd < 5 and after_close:
+        return now_tw.date()
+    day = now_tw.date() - timedelta(days=1)
+    while day.weekday() >= 5:
+        day -= timedelta(days=1)
+    return day
+```
+
+| 檔案 | 修改點 |
+|------|--------|
+| `app.py` | 三個分析端點（`api_get_analysis`/`api_analyze_stock`/`api_recommend_stock`）改用 helper；原 `dt_date.today()` 在 UTC 伺服器台灣 08:00 就翻日 → 08:00~14:30 快取失效 |
+| `modules/stock_service.py` | `get_user_stocks()` 改由精確日期篩選（`analysis_date == analysis_day`），取代原本 `func.max(analysis_date)` 不限日期 |
+| `run_daily_report.py` | `is_cached_today` / `cache_market_analysis` 改用 TW date 保持一致 |
+
+**看板卡片狀態效果：**
+
+| 時間 | `analysis_day` | 快取存在？ | 看板卡片 |
+|------|---------------|----------|---------|
+| 14:30 前 | 昨日 | ✅（昨天已分析）| 顯示昨日風險係數 |
+| 14:30 後 | 今日 | ❌（今天尚未跑）| 全部「尚未分析」灰框 |
+| 14:30 後分析完 | 今日 | ✅ | 顯示今日風險係數 |
+
+視覺提示：14:30 後看板自動出現空白卡，使用者按一鍵分析即可。
+
 ### GitHub Actions 狀態
 
 - `daily_report.yml`：schedule 已停用，保留 `workflow_dispatch`（可手動觸發）
