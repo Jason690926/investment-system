@@ -1,5 +1,5 @@
 # 投資建議書系統 — 重構計畫
-> 建立日期：2026-04-30｜更新日期：2026-05-07｜基於兩次訪談決策 + 實作後討論補充
+> 建立日期：2026-04-30｜更新日期：2026-05-08｜基於兩次訪談決策 + 實作後討論補充
 
 ---
 
@@ -349,7 +349,8 @@ jobs:
 週2 ✅：Google OAuth + PostgreSQL/SQLAlchemy + 持股管理重構（已持有/觀察中）
 週3 ✅：新 data_enricher（週K/月K/成交量/MACD/MA）+ AI 三宗師框架
 週4 ✅：深色主題前端（RWD + lightweight-charts + 逐股分析 + 看圖模式）
-週5（進行中）：產業週報 + PDF 匯出 + Render Starter 部署（+ 以下補充決策）
+週5 ✅：產業週報 + PDF 匯出 + Render Starter 部署
+週6 ✅：Bug 1-7 修復 + 酒田五法強化 + 四項分析品質修復（2026-05-07~08）
 ```
 
 **部署前修復（2026-05-02 已完成）：**
@@ -637,17 +638,42 @@ UNIQUE (user_id, email) 防止同一 email 重複入庫。
 
 ---
 
-## 十五、K線型態識別 + 平日新聞報表（2026-05-07）
+## 十五、K線型態識別 + 平日新聞報表（2026-05-07~08）
 
 ### 功能概述
 
 **K線型態 Rule-based 偵測（`candlestick.py`）**
 
 - `detect_from_bars(daily_bars)` 將 enriched data 格式轉 DataFrame 後呼叫 `detect_patterns()`
-- 偵測型態清單（單K：錘子/吊人/射擊之星/倒錘子線/墓碑十字/十字星/大陽線/大陰線；雙K：多/空頭吞噬/烏雲蓋頂/曙光初現；三K：早晨之星/黃昏之星/三白兵/三黑鴉；多K：三山頂/三川底）
+- 偵測型態清單（截至 2026-05-08）：
+
+| 類型 | 型態 |
+|------|------|
+| 單K（跳空優先）| 跳空上漲/下跌 |
+| 單K（特殊十字）| 蜻蜓十字（強底部）/墓碑十字（強頂部）/長腳十字（強不確定）/十字星 |
+| 單K（實體）| 錘子/吊人/射擊之星/倒錘子/大陽線/大陰線 |
+| 雙K | 多頭吞噬/空頭吞噬/烏雲蓋頂/曙光初現/平頭頂/平頭底 |
+| 三K | 早晨之星/黃昏之星 |
+| 三K（酒田正規）| 三白兵（開盤在前根實體內+影線≤30%）/三黑鴉 |
+| 三K（酒田五法）| 三空上升/三空下降（連三跳空）|
+| 五K（酒田五法）| 上升三法/下降三法（大實體→整理→突破）|
+| 多K（酒田五法）| 三山頂/三川底（`_find_local_peaks/troughs`，lookback=40，間距≥5根，高度±3%）|
+
 - 跳空（gap_up/gap_down）優先判斷
 - 每個 pattern 含 `name`, `type`, `desc`, `strength`, `candle_count`
 - `_MULTI_CANDLE` 為模組層級常數（不在函式內重建）
+
+**`label_bars(bars) -> dict`** — 對每根 K 棒輸出 `{date: 型態名稱}`，供 `_fmt_bars()` 在 K 棒文字後附加 `▶型態` 標注，AI prompt 鐵律禁止更改。
+
+**`calc_pnf_target(bars, lookback, current_price) -> float | None`** — 等幅量度（Measured Move）：
+- `target = base_high + (base_high - base_low)`
+- 波動率 > 35%（趨勢段）→ 縮至 4 根找緊箱體
+- `current_price < base_high × 0.85` → 回 None（尚未接近突破點）
+
+**量能門檻程式計算（`ai_analyzer_v2.py`）**
+- `_vol_breakout = vol_5avg × 1.5`（突破確認門檻）
+- `_vol_spring = vol_5avg × 1.2`（Spring/測試縮量門檻）
+- 兩個值注入 dynamic_block 為鎖定數值，AI 禁止更改
 
 **批次儲存型態歷史（`run_daily_report.py`）**
 
@@ -667,12 +693,18 @@ UNIQUE (user_id, email) 防止同一 email 重複入庫。
 **平日/週末報表切換（`app.py` + `print_report.html`）**
 
 - `now_tw.weekday() >= 5`（週六=5/週日=6）→ 顯示最新週報
-- 平日 → 查 `DailyMarketSummary.summary_date = now_tw.date()` → 顯示「§ NEWS · 今日財經新聞」
+- 平日 → `DailyMarketSummary` 取 `order_by(summary_date.desc()).first()`（最新一筆，非限今日）
 - 儲存時用 `datetime.now(TW).date()`（非 `date.today()` UTC），與查詢側時區一致
+
+**QuoteCache 股價查詢（`app.py`）**
+
+- `/print-report` 查 QuoteCache 改用 `max(cache_date)` subquery 取最近一筆
+- 修前：`filter cache_date == today` → 14:30 前批次未跑 → 股價欄空白
+- 修後：永遠有資料（與 DailyMarketSummary 同模式）
 
 ### 成本影響
 
-- 每日批次多1次 `analyze_daily_news()` 呼叫（max_tokens=600）≈ +$0.01/日
+- 每日批次多1次 `analyze_daily_news()` 呼叫（max_tokens=800）≈ +$0.01/日
 - `analyze_market_only()` 日K從20→30根，token 略增，估計 +5-8%
 
 ---
