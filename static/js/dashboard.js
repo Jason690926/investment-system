@@ -204,6 +204,19 @@ function updateCardPrice(stockId, q) {
   set('.ohlc-c', q.close);
 }
 
+/* ── 週末視窗判斷（週五 14:00 ~ 週一 09:00 台灣時間）──── */
+function isWeeklyWindow() {
+  const tw = new Date(Date.now() + 8 * 60 * 60 * 1000); // UTC+8
+  const wd = tw.getUTCDay();   // 0=Sun 1=Mon ... 5=Fri 6=Sat
+  const h  = tw.getUTCHours();
+  return (wd === 5 && h >= 14) || wd === 6 || wd === 0 || (wd === 1 && h < 9);
+}
+
+function updateAnalyzeBtn() {
+  const btn = document.getElementById('btn-analyze-all');
+  if (btn) btn.textContent = isWeeklyWindow() ? '⚡ 一鍵分析（含週報）' : '⚡ 一鍵分析';
+}
+
 /* ── 一鍵分析所有股票（3 並行 worker pool）──────────────── */
 async function analyzeAll() {
   const CONCURRENCY = 3;
@@ -215,6 +228,16 @@ async function analyzeAll() {
   btn.disabled = true;
   isAnalyzing  = true;
   progress.style.display = 'flex';
+
+  // 週末視窗：先射出週報背景產生，與個股並行
+  if (isWeeklyWindow()) {
+    try {
+      await api('/api/weekly-report/generate', { method: 'POST' });
+      toast('週末視窗：週報背景產生中（約 1-2 分鐘）');
+    } catch (e) {
+      toast('週報觸發失敗，繼續個股分析', 'error');
+    }
+  }
 
   const queue   = [...stocks];
   const inFlight = new Set();
@@ -590,3 +613,4 @@ async function clearTodayCache() {
 }
 
 loadStocks();
+updateAnalyzeBtn();

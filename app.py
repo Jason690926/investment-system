@@ -764,10 +764,14 @@ def print_report():
         if not stocks:
             return '尚無持股資料', 404
 
-        # 顯示切換：週六/日 或 週五 14:30 後 → 週報；其餘 → 每日新聞
+        # 顯示切換：週末視窗（週五 14:30 ~ 週一 09:00）→ 週報；其餘 → 每日新聞
         now_tw = datetime.now(TW)
-        is_friday_close = (now_tw.weekday() == 4 and now_tw.hour >= 14)
-        show_weekly = now_tw.weekday() >= 5 or is_friday_close
+        wd, h = now_tw.weekday(), now_tw.hour
+        show_weekly = (
+            (wd == 4 and h >= 14) or   # 週五 14:30+
+            wd in (5, 6) or            # 週六、週日
+            (wd == 0 and h < 9)        # 週一 09:00 前
+        )
         if show_weekly:
             weekly = db.query(WeeklyReport).order_by(WeeklyReport.week_start.desc()).first()
             weekly_range = (f"{weekly.week_start.strftime('%Y/%m/%d')} ~ "
