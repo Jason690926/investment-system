@@ -3,6 +3,7 @@ import numpy as np
 
 _MULTI_CANDLE = {
     '多頭吞噬': 2, '空頭吞噬': 2, '烏雲蓋頂': 2, '曙光初現': 2,
+    '平頭頂': 2, '平頭底': 2,
     '早晨之星': 3, '黃昏之星': 3, '三白兵': 3, '三黑鴉': 3,
     '三空上升（酒田）': 3, '三空下降（酒田）': 3,
     '上升三法（酒田）': 5, '下降三法（酒田）': 5,
@@ -159,10 +160,36 @@ def detect_patterns(hist):
             'strength': 'strong'
         })
 
-    # 十字星（市場猶豫）- 排除墓碑十字
+    # 蜻蜓十字（強烈底部訊號）：開收盤在高點，長下影線，無上影線
+    if (not gap_up and not gap_down and
+        body_ratio < 0.1 and
+        lower_shadow > total * 0.6 and
+        upper_shadow < total * 0.1):
+        patterns.append({
+            'name': '蜻蜓十字',
+            'type': 'bullish',
+            'desc': '酒田戰法：開收盤幾乎在最高點，下影線極長，空方打壓後多方完全收復，底部強烈反轉訊號',
+            'strength': 'strong'
+        })
+
+    # 長腳十字（強烈不確定）：上下影線均長，多空激烈爭鬥
+    if (not gap_up and not gap_down and
+        body_ratio < 0.1 and
+        upper_shadow > total * 0.3 and
+        lower_shadow > total * 0.3):
+        patterns.append({
+            'name': '長腳十字',
+            'type': 'neutral',
+            'desc': '上下影線均長，多空激烈爭鬥後平手，市場方向高度不確定，需下一根確認',
+            'strength': 'medium'
+        })
+
+    # 十字星（市場猶豫）- 排除墓碑十字、蜻蜓十字、長腳十字
     if (not gap_up and not gap_down and
         body_ratio < 0.1 and total > 0 and
-        upper_shadow <= total * 0.7):
+        upper_shadow <= total * 0.7 and
+        not (lower_shadow > total * 0.6 and upper_shadow < total * 0.1) and
+        not (upper_shadow > total * 0.3 and lower_shadow > total * 0.3)):
         patterns.append({
             'name': '十字星',
             'type': 'neutral',
@@ -233,6 +260,26 @@ def detect_patterns(hist):
                 'type': 'bullish',
                 'desc': '酒田戰法：昨日大陰線後今日跳空開低卻收高，多方反攻訊號，考慮買進',
                 'strength': 'strong'
+            })
+
+        # 平頭頂（頂部壓力確認）：連兩根最高點相同 + 前陽後陰
+        if (c1 > o1 and c0 < o0 and
+                abs(h0 - h1) / max(h1, 1e-9) < 0.003):
+            patterns.append({
+                'name': '平頭頂',
+                'type': 'bearish',
+                'desc': '酒田戰法：連兩根最高點相同，多方兩次衝高均受壓回落，頂部壓力確認，注意轉折',
+                'strength': 'medium'
+            })
+
+        # 平頭底（底部支撐確認）：連兩根最低點相同 + 前陰後陽
+        if (c1 < o1 and c0 > o0 and
+                abs(l0 - l1) / max(l1, 1e-9) < 0.003):
+            patterns.append({
+                'name': '平頭底',
+                'type': 'bullish',
+                'desc': '酒田戰法：連兩根最低點相同，空方兩次打壓均被守住，底部支撐確認，可考慮布局',
+                'strength': 'medium'
             })
 
     # ===== 三K線型態 =====
@@ -450,22 +497,36 @@ def label_bars(bars: list) -> dict:
     return result
 
 
-def calc_pnf_target(bars: list, lookback: int = 12) -> float | None:
+def calc_pnf_target(bars: list, lookback: int = 12,
+                    current_price: float = None) -> float | None:
     """P&F 水平計數概念目標（等幅量度 Measured Move）
     公式：target = base_high + (base_high - base_low)
-    base = 最近 lookback 根K棒代表的整理箱體。
-    lookback=12 週K ≈ 3個月整理區；lookback=20 日K ≈ 1個月整理區（備援）。
+
+    驗證邏輯：
+    1. 若 lookback 區間波動率 > 35%（非整理，是趨勢），縮至近 4 根找較緊箱體
+    2. 若 current_price 距 base_high 超過 15%（尚未接近突破點），目標無意義 → None
+
+    lookback=12 週K ≈ 3個月；lookback=20 日K ≈ 1個月。
     """
     if not bars or len(bars) < 5:
         return None
     try:
-        recent    = bars[-min(lookback, len(bars)):]
-        base_high = max(float(b['high']) for b in recent)
-        base_low  = min(float(b['low'])  for b in recent)
-        if base_high <= base_low:
-            return None
-        target = base_high + (base_high - base_low)
-        return round(target) if target >= 100 else round(target, 1)
+        for lb in [lookback, min(4, lookback)]:
+            recent    = bars[-min(lb, len(bars)):]
+            base_high = max(float(b['high']) for b in recent)
+            base_low  = min(float(b['low'])  for b in recent)
+            if base_high <= base_low:
+                continue
+            range_ratio = (base_high - base_low) / base_low
+            # 箱體波動率合理（≤35%），或已縮至最短回溯
+            if range_ratio <= 0.35 or lb <= 4:
+                # 若已提供當前價，確認接近突破點（base_high 以內 15% 以內）
+                if current_price is not None:
+                    if float(current_price) < base_high * 0.85:
+                        return None   # 尚未接近突破，目標暫不顯示
+                target = base_high + (base_high - base_low)
+                return round(target) if target >= 100 else round(target, 1)
+        return None
     except Exception as e:
         print(f'[candlestick] calc_pnf_target 失敗: {e}')
         return None

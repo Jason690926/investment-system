@@ -800,12 +800,20 @@ def print_report():
         )
         analyses = {r.symbol: r for r in rows}
 
-        # 當日 quote 批次撈（沒命中就 fallback 顯示 —，不打 Yahoo）
-        today_tw = datetime.now(TW).date()
+        # 各股最近一筆 quote（不限今天）：批次 14:30 才跑，早上也顯示昨日收盤
+        # 同 Bug 6 改法（DailyMarketSummary 已採相同做法）
+        subq_q = (
+            db.query(QuoteCache.symbol,
+                     func.max(QuoteCache.cache_date).label('max_date'))
+            .filter(QuoteCache.symbol.in_(symbols))
+            .group_by(QuoteCache.symbol)
+            .subquery()
+        )
         quote_rows = (
             db.query(QuoteCache)
-            .filter(QuoteCache.symbol.in_(symbols),
-                    QuoteCache.cache_date == today_tw)
+            .join(subq_q,
+                  (QuoteCache.symbol == subq_q.c.symbol) &
+                  (QuoteCache.cache_date == subq_q.c.max_date))
             .all()
         )
         quotes = {q.symbol: q for q in quote_rows}
