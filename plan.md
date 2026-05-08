@@ -692,9 +692,7 @@ UNIQUE (user_id, email) 防止同一 email 重複入庫。
 
 **平日/週末報表切換（`app.py` + `print_report.html`）**
 
-- `now_tw.weekday() >= 5`（週六=5/週日=6）→ 顯示最新週報
-- 平日 → `DailyMarketSummary` 取 `order_by(summary_date.desc()).first()`（最新一筆，非限今日）
-- 儲存時用 `datetime.now(TW).date()`（非 `date.today()` UTC），與查詢側時區一致
+見第十六節週末視窗設計。
 
 **QuoteCache 股價查詢（`app.py`）**
 
@@ -709,9 +707,63 @@ UNIQUE (user_id, email) 防止同一 email 重複入庫。
 
 ---
 
+## 十六、週報觸發邏輯 + 週末視窗（2026-05-08）
+
+### 核心設計：週末視窗 = 週五 14:00 ~ 週一 09:00（台灣時間）
+
+不自動排程，一鍵分析按鈕是唯一入口。
+
+### 週末視窗判斷（`isWeeklyWindow()` in `dashboard.js`）
+
+```js
+const tw = new Date(Date.now() + 8 * 60 * 60 * 1000); // UTC+8
+const wd = tw.getUTCDay();   // 0=Sun 1=Mon ... 5=Fri 6=Sat
+const h  = tw.getUTCHours();
+return (wd === 5 && h >= 14) || wd === 6 || wd === 0 || (wd === 1 && h < 9);
+```
+
+### 一鍵分析行為
+
+| 時間 | 行為 | 按鈕文字 |
+|------|------|---------|
+| 週一 09:00 ~ 週五 14:00 | 只跑個股分析 | ⚡ 一鍵分析 |
+| 週五 14:00 ~ 週一 09:00 | 個股 + 週報並行 | ⚡ 一鍵分析（含週報） |
+
+週報：`POST /api/weekly-report/generate` 先射出（背景 threading），個股同時 3-worker 跑，~90s 後均完成。
+
+### PDF 顯示切換（`app.py show_weekly`）
+
+```python
+show_weekly = (
+    (wd == 4 and h >= 14) or   # 週五 14:00+
+    wd in (5, 6) or            # 週六、週日
+    (wd == 0 and h < 9)        # 週一 09:00 前
+)
+```
+
+- `show_weekly=True`：§MARKET 大盤週報 + §INDUSTRY 產業指標 + 各股分析
+- `show_weekly=False`：§NEWS 每日財經新聞 + 各股分析
+
+### `week_end` 修正（`run_weekly_report.py`）
+
+```python
+days_to_friday = (today.weekday() - 4) % 7
+week_end = today - timedelta(days=days_to_friday)
+```
+
+任何執行日均算出本週五（Friday=0天, Saturday=1天, Sunday=2天, Monday=3天偏移）。
+
+### GitHub Actions 狀態
+
+- `daily_report.yml`：schedule 已停用，保留 `workflow_dispatch`（可手動觸發）
+- `weekly_report.yml`：schedule 已停用，保留 `workflow_dispatch`（備用）
+- 主要入口：Dashboard 一鍵分析按鈕
+
+---
+
 ## 十四、待確認事項
 
 - [x] GitHub Repo 網址：`https://github.com/Jason690926/investment-system`（私人）
-- [ ] 財經新聞來源（計畫用 Google News RSS，待確認）
-- [ ] 週報固定跑哪天？（建議週六上午）
+- [x] 財經新聞來源：Google News RSS（已實作）
+- [x] 週報觸發時機：週五 14:00 一鍵分析自動含週報（已實作）
 - [ ] Render Starter 升級時機（目前仍用 Free 方案）
