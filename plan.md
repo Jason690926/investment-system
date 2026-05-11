@@ -1,5 +1,5 @@
 # 投資建議書系統 — 重構計畫
-> 建立日期：2026-04-30｜更新日期：2026-05-11｜基於兩次訪談決策 + 實作後討論補充
+> 建立日期：2026-04-30｜更新日期：2026-05-11（週7收工）｜基於兩次訪談決策 + 實作後討論補充
 
 ---
 
@@ -351,7 +351,7 @@ jobs:
 週4 ✅：深色主題前端（RWD + lightweight-charts + 逐股分析 + 看圖模式）
 週5 ✅：產業週報 + PDF 匯出 + Render Starter 部署
 週6 ✅：Bug 1-7 修復 + 酒田五法強化 + 四項分析品質修復（2026-05-07~08）
-週7 ✅：K線型態全面驗證 + 7項Bug修正（峰谷偵測假陽性/三山頂重複觸發/大陽線矛盾/三白兵三黑鴉缺漏/早晨黃昏之星條件過寬）（2026-05-11）
+週7 ✅：K線7項Bug修正 + AI幻覺封鎖 + NEWS即時重生機制（清快取→自動重呼叫AI）（2026-05-11）
 ```
 
 **部署前修復（2026-05-02 已完成）：**
@@ -717,6 +717,54 @@ UNIQUE (user_id, email) 防止同一 email 重複入庫。
 
 - 每日批次多1次 `analyze_daily_news()` 呼叫（max_tokens=800）≈ +$0.01/日
 - `analyze_market_only()` 日K從20→30根，token 略增，估計 +5-8%
+- `/api/news/regenerate` 手動觸發 ≈ +$0.01/次（只在測試/清快取時用）
+
+---
+
+## 十七、AI 幻覺封鎖 + NEWS 即時重生（2026-05-11）
+
+### 問題：「1778點/突破3萬點」持續出現
+
+根因分層：
+
+| 層 | 問題 | 修法 |
+|----|------|------|
+| 第一層 | `analyze_taiwan_market_v2()` 無任何歷史數字禁令 | 新增【數據鐵律】，列舉「1778點」「突破3萬點」「史高」為禁止用詞 |
+| 第二層 | `analyze_daily_news()` 鐵律不夠明確 | 補「嚴禁引用歷史特定漲跌事件數字」+ 新聞含此類描述需核實才引用 |
+| 第三層 | 清快取不清 `DailyMarketSummary`，NEWS 永遠顯示舊 batch 結果 | `api_clear_today_cache` 一併刪 `DailyMarketSummary`；新增 `/api/news/regenerate` 即時重呼叫 AI |
+
+### /api/news/regenerate 端點設計
+
+```python
+# app.py
+@app.route('/api/news/regenerate', methods=['POST'])
+@login_required
+def api_regenerate_news():
+    # 1. 呼叫 get_tw_news_rss(15)
+    # 2. 呼叫 get_global_markets() 取 TWII 即時行情
+    # 3. 呼叫 analyze_daily_news(news, twii_price, twii_change_pct)
+    # 4. 刪今日 DailyMarketSummary，寫入新結果
+```
+
+### dashboard.js 清快取流程（更新後）
+
+```
+clearTodayCache()
+  → POST /api/admin/clear-today-cache  （刪 StockAnalysis + DailyMarketSummary）
+  → POST /api/news/regenerate           （重抓 RSS + AI 重生成，5-15秒）
+  → loadStocks()                        （重整看板）
+```
+
+### K線 30 項測試套件（`tests/test_candlestick.py`）
+
+| 測試類別 | 項目 | 驗證內容 |
+|---------|------|---------|
+| `TestBug2PeakDetection` | 4項 | 嚴格 `>` 偵測峰谷，平台頂不算峰 |
+| `TestBug1SanshanFreshness` | 4項 | `bars_since_peak <= 15` 時效性 |
+| `TestBug3DaYangGapDown` | 3項 | 大陽線需排除 gap_down |
+| `TestBug45ThreeSoldiersCrowsFirstCandle` | 4項 | 三白兵/三黑鴉首根影線 ≤ 30% 實體 |
+| `TestBug67StarPatterns` | 7項 | 早晨/黃昏之星體型要求 > 50% 振幅 |
+| `TestRegressionNormalPatterns` | 8項 | 錘子/射擊之星/十字星/吞噬正常觸發不誤觸 |
 
 ---
 

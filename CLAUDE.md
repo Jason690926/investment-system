@@ -6,11 +6,25 @@
 - **架構決策**：討論完方案後，先更新 `plan.md`，再開始寫程式
 - `plan.md` 只在需要查架構細節時才讀（節省 token）
 
-## 當前進度（2026-05-11 AI幻覺封鎖 + K線測試套件）
+## 當前進度（2026-05-11 NEWS重生機制 + AI幻覺封鎖 + K線測試套件）
 
 **所在週次：週7**
 
-**狀態：HEAD = `fde93e5`（已 push）**
+**狀態：HEAD = `f800c7f`（已 push）**
+
+**本次（2026-05-11）進度 — NEWS 區塊無法即時重生：**
+
+**Commit `f800c7f` — fix(news): 清快取一併刪 DailyMarketSummary + 新增 /api/news/regenerate**
+
+**根本診斷：清快取後 NEWS 仍顯示舊資料**
+- `api_clear_today_cache` 只刪 `StockAnalysis`，完全不動 `DailyMarketSummary`
+- NEWS 區塊讀最近一筆 `DailyMarketSummary`，只有 14:30 batch 才會更新
+- 清快取→重跑一鍵分析：個股重新產生，NEWS 永遠是舊的
+
+**修法：**
+- `api_clear_today_cache`：一起刪 `DailyMarketSummary` 所有記錄
+- 新增 `/api/news/regenerate` POST：重抓 RSS + 取 TWII 即時行情 + 呼叫 AI（含新鐵律 prompt）+ 覆寫今日 `DailyMarketSummary`
+- `dashboard.js clearTodayCache`：清完後自動串呼 `/api/news/regenerate`，按鈕顯示「重生新聞…」進度
 
 **本次（2026-05-11）進度 — AI 歷史幻覺封鎖 + K線 30 項測試：**
 
@@ -164,7 +178,7 @@
   - 已討論方案供日後參考：A. 換 Resend HTTP API（推薦） / B. Render Starter / C. 加 timeout
 
 **下一步（按優先順序）：**
-1. **驗證 AI 幻覺封鎖**：下次執行報表後，確認「今日走勢回顧」及「新聞摘要」不再出現「1778點」「突破3萬點」等歷史字眼
+1. **驗證 AI 幻覺封鎖**：Render 部署 `f800c7f` 後，按「🗑 清快取」→ 等新聞重生 → 確認 NEWS 不再出現「1778點」「突破3萬點」
 2. **驗證三山頂修正**：觀察原本天天顯示三山頂的個股，確認 15 根靜音機制生效
 3. **驗證早晨之星/黃昏之星**：確認小陰+小實體+小陽不再誤觸發（需 3 根實體均 > 50% 振幅才觸發）
 4. **驗證週末視窗**：週五 14:00 後按一鍵分析，確認按鈕顯示「含週報」、週報背景產生、PDF 顯示 §MARKET
