@@ -734,13 +734,49 @@ def api_add_trade():
 @app.route('/api/admin/clear-today-cache', methods=['POST'])
 @login_required
 def api_clear_today_cache():
-    """⚠️ 測試用：清除所有 StockAnalysis 快取（含歷史）"""
-    from modules.models import StockAnalysis
+    """⚠️ 測試用：清除所有 StockAnalysis + DailyMarketSummary 快取（含歷史）"""
+    from modules.models import StockAnalysis, DailyMarketSummary
     db = SessionLocal()
     try:
         deleted = db.query(StockAnalysis).delete()
+        db.query(DailyMarketSummary).delete()
         db.commit()
         return jsonify({'deleted': deleted, 'date': 'all'})
+    finally:
+        db.close()
+
+
+@app.route('/api/news/regenerate', methods=['POST'])
+@login_required
+def api_regenerate_news():
+    """重新抓取財經新聞並呼叫 AI 產生 DailyMarketSummary（清快取後使用）"""
+    from modules.models import DailyMarketSummary
+    from modules.ai_analyzer_v2 import analyze_daily_news
+    from modules.data_fetcher import get_tw_news_rss, get_global_markets
+    from datetime import datetime, timezone, timedelta
+    TW = timezone(timedelta(hours=8))
+    today = datetime.now(TW).date()
+
+    db = SessionLocal()
+    try:
+        news = get_tw_news_rss(15)
+        twii_price, twii_change_pct = None, None
+        try:
+            markets = get_global_markets()
+            twii_data = markets.get('台灣加權', {})
+            twii_price = twii_data.get('price')
+            twii_change_pct = twii_data.get('change')
+        except Exception:
+            pass
+
+        html_news = analyze_daily_news(news, twii_price=twii_price, twii_change_pct=twii_change_pct)
+
+        db.query(DailyMarketSummary).filter_by(summary_date=today).delete()
+        db.add(DailyMarketSummary(summary_date=today, html_content=html_news))
+        db.commit()
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
     finally:
         db.close()
 

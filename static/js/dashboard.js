@@ -594,15 +594,18 @@ async function submitShare() {
   }
 }
 
-/* ── 測試用：清除今日快取 ─────────────────────────────── */
+/* ── 測試用：清除今日快取（含 NEWS，並立刻重生成新聞摘要）────── */
 async function clearTodayCache() {
-  if (!confirm('確定清除今日所有分析快取？（僅測試用）')) return;
+  if (!confirm('確定清除今日所有分析快取？（含新聞摘要，僅測試用）')) return;
   const btn = document.getElementById('btn-clear-cache');
   btn.disabled = true;
   btn.textContent = '清除中…';
   try {
     const res = await api('/api/admin/clear-today-cache', { method: 'POST' });
-    toast(`已清除 ${res.deleted} 筆今日快取（${res.date}）`);
+    toast(`已清除 ${res.deleted} 筆快取，正在重新產生新聞摘要…`);
+    btn.textContent = '重生新聞…';
+    await api('/api/news/regenerate', { method: 'POST' });
+    toast('新聞摘要已更新');
     loadStocks();
   } catch (e) {
     toast(e.message, 'error');
