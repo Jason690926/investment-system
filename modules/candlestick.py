@@ -12,23 +12,23 @@ _MULTI_CANDLE = {
 
 
 def _find_local_peaks(arr, min_gap: int = 3) -> list:
-    """局部高點：左右各 min_gap 根都不超過它才算真實峰頂"""
+    """局部高點：左右各 min_gap 根都嚴格不超過它才算真實峰頂"""
     peaks = []
     n = len(arr)
     for k in range(min_gap, n - min_gap):
-        if (arr[k] >= max(arr[k - min_gap:k]) and
-                arr[k] >= max(arr[k + 1:k + min_gap + 1])):
+        if (arr[k] > max(arr[k - min_gap:k]) and
+                arr[k] > max(arr[k + 1:k + min_gap + 1])):
             peaks.append((k, arr[k]))
     return peaks
 
 
 def _find_local_troughs(arr, min_gap: int = 3) -> list:
-    """局部低點：左右各 min_gap 根都不低於它才算真實谷底"""
+    """局部低點：左右各 min_gap 根都嚴格不低於它才算真實谷底"""
     troughs = []
     n = len(arr)
     for k in range(min_gap, n - min_gap):
-        if (arr[k] <= min(arr[k - min_gap:k]) and
-                arr[k] <= min(arr[k + 1:k + min_gap + 1])):
+        if (arr[k] < min(arr[k - min_gap:k]) and
+                arr[k] < min(arr[k + 1:k + min_gap + 1])):
             troughs.append((k, arr[k]))
     return troughs
 
@@ -198,7 +198,7 @@ def detect_patterns(hist):
         })
 
     # 大陽線（強勢多頭）- 非跳空才顯示
-    if (not gap_up and
+    if (not gap_up and not gap_down and
         c[i] > o[i] and body_ratio > 0.7):
         patterns.append({
             'name': '大陽線',
@@ -284,11 +284,12 @@ def detect_patterns(hist):
 
     # ===== 三K線型態 =====
     if i >= 2:
-        # 三白兵（酒田正規）：連三陽線 + 每根開盤在前根實體內（不跳空） + 上影線短
+        # 三白兵（酒田正規）：連三陽線 + 每根開盤在前根實體內（不跳空） + 上影線短（三根均檢查）
         if (c[i-2] > o[i-2] and c[i-1] > o[i-1] and c[i] > o[i] and
                 c[i-1] > c[i-2] and c[i] > c[i-1] and
                 o[i-1] >= o[i-2] and o[i-1] <= c[i-2] and
                 o[i]   >= o[i-1] and o[i]   <= c[i-1] and
+                (h[i-2] - c[i-2]) <= abs(c[i-2] - o[i-2]) * 0.3 and
                 (h[i-1] - c[i-1]) <= abs(c[i-1] - o[i-1]) * 0.3 and
                 (h[i]   - c[i])   <= abs(c[i]   - o[i])   * 0.3):
             patterns.append({
@@ -298,11 +299,12 @@ def detect_patterns(hist):
                 'strength': 'strong'
             })
 
-        # 三黑鴉（酒田正規）：連三陰線 + 每根開盤在前根實體內（不跳空） + 下影線短
+        # 三黑鴉（酒田正規）：連三陰線 + 每根開盤在前根實體內（不跳空） + 下影線短（三根均檢查）
         if (c[i-2] < o[i-2] and c[i-1] < o[i-1] and c[i] < o[i] and
                 c[i-1] < c[i-2] and c[i] < c[i-1] and
                 o[i-1] <= o[i-2] and o[i-1] >= c[i-2] and
                 o[i]   <= o[i-1] and o[i]   >= c[i-1] and
+                (c[i-2] - l[i-2]) <= abs(c[i-2] - o[i-2]) * 0.3 and
                 (c[i-1] - l[i-1]) <= abs(c[i-1] - o[i-1]) * 0.3 and
                 (c[i]   - l[i])   <= abs(c[i]   - o[i])   * 0.3):
             patterns.append({
@@ -312,10 +314,13 @@ def detect_patterns(hist):
                 'strength': 'strong'
             })
 
-        # 早晨之星（底部反轉）
+        # 早晨之星（底部反轉）：第一根需為大陰線（實體 > 50% 振幅），第三根需大陽線
         if (c[i-2] < o[i-2] and
+            abs(c[i-2] - o[i-2]) / max(h[i-2] - l[i-2], 1e-9) > 0.5 and
             abs(c[i-1] - o[i-1]) < (h[i-1] - l[i-1]) * 0.3 and
-            c[i] > o[i] and c[i] > (o[i-2] + c[i-2]) / 2):
+            c[i] > o[i] and
+            abs(c[i] - o[i]) / max(h[i] - l[i], 1e-9) > 0.5 and
+            c[i] > (o[i-2] + c[i-2]) / 2):
             patterns.append({
                 'name': '早晨之星',
                 'type': 'bullish',
@@ -323,10 +328,13 @@ def detect_patterns(hist):
                 'strength': 'strong'
             })
 
-        # 黃昏之星（頂部反轉）
+        # 黃昏之星（頂部反轉）：第一根需為大陽線（實體 > 50% 振幅），第三根需大陰線
         if (c[i-2] > o[i-2] and
+            abs(c[i-2] - o[i-2]) / max(h[i-2] - l[i-2], 1e-9) > 0.5 and
             abs(c[i-1] - o[i-1]) < (h[i-1] - l[i-1]) * 0.3 and
-            c[i] < o[i] and c[i] < (o[i-2] + c[i-2]) / 2):
+            c[i] < o[i] and
+            abs(c[i] - o[i]) / max(h[i] - l[i], 1e-9) > 0.5 and
+            c[i] < (o[i-2] + c[i-2]) / 2):
             patterns.append({
                 'name': '黃昏之星',
                 'type': 'bearish',
@@ -389,7 +397,7 @@ def detect_patterns(hist):
         h_win = h[win_start:i + 1]
         l_win = l[win_start:i + 1]
 
-        # 三山頂：3個局部高點在相近水平（±3%），且當前價格已從高點回落
+        # 三山頂：3個局部高點在相近水平（±3%），最後峰值在近15根內（避免舊高點每日重複觸發），且當前價格已從高點回落
         raw_peaks = _find_local_peaks(h_win, min_gap=3)
         spaced_peaks: list = []
         for pk in raw_peaks:
@@ -400,7 +408,9 @@ def detect_patterns(hist):
                                  spaced_peaks[-2][1],
                                  spaced_peaks[-1][1])
             avg_h = (p1_h + p2_h + p3_h) / 3
-            if (all(abs(px - avg_h) / avg_h <= 0.03 for px in (p1_h, p2_h, p3_h)) and
+            bars_since_peak = (len(h_win) - 1) - spaced_peaks[-1][0]
+            if (bars_since_peak <= 15 and
+                    all(abs(px - avg_h) / avg_h <= 0.03 for px in (p1_h, p2_h, p3_h)) and
                     c[i] < avg_h * 0.97):
                 patterns.append({
                     'name': '三山頂（酒田）',
@@ -409,7 +419,7 @@ def detect_patterns(hist):
                     'strength': 'strong'
                 })
 
-        # 三川底：3個局部低點在相近水平（±3%），且當前價格已從低點反彈
+        # 三川底：3個局部低點在相近水平（±3%），最後谷底在近15根內（避免舊低點每日重複觸發），且當前價格已從低點反彈
         raw_troughs = _find_local_troughs(l_win, min_gap=3)
         spaced_troughs: list = []
         for tr in raw_troughs:
@@ -420,7 +430,9 @@ def detect_patterns(hist):
                                  spaced_troughs[-2][1],
                                  spaced_troughs[-1][1])
             avg_l = (t1_l + t2_l + t3_l) / 3
-            if (all(abs(tx - avg_l) / avg_l <= 0.03 for tx in (t1_l, t2_l, t3_l)) and
+            bars_since_trough = (len(l_win) - 1) - spaced_troughs[-1][0]
+            if (bars_since_trough <= 15 and
+                    all(abs(tx - avg_l) / avg_l <= 0.03 for tx in (t1_l, t2_l, t3_l)) and
                     c[i] > avg_l * 1.03):
                 patterns.append({
                     'name': '三川底（酒田）',
