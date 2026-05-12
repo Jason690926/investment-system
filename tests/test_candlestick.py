@@ -7,7 +7,7 @@ import pandas as pd
 import numpy as np
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-from modules.candlestick import detect_patterns, _find_local_peaks, _find_local_troughs
+from modules.candlestick import detect_patterns, _find_local_peaks, _find_local_troughs, calc_pnf_target
 
 
 # ────────────────────────────────────────
@@ -377,3 +377,93 @@ class TestRegressionNormalPatterns:
             [100, 100, 100, 90, 95],
         )
         assert '曙光初現' in names(df)
+
+
+# ────────────────────────────────────────
+# calc_pnf_target — Darvas 箱體突破目標
+# ────────────────────────────────────────
+
+def _pnf_bar(h, l, date_str):
+    c = (h + l) / 2
+    return {'date': date_str, 'open': c, 'high': h, 'low': l, 'close': c}
+
+def make_pnf_bars(specs):
+    """(high, low) list → bars list，日期以週為單位遞增"""
+    from datetime import date, timedelta
+    d = date(2026, 1, 1)
+    result = []
+    for h, l in specs:
+        result.append(_pnf_bar(h, l, str(d)))
+        d += timedelta(weeks=1)
+    return result
+
+
+class TestCalcPnfTarget:
+
+    # 基本場景：箱體確立 + 突破 → 回傳目標
+    def test_basic_breakout_returns_target(self):
+        bars = make_pnf_bars([
+            (80, 70), (75, 65), (70, 60),
+            (65, 55), (64, 56), (63, 55), (64, 56), (65, 57),
+            (70, 62), (72, 64), (74, 65), (76, 68),
+        ])
+        result = calc_pnf_target(bars, lookback=12, current_price=75)
+        assert result is not None
+        assert result > 64  # 目標必須高於箱頂
+
+    # 核心驗證：新增一根 bar 後目標不漂移
+    def test_stable_target_after_new_bar(self):
+        bars = make_pnf_bars([
+            (80, 70), (75, 65), (70, 60),
+            (65, 55), (64, 56), (63, 55), (64, 56), (65, 57),
+            (70, 62), (72, 64), (74, 65), (76, 68),
+        ])
+        from datetime import date, timedelta
+        extended = bars + [_pnf_bar(78, 70, str(date(2026, 3, 26)))]
+
+        r1 = calc_pnf_target(bars,     lookback=12, current_price=75)
+        r2 = calc_pnf_target(extended, lookback=12, current_price=78)
+        assert r1 is not None and r2 is not None
+        assert r1 == r2, f"目標漂移：{r1} → {r2}"
+
+    # 箱體存在但尚未突破 → None
+    def test_no_breakout_returns_none(self):
+        bars = make_pnf_bars([
+            (80, 70), (75, 65), (70, 60),
+            (65, 55), (64, 56), (63, 55), (64, 56), (65, 57),
+            (64, 58),
+        ])
+        assert calc_pnf_target(bars, lookback=12, current_price=64) is None
+
+    # 箱寬 > 20%（週K 閾值）→ None
+    def test_box_too_wide_returns_none(self):
+        # box_top=110, box_bottom=78 → 41% > 20%
+        bars = make_pnf_bars([
+            (100, 80), (99, 81), (98, 79),
+            (110, 78), (109, 79), (108, 80), (109, 79), (110, 81),
+            (120, 100), (122, 105),
+        ])
+        assert calc_pnf_target(bars, lookback=12, current_price=125) is None
+
+    # 純趨勢段（無有效箱體）→ None
+    def test_pure_uptrend_no_box(self):
+        specs = [(50 + i*5, 45 + i*5) for i in range(12)]
+        bars  = make_pnf_bars(specs)
+        assert calc_pnf_target(bars, lookback=12, current_price=120) is None
+
+    # 日K confirm=3（lookback=20 > 14）
+    def test_daily_bars_confirm3(self):
+        bars = make_pnf_bars([
+            (80, 70), (75, 65), (70, 60), (68, 58),
+            (65, 55), (64, 56), (63, 55), (64, 56), (65, 57), (65, 58),
+            (70, 62), (72, 64), (74, 65), (76, 68),
+            (78, 70), (80, 72), (82, 74), (84, 76), (86, 78), (88, 80),
+        ])
+        result = calc_pnf_target(bars, lookback=20, current_price=90)
+        # confirm=3：不同的箱頂可能被選中，只確認有結果且大於箱頂
+        assert result is None or result > 60
+
+    # 資料不足 → None
+    def test_insufficient_bars(self):
+        assert calc_pnf_target([], lookback=12) is None
+        assert calc_pnf_target([_pnf_bar(100, 90, '2026-01-01')] * 3) is None

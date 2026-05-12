@@ -511,33 +511,64 @@ def label_bars(bars: list) -> dict:
 
 def calc_pnf_target(bars: list, lookback: int = 12,
                     current_price: float = None) -> float | None:
-    """P&F 水平計數概念目標（等幅量度 Measured Move）
-    公式：target = base_high + (base_high - base_low)
+    """Darvas 箱體突破目標（等幅量度 Measured Move）
 
-    驗證邏輯：
-    1. 若 lookback 區間波動率 > 35%（非整理，是趨勢），縮至近 4 根找較緊箱體
-    2. 若 current_price 距 base_high 超過 15%（尚未接近突破點），目標無意義 → None
+    掃描全部 bars，找最近一個有效盤整箱體：
+      箱頂：某根 bar 的 high，後 confirm 根均未超過（阻力確認）
+      箱底：箱頂後窗口內最低點，後 confirm 根均未跌破（支撐確認）
+      箱寬 ≤ max_range（排除趨勢段）
+      current_price > 箱頂 × 1.02（突破確認）
 
-    lookback=12 週K ≈ 3個月；lookback=20 日K ≈ 1個月。
+    目標 = 箱頂 + (箱頂 - 箱底)，突破後鎖定不漂移。
+    找到最近箱體但尚未突破 → 直接 None（不往舊箱找）。
+
+    lookback 決定確認週數與箱寬閾值（不截斷掃描範圍）：
+      週K (lookback ≤ 14)：confirm=2，箱寬 ≤ 20%
+      日K (lookback > 14)：confirm=3，箱寬 ≤ 15%
     """
     if not bars or len(bars) < 5:
         return None
     try:
-        for lb in [lookback, min(4, lookback)]:
-            recent    = bars[-min(lb, len(bars)):]
-            base_high = max(float(b['high']) for b in recent)
-            base_low  = min(float(b['low'])  for b in recent)
-            if base_high <= base_low:
+        n         = len(bars)
+        confirm   = 2 if lookback <= 14 else 3
+        max_range = 0.20 if lookback <= 14 else 0.15
+
+        highs = [float(b['high']) for b in bars]
+        lows  = [float(b['low'])  for b in bars]
+        cur   = float(current_price) if current_price is not None else None
+
+        for i in range(n - confirm - 2, 0, -1):
+            box_top = highs[i]
+
+            # 箱頂確認：後 confirm 根 high 均未超過
+            if not all(highs[j] <= box_top
+                       for j in range(i + 1, min(i + confirm + 1, n))):
                 continue
-            range_ratio = (base_high - base_low) / base_low
-            # 箱體波動率合理（≤35%），或已縮至最短回溯
-            if range_ratio <= 0.35 or lb <= 4:
-                # 若已提供當前價，確認接近突破點（base_high 以內 15% 以內）
-                if current_price is not None:
-                    if float(current_price) < base_high * 0.85:
-                        return None   # 尚未接近突破，目標暫不顯示
-                target = base_high + (base_high - base_low)
-                return round(target) if target >= 100 else round(target, 1)
+
+            # 箱底：箱頂後窗口內最低點（confirm+4 根搜尋範圍）
+            search_end = min(i + confirm + 5, n)
+            window     = lows[i:search_end]
+            box_bottom = min(window)
+            low_idx    = i + window.index(box_bottom)
+
+            # 箱底確認：後 confirm 根 low 均未跌破
+            if low_idx + confirm >= n:
+                continue
+            if not all(lows[j] >= box_bottom
+                       for j in range(low_idx + 1, min(low_idx + confirm + 1, n))):
+                continue
+
+            # 箱寬：排除趨勢段
+            if box_bottom <= 0 or (box_top - box_bottom) / box_bottom > max_range:
+                continue
+
+            # 突破確認：最近箱體未突破 → None，不往舊箱找
+            if cur is not None and cur <= box_top * 1.02:
+                return None
+
+            target = box_top + (box_top - box_bottom)
+            return round(target) if target >= 100 else round(target, 1)
+
         return None
     except Exception as e:
         print(f'[candlestick] calc_pnf_target 失敗: {e}')
