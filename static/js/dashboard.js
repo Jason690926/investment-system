@@ -204,12 +204,13 @@ function updateCardPrice(stockId, q) {
   set('.ohlc-c', q.close);
 }
 
-/* ── 週末視窗判斷（週五 14:00 ~ 週一 09:00 台灣時間）──── */
+/* ── 週末視窗判斷（週五 14:30 ~ 週一 09:00 台灣時間）──── */
 function isWeeklyWindow() {
   const tw = new Date(Date.now() + 8 * 60 * 60 * 1000); // UTC+8
   const wd = tw.getUTCDay();   // 0=Sun 1=Mon ... 5=Fri 6=Sat
   const h  = tw.getUTCHours();
-  return (wd === 5 && h >= 14) || wd === 6 || wd === 0 || (wd === 1 && h < 9);
+  const m  = tw.getUTCMinutes();
+  return (wd === 5 && (h > 14 || (h === 14 && m >= 30))) || wd === 6 || wd === 0 || (wd === 1 && h < 9);
 }
 
 function updateAnalyzeBtn() {

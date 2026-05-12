@@ -297,11 +297,12 @@ def api_market_quote(symbol):
        ④ Yahoo Finance；成功後寫入 QuoteCache 與 _quote_cache
     """
     import json as _json
-    from datetime import date as dt_date, datetime as _dt
+    from datetime import datetime as _dt, timedelta as _td
     from modules.data_enricher import get_stock_quote
     from modules.models import MarketDataCache, QuoteCache
 
-    today = dt_date.today()
+    # TW date：避免伺服器 UTC 在台灣 08:00 翻日造成 cache key 失準
+    today = (_dt.utcnow() + _td(hours=8)).date()
     key = f'{symbol}_{today}'
 
     if key not in _quote_cache:
@@ -376,10 +377,10 @@ def api_market_quote(symbol):
 def api_market_data(symbol):
     """完整市場資料：股票詳情頁用，DB 當日快取、跨用戶共用"""
     import json
-    from datetime import date as dt_date
+    from datetime import datetime as _dt, timedelta as _td
     from modules.models import MarketDataCache
     from modules.data_enricher import get_full_stock_data
-    today = dt_date.today()
+    today = (_dt.utcnow() + _td(hours=8)).date()
     db = SessionLocal()
     try:
         cached = db.query(MarketDataCache).filter_by(
@@ -499,14 +500,13 @@ def api_analyze_stock(stock_id):
             })
 
         # force=1 且今日已有快取 → 檢查台灣時間（UTC+8）及冷卻期
-        # ⚠️ 測試模式：時間鎖與冷卻暫時停用，測試完請改回正常值
         if existing and existing.html_content and force:
             tw_now = _dt.datetime.utcnow() + _dt.timedelta(hours=8)
-            if tw_now.hour < 0:  # TODO: 測試完改回 15
+            if tw_now.hour < 15:
                 return jsonify({'error': 'CUTOFF|15:00'}), 429
             if existing.generated_at:
                 elapsed = (_dt.datetime.utcnow() - existing.generated_at).total_seconds()
-                if elapsed < 0 * 3600:  # TODO: 測試完改回 4
+                if elapsed < 4 * 3600:
                     unlock_tw = existing.generated_at + _dt.timedelta(hours=12)
                     return jsonify({'error': f'COOLDOWN|{unlock_tw.strftime("%H:%M")}'}), 429
 
@@ -735,6 +735,8 @@ def api_add_trade():
 @login_required
 def api_clear_today_cache():
     """⚠️ 測試用：清除所有 StockAnalysis + DailyMarketSummary 快取（含歷史）"""
+    if current_user.role != 'admin':
+        return jsonify({'error': '無權限'}), 403
     from modules.models import StockAnalysis, DailyMarketSummary
     db = SessionLocal()
     try:
@@ -819,11 +821,11 @@ def print_report():
 
         # 顯示切換：週末視窗（週五 14:30 ~ 週一 09:00）→ 週報；其餘 → 每日新聞
         now_tw = datetime.now(TW)
-        wd, h = now_tw.weekday(), now_tw.hour
+        wd, h, m = now_tw.weekday(), now_tw.hour, now_tw.minute
         show_weekly = (
-            (wd == 4 and h >= 14) or   # 週五 14:30+
-            wd in (5, 6) or            # 週六、週日
-            (wd == 0 and h < 9)        # 週一 09:00 前
+            (wd == 4 and (h > 14 or (h == 14 and m >= 30))) or  # 週五 14:30+
+            wd in (5, 6) or                                      # 週六、週日
+            (wd == 0 and h < 9)                                  # 週一 09:00 前
         )
         if show_weekly:
             weekly = db.query(WeeklyReport).order_by(WeeklyReport.week_start.desc()).first()
