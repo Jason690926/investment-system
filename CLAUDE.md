@@ -6,11 +6,64 @@
 - **架構決策**：討論完方案後，先更新 `plan.md`，再開始寫程式
 - `plan.md` 只在需要查架構細節時才讀（節省 token）
 
-## 當前進度（2026-05-12 收工 — 6項邏輯Bug全修）
+## 當前進度（2026-05-13 dashboard 卡片改版 + 工具鏈擴充）
 
-**所在週次：週7（收尾）**
+**所在週次：週7（UI 重整）**
 
-**狀態：HEAD = `fb58e39`（已 push origin/main）**
+**狀態：HEAD = `37cc3e6`（已 push origin/main）**
+
+**本次（2026-05-13）進度 — dashboard 卡片重新設計（5 輪 mockup → 正式上線）：**
+
+**Commit `37cc3e6` — feat(ui): dashboard 卡片改版 — slate-900 + 台股紅綠 + 20日K + IBM Plex Sans**
+
+設計流程（用 ui-ux-pro-max skill 查設計庫 + mockup 迭代）：
+- v1：slate-900 + IBM Plex Sans + tabular-nums（基礎方案）
+- v2：加 7 日 sparkline + RISK 改 inline chip + 移除 risk-bar
+- v3：翻轉漲跌色為**台股紅綠慣例**（用戶提醒既有 app.css 用美股慣例是 bug）
+- v4：badge 從 absolute 改 inline（解決「觀察中」3 字壓到 price）+ sparkline 改 mini K 棒
+- v5：對齊修正（wyckoff/risk chip） + K 棒擴增 7 → 20 根（覆蓋 1 個月交易日）
+
+**主要技術變動：**
+1. **CSS token 重定義** `static/css/app.css`：
+   - 主題：slate-950/900 系列（bg `#020617` / card `#0F172A` / border `#334155`）
+   - 漲跌：`--up: #EF4444` / `--down: #22C55E`（台股慣例）
+   - 風險：`--risk-low: cyan` / `--risk-mid: amber` / `--risk-high: fuchsia`（獨立 token 避開紅綠）
+   - 強調：`--accent: #38BDF8`（已分析、tab active）
+2. **全檔色彩翻轉**：`.up/.down/.bull/.bear/.support-level/.resistance-level/.wyckoff-*/.qs-*` 從美股慣例改為台股
+3. **字體**：IBM Plex Sans Google Font + `font-feature-settings: 'tnum' on` 全域
+4. **卡片 layout**：
+   - badge `absolute` → inline 放 card-name 上方
+   - 新增 `.card-status-row`（wyckoff + RISK chip 並排）
+   - 新增 `.card-spark-wrap`（20 日迷你 K 線 SVG）
+   - 移除 `.risk-bar/.risk-fill`（長條圖換 inline chip）
+   - `.analyzed-badge` display:none（漸層 bar 已足夠）
+5. **Sparkline 後端**：
+   - `get_stock_quote` 抓 30 天 → 回傳 `spark_bars: [{o,h,l,c}] × 20`
+   - `api_market_quote` 三條讀取路徑（QuoteCache / MarketDataCache / Yahoo）均回 spark_bars
+6. **Sparkline 前端**：
+   - `renderSparkline(bars)`：動態生成 SVG 20 根 K 棒（紅實體 = 漲 / 綠實體 = 跌）
+   - `sparkPctLabel(bars)`：算 20D 整體漲跌幅 + 染色
+   - `buildCard / updateCardPrice / markCardAnalyzed` 全部適配新結構
+
+**Memory 紀錄：**
+- 新增 `feedback_taiwan_stock_color_convention.md`：台股漲跌色慣例規則，未來會話開工自動載入提醒
+
+**Claude Code 工具鏈擴充（user scope 全域）：**
+- 安裝 `ui-ux-pro-max` skill（67 風格 / 161 配色 / 99 UX 準則，本次主要用它跑 fintech dashboard design system）
+- 安裝 `context7` MCP server（即時抓 Flask/SQLAlchemy/Anthropic SDK 等套件文件）
+- CLAUDE.md「Claude Code 工具鏈」區塊新增說明
+
+**驗證：**
+- pytest 37/37 通過
+- py_compile 全綠
+- dashboard.js / app.js syntax OK
+- Render 自動 deploy 中（webhook 觸發）
+
+---
+
+## 過往進度（2026-05-12 收工 — 6項邏輯Bug全修）
+
+**狀態：HEAD = `fb58e39`**
 
 **本次（2026-05-12 第二輪）進度 — 系統性審視週7程式碼，找出並修正 6 項邏輯 Bug：**
 
