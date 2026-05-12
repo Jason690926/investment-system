@@ -6,13 +6,39 @@
 - **架構決策**：討論完方案後，先更新 `plan.md`，再開始寫程式
 - `plan.md` 只在需要查架構細節時才讀（節省 token）
 
-## 當前進度（2026-05-12 K線特徵標注 + 多空欄位修正）
+## 當前進度（2026-05-12 收工 — 6項邏輯Bug全修）
 
-**所在週次：週7**
+**所在週次：週7（收尾）**
 
-**狀態：HEAD = `e4bec98`（已 push）**
+**狀態：HEAD = `fb58e39`（已 push origin/main）**
 
-**本次（2026-05-12）進度 — K線多空欄位誤判修正：**
+**本次（2026-05-12 第二輪）進度 — 系統性審視週7程式碼，找出並修正 6 項邏輯 Bug：**
+
+**Commit `fb58e39` — fix(audit): 修6項邏輯Bug — HTML清理/AI幻覺/權限/時間鎖/週末視窗/快取TW date**
+
+| # | 嚴重度 | 檔案:行 | Bug | 修法 |
+|---|--------|---------|-----|------|
+| 1 | 🔴 | `ai_analyzer_v2.py:875` | `analyze_taiwan_market_v2` 末尾無 `_clean_html_output`，AI 若回傳 `<head>/<style>` 會污染頁面（與其他三個 AI 函式不一致）| 末尾加 `_clean_html_output(...)` 包裝 |
+| 2 | 🔴 | `ai_analyzer_v2.py:973-977` | `analyze_weekly_taiwan_v2` 沒加歷史幻覺鐵律（commit `fde93e5` 只強化了 daily_news + taiwan_market_v2，週報函式遺漏）| prompt 加【數據鐵律】區塊（與 taiwan_market_v2 同模板）|
+| 3 | 🟡 | `app.py:738-739` | `api_clear_today_cache` 缺 admin 檢查，任何登入用戶可清光所有共用快取 | 加 `if current_user.role != 'admin': return 403` |
+| 4 | 🟡 | `app.py:505,509` | 時間鎖與冷卻硬編碼為 `< 0`（永遠停用），CLAUDE.md 標註的「測試模式遺留」 | 還原 `< 15` 與 `< 4 * 3600`，移除測試模式註解 |
+| 5 | 🟡 | `app.py:822-827` + `dashboard.js:208-214` | 週末視窗只判 `h >= 14`，週五 14:00–14:29 報表已切到「週末視窗」但週報未跑 → daily_news=None、weekly=None 頂部空缺 | 兩端都改為 `h > 14 or (h == 14 and m >= 30)` 精確到分鐘 |
+| 6 | 🟢 | `app.py:304, 382` | `api_market_quote` / `api_market_data` 用 UTC `dt_date.today()`，與其他端點用的 TW date 不一致，08:00 TW 翻日後 cache key 失準 | 改用 `(utcnow + 8h).date()` |
+
+**未修 — 微小 7：`_fmt_bars` 特徵基準退化**
+- 重新審視後判斷不算 bug：現有 fallback 已處理 `range_high == range_low → 中段` / `vol_avg == 0 → 均量`；生產 daily_bars ≥ 60 根不會踩到。
+
+**驗證：**
+- `pytest tests/test_candlestick.py` → 37/37 通過
+- `py_compile`：app.py / ai_analyzer_v2.py / run_daily_report / run_weekly_report / stock_service 全綠
+- `dashboard.js` JS SYNTAX OK
+- 變更：3 檔、+23/-14 行
+
+**注意：修 2 改了 `analyze_weekly_taiwan_v2` 的 prompt，下次週報跑（最近的週末視窗）才會看到效果。模板已被 `taiwan_market_v2` 同步驗證，不需特別重跑。**
+
+---
+
+**本次（2026-05-12 第一輪）進度 — K線多空欄位誤判修正：**
 
 **Commit `e4bec98` — fix(kline): 修正K線多空欄位誤判邏輯 + 加入程式化特徵標注**
 
