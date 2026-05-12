@@ -253,6 +253,26 @@
 
 ---
 
+## Claude Code 工具鏈（user scope，全域）
+
+裝於 2026-05-12，跨專案可用：
+
+- **ui-ux-pro-max** (skill)：UI/UX 設計庫查詢，50+ 風格、161 配色、57 字體配對、99 UX 準則、25 圖表類型，含 dark mode 獨立規則與對比度檢查。
+  - **何時觸發**：改 `templates/*.html`、`static/css/*`、`static/js/dashboard.js` 視覺面 / 配色 / 字體 / 排版 / chart 時自動觸發
+  - **成本**：核心是 local Python 查詢，0 token；後續套規格走我一般 token
+  - **指令**：`python3 ~/.claude/skills/ui-ux-pro-max/scripts/search.py "<query>" --design-system`
+- **context7** (MCP server)：即時抓套件官方文件，補我訓練 cutoff (2025-08) 後的 API 變動。
+  - **何時觸發**：問 Flask / SQLAlchemy / yfinance / anthropic SDK / mistune / SortableJS / html2pdf.js 等套件文件時自動觸發
+  - **成本**：MCP call，0 token（不打 LLM）
+  - **工具**：`mcp__plugin_context7_context7__resolve-library-id` + `query-docs`
+
+**注意：**
+- ui-ux-pro-max **不適用** AI prompt 調整、DB schema、K 線演算法、cache 邏輯這類非前端工作
+- context7 **不適用** 重構、寫腳本、debug 業務邏輯、code review，僅限「套件文件查詢」
+- 兩者互不衝突，可同時觸發（例：改前端時若用到新版 Tailwind class，先 context7 確認語法，再 ui-ux-pro-max 給設計建議）
+
+---
+
 ## 修改 AI 功能的紀律（避免燒 token）
 
 修改會呼叫 Claude API 的程式碼前（週報產生、個股分析、產業指標股、市場分析等），必須在本機**用 DB 既有的真實 raw 輸出**完整推演 cleanup / prompt / 渲染管道，確認修法在實際資料上會 work，再讓使用者重跑。
