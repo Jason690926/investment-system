@@ -54,10 +54,50 @@ def _fmt_bars(bars: list, label: str, n: int, pattern_labels: dict = None) -> st
     if not bars:
         return f"【{label}】：資料不足"
     rows = bars[-n:]
+
+    # 20-bar baselines for 特徵 computation
+    ref        = bars[-20:]
+    vol_list   = [float(b.get('volume_zhang', 0) or 0) for b in ref]
+    vol_avg    = sum(vol_list) / len(vol_list) if vol_list else 0
+    range_high = max(float(b['high']) for b in ref) if ref else 0
+    range_low  = min(float(b['low'])  for b in ref) if ref else 0
+
     lines = []
-    for b in rows:
+    for idx, b in enumerate(rows):
+        abs_idx = len(bars) - len(rows) + idx
+
+        # 量能
+        vol = float(b.get('volume_zhang', 0) or 0)
+        if vol_avg > 0:
+            r = vol / vol_avg
+            vol_feat = '放量' if r >= 1.5 else ('縮量' if r <= 0.7 else '均量')
+        else:
+            vol_feat = '均量'
+
+        # 位置（收盤在20根高低範圍中的相對位置）
+        close = float(b['close'])
+        if range_high > range_low:
+            pos = (close - range_low) / (range_high - range_low)
+            pos_feat = ('極高位' if pos >= 0.85 else
+                        '高位'   if pos >= 0.65 else
+                        '中段'   if pos >= 0.35 else
+                        '低位'   if pos >= 0.15 else '極低位')
+        else:
+            pos_feat = '中段'
+
+        # 跳空（開盤 vs 前根收盤 ±1%）
+        gap_feat = ''
+        if abs_idx > 0:
+            prev_close = float(bars[abs_idx - 1]['close'])
+            open_ = float(b['open'])
+            if open_ > prev_close * 1.01:
+                gap_feat = '·跳空高開'
+            elif open_ < prev_close * 0.99:
+                gap_feat = '·跳空低開'
+
+        feat = f"【特徵={vol_feat}·{pos_feat}{gap_feat}】"
         line = (f"{b['date']}  O={b['open']} H={b['high']} L={b['low']} C={b['close']}  "
-                f"量={b['volume_zhang']}張")
+                f"量={b['volume_zhang']}張  {feat}")
         if pattern_labels and b['date'] in pattern_labels:
             line += f"  ▶{pattern_labels[b['date']]}"
         lines.append(line)
@@ -259,8 +299,10 @@ WYCKOFF_PHASE: [積累|上漲|派發|下跌|再積累|再派發|不明]
 
 ### 二、本間宗久K線確認
 ⚠️ K棒資料中 ▶型態名稱 為程式依數學公式精確計算，禁止更改或自行重新命名。請直接使用標注的型態並解讀其在當前趨勢下的含意。
-- 週K型態（最近3根）：引用 ▶標注 的型態名稱，說明多空含意
-- 日K型態（最近5根）：引用 ▶標注 的型態名稱，說明多空含意
+⚠️ 禁止只憑單根紅/綠顏色判斷多空，必須結合【特徵=...】的量能·位置分析含意。
+- 週K型態（最近3根）：引用 ▶標注 的型態名稱，結合【特徵=...】量能·位置解讀含意
+- 日K型態（最近5根）：引用 ▶標注 的型態名稱，結合【特徵=...】量能·位置解讀含意
+- K線序列：連續3-5根量能·位置的變化趨勢，說明多空動能是否增強或衰退
 - 週K ↔ 日K 方向是否一致確認？
 
 ### 三、李佛摩時機判斷
@@ -496,8 +538,8 @@ WYCKOFF_PHASE: [積累|上漲|派發|下跌|再積累|再派發|不明]
 7. 其他語意 span 照舊：`support-level` / `resistance-level` / `target-price`
 
 ## K 線 table 輸出範例（第二節專用）
-<table><thead><tr><th>日期</th><th>型態</th><th>開</th><th>高</th><th>低</th><th>收</th><th>多空</th></tr></thead>
-<tbody><tr><td>YYYY-MM-DD</td><td>錘子</td><td>150</td><td>153</td><td>148</td><td>152</td><td class="bull">看漲</td></tr></tbody></table>
+<table><thead><tr><th>日期</th><th>型態</th><th>開</th><th>高</th><th>低</th><th>收</th><th>特徵</th></tr></thead>
+<tbody><tr><td>YYYY-MM-DD</td><td>錘子</td><td>150</td><td>153</td><td>148</td><td>152</td><td>放量·高位</td></tr></tbody></table>
 
 ## 請輸出以下分析（不含操作建議）：
 
@@ -510,12 +552,15 @@ WYCKOFF_PHASE: [積累|上漲|派發|下跌|再積累|再派發|不明]
 
 ### 二、本間宗久K線確認（⚠️ 必須輸出 HTML table）
 ⚠️ 【K線型態命名鐵律】K棒資料中 ▶型態名稱 為程式依數學公式精確計算，禁止更改或自行重新命名。table 的「型態」欄必須直接使用 ▶標注 的名稱，你的任務是解讀含意，不是命名型態。
-K棒型態含意速查（僅供解讀參考）：錘子（下影≥實體2倍/底部看漲）、吊人（錘子型/高位看跌）、射擊之星（上影≥實體2倍/頂部看跌）、
+⚠️ 【特徵欄鐵律】table 的「特徵」欄必須直接抄 K棒資料中 【特徵=...】 的值，禁止自行判斷，禁止只因陽線/陰線填寫看漲/看跌。
+K棒型態含意速查（僅供解讀參考，必須結合特徵欄的量能·位置）：
+錘子（下影≥實體2倍/低位看漲·高位需謹慎）、吊人（錘子型/高位看跌訊號）、射擊之星（上影≥實體2倍/高位看跌）、
 早晨之星（長黑+小K+長紅/底部反轉）、黃昏之星（長紅+小K+長黑/頂部反轉）、
-多頭吞噬（陽線吞陰線）、空頭吞噬（陰線吞陽線）、十字星（開收相等/猶豫）、陽線（收>開）、陰線（收<開）
+多頭吞噬（陽線吞陰線）、空頭吞噬（陰線吞陽線）、十字星（開收相等/高位→頂部訊號·低位→底部訊號·中段→觀望）
 
 【週K最近3根 table】（輸出如範例格式）
 【日K最近5根 table】（輸出如範例格式）
+- K線序列：依「特徵」欄的量能·位置變化，說明多空動能是否增強或衰退（禁止靠單根顏色判斷方向）
 - 週K ↔ 日K 方向：一致多頭 / 一致空頭 / 訊號分歧（分歧時說明以哪個為準）
 <span class="key-point">K線核心結論（≤15字）</span>
 
