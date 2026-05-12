@@ -171,13 +171,14 @@ def get_stock_info(symbol: str) -> dict | None:
 
 
 def get_stock_quote(symbol: str) -> dict | None:
-    """輕量行情：只抓最近 10 日日K，用於看板快速顯示 OHLC + 漲跌幅"""
+    """輕量行情：最近 ~30 日 K，回傳即時 OHLC + 20 根 spark_bars 給看板畫迷你日 K"""
     symbol = _resolve_tw_symbol(symbol)
-    daily = _yahoo_ohlcv(symbol, '1d', '10d')
+    daily = _yahoo_ohlcv(symbol, '1d', '30d')
     if daily is None or len(daily) < 1:
         return None
     last = daily.iloc[-1]
     prev = daily.iloc[-2] if len(daily) >= 2 else None
+    spark = daily.tail(20)
     return {
         'symbol':     symbol,
         'open':       round(float(last['Open']),  2),
@@ -185,6 +186,15 @@ def get_stock_quote(symbol: str) -> dict | None:
         'low':        round(float(last['Low']),   2),
         'close':      round(float(last['Close']), 2),
         'prev_close': round(float(prev['Close']), 2) if prev is not None else None,
+        'spark_bars': [
+            {
+                'o': round(float(r['Open']),  2),
+                'h': round(float(r['High']),  2),
+                'l': round(float(r['Low']),   2),
+                'c': round(float(r['Close']), 2),
+            }
+            for _, r in spark.iterrows()
+        ],
     }
 
 

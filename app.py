@@ -305,12 +305,32 @@ def api_market_quote(symbol):
     today = (_dt.utcnow() + _td(hours=8)).date()
     key = f'{symbol}_{today}'
 
+    def _bars_to_spark(bars_list):
+        """daily_bars list[dict] → spark_bars list[20 個 OHLC]，給前端畫迷你日 K"""
+        return [
+            {'o': b['open'], 'h': b['high'], 'l': b['low'], 'c': b['close']}
+            for b in bars_list[-20:]
+        ] if bars_list else []
+
     if key not in _quote_cache:
         db = SessionLocal()
         try:
-            # ② QuoteCache 命中
+            # ② QuoteCache 命中（無 bars 資料，從 MarketDataCache 補 spark_bars）
             qc = db.query(QuoteCache).filter_by(symbol=symbol, cache_date=today).first()
             if qc and qc.close is not None:
+                spark = []
+                mkt_for_spark = (
+                    db.query(MarketDataCache)
+                    .filter_by(symbol=symbol)
+                    .order_by(MarketDataCache.cache_date.desc())
+                    .first()
+                )
+                if mkt_for_spark:
+                    try:
+                        bars = _json.loads(mkt_for_spark.data_json).get('daily_bars', [])
+                        spark = _bars_to_spark(bars)
+                    except Exception:
+                        pass
                 _quote_cache[key] = {
                     'symbol':     symbol,
                     'open':       float(qc.open) if qc.open is not None else None,
@@ -318,6 +338,7 @@ def api_market_quote(symbol):
                     'low':        float(qc.low) if qc.low is not None else None,
                     'close':      float(qc.close),
                     'prev_close': float(qc.prev_close) if qc.prev_close is not None else None,
+                    'spark_bars': spark,
                 }
             else:
                 # ③ MarketDataCache 命中（分析跑過後）
@@ -333,6 +354,7 @@ def api_market_quote(symbol):
                             'low':        last['low'],
                             'close':      last['close'],
                             'prev_close': prev['close'],
+                            'spark_bars': _bars_to_spark(bars),
                         }
         except Exception as e:
             print(f"[quote] DB 快取讀取失敗 {symbol}: {e}")

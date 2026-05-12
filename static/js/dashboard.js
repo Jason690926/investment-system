@@ -101,41 +101,45 @@ function buildCard(s) {
   const badgeText  = s.status === 'holding' ? '已持有' : '觀察中';
   const isAnalyzed = riskPct != null;
 
-  const riskBar = riskPct != null ? `
-    <div class="risk-block">
-      <div class="risk-label">
-        風險係數 <span class="${riskClass(riskPct)}">${riskPct}%</span>
-      </div>
-      <div class="risk-bar">
-        <div class="risk-fill ${riskClass(riskPct)}" style="width:${riskPct}%"></div>
-      </div>
-    </div>` : `<div class="risk-block" style="color:var(--muted);font-size:12px;">尚未分析</div>`;
+  // Status row: wyckoff badge + risk inline chip（並排）
+  const wyckoffChip = wyckoff
+    ? `<span class="wyckoff-badge ${wyckoffBadgeCls(wyckoff)}">${wyckoff}</span>`
+    : '';
+  const riskChip = riskPct != null
+    ? `<span class="risk-inline ${riskClass(riskPct)}">RISK ${riskPct}%</span>`
+    : (wyckoff ? '' : '<span class="risk-inline-empty">尚未分析</span>');
+  const statusRowHtml = (wyckoffChip || riskChip)
+    ? `<div class="card-status-row">${wyckoffChip}${riskChip}</div>`
+    : '';
 
+  // Meta row：holding 顯示張數+成本；watching 顯示「觀察中」
   let metaHtml = '';
   if (s.status === 'holding') {
     metaHtml = `<div class="card-meta">
       <div>${s.total_zhang ?? '--'} 張</div>
       ${s.avg_cost ? `<div>成本 <strong>${s.avg_cost}</strong></div>` : ''}
     </div>`;
+  } else {
+    metaHtml = `<div class="card-meta" style="color:var(--muted);">觀察中 · 尚未建倉</div>`;
   }
-
-  const wyckoffBadge = wyckoff
-    ? `<div class="wyckoff-badge ${wyckoffBadgeCls(wyckoff)}">${wyckoff}</div>`
-    : `<div class="wyckoff-badge wyckoff-none"></div>`;
 
   return `
   <div class="stock-card${isAnalyzed ? ' analyzed' : ''}" data-stock-id="${s.id}" onclick="openStockPage(${s.id})">
-    <span class="badge ${badgeCls}">${badgeText}</span>
     <div class="card-row1">
-      <div>
+      <div class="card-ident">
+        <span class="badge ${badgeCls}">${badgeText}</span>
         <div class="card-name">${s.name}</div>
         <div class="card-symbol">${s.symbol}</div>
-        ${wyckoffBadge}
       </div>
       <div class="card-price-block">
         <div class="card-price card-price-val">—</div>
         <div class="card-change flat">—</div>
       </div>
+    </div>
+    ${statusRowHtml}
+    <div class="card-spark-wrap">
+      <span class="card-spark-title">近 20 日 K</span>
+      <span class="card-spark-label flat">—</span>
     </div>
     <div class="card-ohlc">
       <span class="ohlc-item">開 <strong class="ohlc-o">—</strong></span>
@@ -145,11 +149,55 @@ function buildCard(s) {
     </div>
     <hr class="card-divider">
     <div class="card-row2">
-      ${riskBar}
       ${metaHtml}
     </div>
-    ${isAnalyzed ? '<div class="analyzed-badge">✦ 已分析</div>' : ''}
   </div>`;
+}
+
+/* ── 20 日迷你日 K 線 SVG 渲染（台股漲紅跌綠）──────────── */
+function renderSparkline(bars) {
+  if (!bars || bars.length < 2) return '';
+  const W = 200, H = 56, padY = 4;
+  let maxH = -Infinity, minL = Infinity;
+  for (const b of bars) {
+    if (b.h > maxH) maxH = b.h;
+    if (b.l < minL) minL = b.l;
+  }
+  const range = (maxH - minL) || 1;
+  const usable = H - padY * 2;
+  const n = bars.length;
+  const slot = W / n;
+  const bodyW = Math.max(slot * 0.6, 2);
+  const halfBody = bodyW / 2;
+  const yOf = (p) => padY + (1 - (p - minL) / range) * usable;
+
+  const parts = [];
+  for (let i = 0; i < n; i++) {
+    const b = bars[i];
+    const xc = slot * (i + 0.5);
+    const isUp = b.c >= b.o;
+    const color = isUp ? '#EF4444' : '#22C55E';   // 台股：漲紅跌綠
+    const yH = yOf(b.h), yL = yOf(b.l);
+    const yO = yOf(b.o), yC = yOf(b.c);
+    const top = Math.min(yO, yC);
+    const h = Math.max(Math.abs(yO - yC), 1);
+    parts.push(
+      `<line x1="${xc.toFixed(1)}" y1="${yH.toFixed(1)}" x2="${xc.toFixed(1)}" y2="${yL.toFixed(1)}" stroke="${color}"/>`,
+      `<rect x="${(xc - halfBody).toFixed(1)}" y="${top.toFixed(1)}" width="${bodyW.toFixed(1)}" height="${h.toFixed(1)}" fill="${color}"/>`
+    );
+  }
+  return `<svg class="card-spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${parts.join('')}</svg>`;
+}
+
+function sparkPctLabel(bars) {
+  if (!bars || bars.length < 2) return ['flat', '—'];
+  const first = bars[0].c, last = bars[bars.length - 1].c;
+  if (!first) return ['flat', '—'];
+  const pct = (last - first) / first * 100;
+  if (Math.abs(pct) < 0.05) return ['flat', '0.0%'];
+  const cls = pct >= 0 ? 'up' : 'down';
+  const arrow = pct >= 0 ? '▲' : '▼';
+  return [cls, `${arrow} ${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`];
 }
 
 /* ── 非同步抓各卡片行情（輕量 /quote 端點）────────────────
@@ -202,6 +250,22 @@ function updateCardPrice(stockId, q) {
   set('.ohlc-h', q.high,  'up');
   set('.ohlc-l', q.low,   'down');
   set('.ohlc-c', q.close);
+
+  // 20 日迷你 K 線 sparkline
+  if (q.spark_bars && q.spark_bars.length >= 2) {
+    const wrap = card.querySelector('.card-spark-wrap');
+    if (wrap) {
+      const oldSvg = wrap.querySelector('svg.card-spark');
+      if (oldSvg) oldSvg.remove();
+      wrap.insertAdjacentHTML('beforeend', renderSparkline(q.spark_bars));
+      const labelEl = wrap.querySelector('.card-spark-label');
+      if (labelEl) {
+        const [cls, text] = sparkPctLabel(q.spark_bars);
+        labelEl.className = 'card-spark-label ' + cls;
+        labelEl.textContent = text;
+      }
+    }
+  }
 }
 
 /* ── 週末視窗判斷（週五 14:30 ~ 週一 09:00 台灣時間）──── */
@@ -300,29 +364,41 @@ function markCardAnalyzed(stockId, riskPct, wyckoffPhase) {
   if (!card) return;
   card.classList.add('analyzed');
 
-  if (riskPct != null) {
-    const rc = riskClass(riskPct);
-    const rb = card.querySelector('.risk-block');
-    if (rb) rb.innerHTML = `
-      <div class="risk-label">風險係數 <span class="${rc}">${riskPct}%</span></div>
-      <div class="risk-bar"><div class="risk-fill ${rc}" style="width:${riskPct}%"></div></div>`;
+  // 找或建 card-status-row（插在 card-row1 後）
+  let statusRow = card.querySelector('.card-status-row');
+  if (!statusRow) {
+    statusRow = document.createElement('div');
+    statusRow.className = 'card-status-row';
+    const row1 = card.querySelector('.card-row1');
+    if (row1) row1.after(statusRow);
   }
+  // 移除「尚未分析」placeholder
+  const empty = statusRow.querySelector('.risk-inline-empty');
+  if (empty) empty.remove();
+
+  // 更新或建立 wyckoff badge（插在 row 最前）
   if (wyckoffPhase) {
-    const wb = card.querySelector('.wyckoff-badge');
+    let wb = statusRow.querySelector('.wyckoff-badge');
     if (wb) {
       wb.textContent = wyckoffPhase;
       wb.className = `wyckoff-badge ${wyckoffBadgeCls(wyckoffPhase)}`;
     } else {
-      card.querySelector('.card-symbol')
-          ?.insertAdjacentHTML('afterend',
-            `<div class="wyckoff-badge ${wyckoffBadgeCls(wyckoffPhase)}">${wyckoffPhase}</div>`);
+      statusRow.insertAdjacentHTML('afterbegin',
+        `<span class="wyckoff-badge ${wyckoffBadgeCls(wyckoffPhase)}">${wyckoffPhase}</span>`);
     }
   }
-  if (!card.querySelector('.analyzed-badge')) {
-    const b = document.createElement('div');
-    b.className = 'analyzed-badge';
-    b.textContent = '✦ 已分析';
-    card.appendChild(b);
+
+  // 更新或建立 risk chip（插在 row 最後）
+  if (riskPct != null) {
+    let rc = statusRow.querySelector('.risk-inline');
+    const cls = riskClass(riskPct);
+    if (rc) {
+      rc.textContent = `RISK ${riskPct}%`;
+      rc.className = `risk-inline ${cls}`;
+    } else {
+      statusRow.insertAdjacentHTML('beforeend',
+        `<span class="risk-inline ${cls}">RISK ${riskPct}%</span>`);
+    }
   }
 }
 

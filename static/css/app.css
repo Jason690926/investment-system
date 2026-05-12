@@ -1,18 +1,35 @@
-/* ── 變數 ─────────────────────────────────────────────── */
+/* ── 變數 (slate-900 + 台股漲紅跌綠) ─────────────────────── */
 :root {
-  --bg:         #0d1117;
-  --card:       #161b22;
-  --card-hover: #1c2128;
-  --border:     #30363d;
-  --text:       #e6edf3;
-  --muted:      #8b949e;
-  --green:      #3fb950;
-  --red:        #f85149;
-  --blue:       #58a6ff;
-  --orange:     #e3b341;
-  --purple:     #d2a8ff;
-  --radius:     10px;
-  --text-dim:   #b0bec8;
+  /* 主題色（slate-900 系列）*/
+  --bg:         #020617;
+  --card:       #0F172A;
+  --card-hover: #1E293B;
+  --border:     #334155;
+  --border-soft:#1E293B;
+  --text:       #F8FAFC;
+  --text-dim:   #CBD5E1;
+  --muted:      #94A3B8;
+
+  /* 通用色彩（保留 raw color tokens 給 button/toast/border/danger 等） */
+  --green:      #22C55E;   /* universal success / 台股「跌」色 */
+  --red:        #EF4444;   /* universal danger / 台股「漲」色 */
+  --orange:     #F59E0B;   /* universal warning */
+  --blue:       #38BDF8;   /* universal info / 已分析 */
+  --purple:     #D2A8FF;   /* legacy（未用，保留向後相容）*/
+
+  /* 漲跌色語意 token — 台股慣例：漲紅跌綠 */
+  --up:         #EF4444;   /* 紅 = 漲 / bull / 突破 / 壓力 */
+  --down:       #22C55E;   /* 綠 = 跌 / bear / 跌破 / 支撐 */
+
+  /* 風險色（獨立 token，避免跟漲跌混淆）*/
+  --risk-low:   #06B6D4;   /* cyan */
+  --risk-mid:   #F59E0B;   /* amber，同 --orange */
+  --risk-high:  #D946EF;   /* fuchsia */
+
+  /* 強調色 */
+  --accent:     #38BDF8;   /* 已分析、tab active，同 --blue */
+
+  --radius:     12px;
 }
 
 /* ── Reset ────────────────────────────────────────────── */
@@ -20,7 +37,9 @@
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+               'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  font-feature-settings: 'tnum' on; /* tabular numbers — 數字統一寬，避免跳動 */
   font-size: 15px;
   line-height: 1.5;
   min-height: 100vh;
@@ -142,18 +161,18 @@ a:hover { text-decoration: underline; }
 /* ── Stock Card ───────────────────────────────────────── */
 .stock-card {
   background: var(--card);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius);
   padding: 22px 24px 18px;
   cursor: pointer;
   transition: all .2s;
   position: relative;
-  min-height: var(--card-min-h, 200px); /* JS 依股票數動態設定 */
+  min-height: var(--card-min-h, 240px); /* 加高以容納 spark 圖 */
   display: flex;
   flex-direction: column;
 }
 .stock-card:hover {
-  border-color: var(--blue);
+  border-color: var(--accent);
   background: var(--card-hover);
   transform: translateY(-2px);
   box-shadow: 0 4px 20px rgba(0,0,0,.3);
@@ -168,18 +187,69 @@ a:hover { text-decoration: underline; }
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
+  gap: 10px;
 }
-.card-name { font-size: 20px; font-weight: 800; letter-spacing: -.3px; }
-.card-symbol { font-size: 13px; color: var(--muted); margin-top: 4px; }
-.card-price-block { text-align: right; }
-.card-price { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
-.card-change { font-size: 14px; font-weight: 600; margin-top: 3px; }
-.up   { color: var(--green); }
-.down { color: var(--red); }
+.card-ident { min-width: 0; flex: 1; }
+.card-name { font-size: 20px; font-weight: 600; letter-spacing: -.2px; }
+.card-symbol { font-size: 13px; color: var(--muted); margin-top: 4px; font-weight: 400; }
+.card-price-block { text-align: right; flex-shrink: 0; }
+.card-price { font-size: 24px; font-weight: 600; letter-spacing: -.5px; }
+.card-change { font-size: 13px; font-weight: 500; margin-top: 3px; }
+/* 漲跌色 — 台股慣例：漲紅跌綠 */
+.up   { color: var(--up); }
+.down { color: var(--down); }
 .flat { color: var(--muted); }
 
-.card-divider { border: none; border-top: 1px solid var(--border); margin: 14px 0 12px; }
+.card-divider { border: none; border-top: 1px solid var(--border-soft); margin: 12px 0 10px; }
+
+/* Status row: wyckoff + risk inline chip 並排 */
+.card-status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 4px;
+  flex-wrap: wrap;
+}
+.risk-inline {
+  font-size: 10px; font-weight: 600;
+  padding: 2px 8px; border-radius: 4px;
+  letter-spacing: .04em;
+}
+.risk-inline.risk-low  { color: var(--risk-low);  background: rgba(6,182,212,.10);  border: 1px solid rgba(6,182,212,.30); }
+.risk-inline.risk-mid  { color: var(--risk-mid);  background: rgba(245,158,11,.10); border: 1px solid rgba(245,158,11,.30); }
+.risk-inline.risk-high { color: var(--risk-high); background: rgba(217,70,239,.10); border: 1px solid rgba(217,70,239,.30); }
+.risk-inline-empty {
+  font-size: 10px; color: var(--muted); padding: 2px 0; letter-spacing: .04em;
+}
+
+/* 20 日 K 線 sparkline 容器 */
+.card-spark-wrap {
+  position: relative;
+  height: 56px;
+  margin: 22px 0 10px; /* top: 留 title/label 文字空間 */
+}
+.card-spark {
+  width: 100%; height: 100%;
+  display: block;
+}
+.card-spark-title {
+  position: absolute;
+  left: 0; top: -16px;
+  font-size: 10px; font-weight: 600;
+  color: var(--muted);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.card-spark-label {
+  position: absolute;
+  right: 4px; top: -16px;
+  font-size: 10px; font-weight: 600;
+  color: var(--muted);
+  letter-spacing: .05em;
+}
+.card-spark-label.up   { color: var(--up); }
+.card-spark-label.down { color: var(--down); }
 
 .card-row2 {
   display: flex;
@@ -189,31 +259,13 @@ a:hover { text-decoration: underline; }
   margin-top: auto;
 }
 .risk-block { flex: 1; }
-.risk-label {
-  font-size: 12px;
-  color: var(--muted);
-  margin-bottom: 6px;
-  display: flex;
-  justify-content: space-between;
-}
-.risk-label span { font-weight: 700; font-size: 13px; }
-.risk-bar {
-  height: 6px;
-  background: var(--border);
-  border-radius: 3px;
-  overflow: hidden;
-}
-.risk-fill {
-  height: 100%;
-  border-radius: 3px;
-  transition: width .4s ease;
-}
-.risk-low  { color: var(--green); }
-.risk-mid  { color: var(--orange); }
-.risk-high { color: var(--red); }
-.risk-fill.risk-low  { background: var(--green); }
-.risk-fill.risk-mid  { background: var(--orange); }
-.risk-fill.risk-high { background: var(--red); }
+/* 風險色 — 獨立 token，不與漲跌色混淆 */
+.risk-low  { color: var(--risk-low); }
+.risk-mid  { color: var(--risk-mid); }
+.risk-high { color: var(--risk-high); }
+.risk-fill.risk-low  { background: var(--risk-low); }
+.risk-fill.risk-mid  { background: var(--risk-mid); }
+.risk-fill.risk-high { background: var(--risk-high); }
 
 .card-meta {
   font-size: 13px;
@@ -224,41 +276,35 @@ a:hover { text-decoration: underline; }
 }
 .card-meta strong { color: var(--text); font-size: 14px; }
 
-/* ── Badge ────────────────────────────────────────────── */
+/* ── Badge（card 內 inline，不再 absolute 避免跟 price 撞）─── */
 .badge {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   padding: 2px 8px;
-  border-radius: 20px;
-  position: absolute;
-  top: 14px;
-  right: 14px;
+  border-radius: 4px;
+  display: inline-block;
+  margin-bottom: 6px;
+  letter-spacing: .04em;
 }
-.badge-holding  { background: rgba(63,185,80,.15);  color: var(--green); }
-.badge-watching { background: rgba(88,166,255,.15); color: var(--blue);  }
+/* 持有/觀察 用 accent/grey，避開漲跌綠色衝突 */
+.badge-holding  { background: rgba(56,189,248,.12); color: var(--accent);   border: 1px solid rgba(56,189,248,.30); }
+.badge-watching { background: rgba(148,163,184,.10); color: var(--text-dim); border: 1px solid rgba(148,163,184,.25); }
 
 /* ── Analyzed card state ──────────────────────────────── */
 .stock-card.analyzed {
-  border-color: rgba(88,166,255,.35);
+  border-color: rgba(56,189,248,.30);
 }
 .stock-card.analyzed::after {
   content: '';
   position: absolute;
   top: 0; left: 0; right: 0;
   height: 2px;
-  background: linear-gradient(90deg, var(--blue), rgba(88,166,255,0));
+  background: linear-gradient(90deg, var(--accent), rgba(56,189,248,0));
   border-radius: var(--radius) var(--radius) 0 0;
   pointer-events: none;
 }
-.analyzed-badge {
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--blue);
-  opacity: 0.6;
-  text-align: right;
-  margin-top: 8px;
-  letter-spacing: 0.08em;
-}
+/* analyzed-badge 已被頂部漸層 bar 取代（解決 opacity .6 違反 WCAG）*/
+.analyzed-badge { display: none; }
 
 /* ── Analyze progress bar ─────────────────────────────── */
 .analyze-progress {
@@ -285,9 +331,18 @@ a:hover { text-decoration: underline; }
   margin-top: 10px;
   letter-spacing: 0.04em;
 }
-.wyckoff-bull    { color: var(--green);  background: rgba(63,185,80,.15);  border: 1px solid rgba(63,185,80,.35); }
-.wyckoff-bear    { color: var(--red);    background: rgba(248,81,73,.15);  border: 1px solid rgba(248,81,73,.35); }
-.wyckoff-neutral { color: var(--orange); background: rgba(227,179,65,.12); border: 1px solid rgba(227,179,65,.35); }
+/* card-status-row 內覆寫成小尺寸，並水平對齊 risk chip */
+.card-status-row .wyckoff-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  margin-top: 0;
+}
+/* Wyckoff 台股：bull = 紅, bear = 綠, neutral = amber */
+.wyckoff-bull    { color: var(--up);       background: rgba(239,68,68,.12);  border: 1px solid rgba(239,68,68,.30); }
+.wyckoff-bear    { color: var(--down);     background: rgba(34,197,94,.12);  border: 1px solid rgba(34,197,94,.30); }
+.wyckoff-neutral { color: var(--orange);   background: rgba(245,158,11,.10); border: 1px solid rgba(245,158,11,.30); }
 .wyckoff-none    { display: none; }
 
 /* ── OHLC 行情列 ──────────────────────────────────────── */
@@ -654,10 +709,10 @@ a:hover { text-decoration: underline; }
 #analysis-content .mid-term-title   { color: var(--orange) !important; }
 #analysis-content .target-price     { color: var(--purple) !important; }
 #analysis-content .stop-loss        { color: var(--red) !important; }
-#analysis-content .support-level    { color: var(--green) !important; }
-#analysis-content .resistance-level { color: var(--red) !important; }
-#analysis-content .bull             { color: var(--green) !important; }
-#analysis-content .bear             { color: var(--red) !important; }
+#analysis-content .support-level    { color: var(--down) !important; }
+#analysis-content .resistance-level { color: var(--up) !important; }
+#analysis-content .bull             { color: var(--up) !important; }
+#analysis-content .bear             { color: var(--down) !important; }
 #analysis-content .neutral          { color: var(--muted) !important; }
 #analysis-content .close-price      { color: var(--text) !important; }
 #analysis-content .key-point {
@@ -676,11 +731,13 @@ a:hover { text-decoration: underline; }
 .mid-term-title    { color: var(--orange); font-weight: 700; }
 .target-price      { color: var(--purple); font-weight: 700; background: rgba(210,168,255,.1); padding: 2px 8px; border-radius: 4px; }
 .stop-loss         { color: var(--red);    font-weight: 700; background: rgba(248,81,73,.1);   padding: 2px 8px; border-radius: 4px; }
-.support-level     { color: var(--green);  font-weight: 700; background: rgba(63,185,80,.1);   padding: 2px 8px; border-radius: 4px; }
-.resistance-level  { color: var(--red);    font-weight: 700; background: rgba(248,81,73,.1);   padding: 2px 8px; border-radius: 4px; }
+/* 支撐 = 下方底（跌的底）→ 用 down 綠；壓力 = 上方頂（漲的頂）→ 用 up 紅（台股）*/
+.support-level     { color: var(--down);   font-weight: 700; background: rgba(34,197,94,.10);  padding: 2px 8px; border-radius: 4px; }
+.resistance-level  { color: var(--up);     font-weight: 700; background: rgba(239,68,68,.10);  padding: 2px 8px; border-radius: 4px; }
 .close-price       { color: var(--text);   font-weight: 700; }
-.bear              { color: var(--red); }
-.bull              { color: var(--green); }
+/* 台股：bull = 看漲 = 紅，bear = 看跌 = 綠 */
+.bear              { color: var(--down); }
+.bull              { color: var(--up); }
 .neutral           { color: var(--muted); }
 .key-point {
   color: var(--orange);
@@ -758,10 +815,10 @@ a:hover { text-decoration: underline; }
 .recommend-content .mid-term-title   { color: var(--orange) !important; }
 .recommend-content .target-price     { color: var(--purple) !important; }
 .recommend-content .stop-loss        { color: var(--red) !important; font-weight: 700 !important; }
-.recommend-content .support-level    { color: var(--green) !important; }
-.recommend-content .resistance-level { color: var(--red) !important; }
-.recommend-content .bull             { color: var(--green) !important; }
-.recommend-content .bear             { color: var(--red) !important; }
+.recommend-content .support-level    { color: var(--down) !important; }
+.recommend-content .resistance-level { color: var(--up) !important; }
+.recommend-content .bull             { color: var(--up) !important; }
+.recommend-content .bear             { color: var(--down) !important; }
 .recommend-content .key-point {
   color: var(--orange) !important;
   font-weight: 700 !important;
@@ -817,12 +874,13 @@ a:hover { text-decoration: underline; }
   font-size: 13px;
   font-weight: 700;
 }
-.qs-bull     { background: rgba(63,185,80,.15);  color: var(--green);  border: 1px solid rgba(63,185,80,.35); }
-.qs-bear     { background: rgba(248,81,73,.15);   color: var(--red);    border: 1px solid rgba(248,81,73,.35); }
-.qs-neutral  { background: rgba(139,148,158,.12); color: var(--muted);  border: 1px solid rgba(139,148,158,.25); }
-.qs-risk-low  { background: rgba(63,185,80,.12);  color: var(--green);  border: 1px solid rgba(63,185,80,.3); }
-.qs-risk-mid  { background: rgba(227,179,65,.12); color: var(--orange); border: 1px solid rgba(227,179,65,.3); }
-.qs-risk-high { background: rgba(248,81,73,.12);  color: var(--red);    border: 1px solid rgba(248,81,73,.3); }
+/* Quick summary chips — 台股配色 + 風險用獨立 token */
+.qs-bull     { background: rgba(239,68,68,.12);   color: var(--up);        border: 1px solid rgba(239,68,68,.30); }
+.qs-bear     { background: rgba(34,197,94,.12);   color: var(--down);      border: 1px solid rgba(34,197,94,.30); }
+.qs-neutral  { background: rgba(148,163,184,.12); color: var(--muted);     border: 1px solid rgba(148,163,184,.25); }
+.qs-risk-low  { background: rgba(6,182,212,.10);  color: var(--risk-low);  border: 1px solid rgba(6,182,212,.30); }
+.qs-risk-mid  { background: rgba(245,158,11,.10); color: var(--risk-mid);  border: 1px solid rgba(245,158,11,.30); }
+.qs-risk-high { background: rgba(217,70,239,.10); color: var(--risk-high); border: 1px solid rgba(217,70,239,.30); }
 .qs-num {
   padding: 4px 11px;
   border-radius: 14px;
