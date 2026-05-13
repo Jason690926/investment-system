@@ -6,11 +6,55 @@
 - **架構決策**：討論完方案後，先更新 `plan.md`，再開始寫程式
 - `plan.md` 只在需要查架構細節時才讀（節省 token）
 
-## 當前進度（2026-05-13 dashboard 卡片改版 + 工具鏈擴充）
+## 當前進度（2026-05-13 收工 — 修 QuoteCache 鎖死 bug）
 
-**所在週次：週7（UI 重整）**
+**所在週次：週7（UI 重整 + 設計層 bug 修復）**
 
-**狀態：HEAD = `37cc3e6`（已 push origin/main）**
+**狀態：HEAD = `32bf6af`（已 push origin/main）**
+
+**本次（2026-05-13 第二輪）進度 — 修「儀表板股價不是當日收盤」設計層 bug：**
+
+**Commit `32bf6af` — fix(quote): 修 QuoteCache 鎖死壞資料整天 — post-close 優先 MarketDataCache + stale 偵測**
+
+**根本診斷：systematic-debugging 四階段定位根因**
+- `QuoteCache` 註解明文寫死「寫滿即固化（盤中自動更新由前端 retry/refresh 控制）」，但 `dashboard.js` 沒有 setInterval / retry / refresh 機制
+- 失效條件只看 `cache_date == today_tw`，不分「盤前/盤中/盤後」身份；任何盤前/盤中 cache miss 觸發 yfinance → 寫入「未 settle 的 OHLC」→ 整天黏住
+- DB 證據：5/13 全 18 支於 TPE 00:36 凌晨被某觸發源寫入（GitHub Actions 已停用、`run_daily_report.py` 不寫 quote_cache、dashboard.js 無 setInterval — 觸發源未確認），盤後查仍是凌晨那份；`prev_close` 連 5/12 真實收盤都對不上
+
+**修法（B+C 融合，純後端一檔改動）：**
+- 抽 `_resolve_quote(db, symbol, today_tw, now_utc, get_yahoo_quote=None)` 純函式 + 6 helpers（`_post_close_tw` / `_today_close_threshold_utc` / `_upsert_quote_cache` / `_bars_to_spark` / `_strip_internal` / `_try_market_data_cache` / `_try_quote_cache_db`）
+- `api_market_quote` view function 簡化為 dispatch
+- 讀取優先序變更：
+
+| 時段 | 順序 |
+|------|------|
+| post-close（TW ≥ 14:30）| ① **MarketDataCache(today)**（命中即 upsert QuoteCache）→ ② mem stale check → ③ QuoteCache stale check → ④ Yahoo（upsert QuoteCache）|
+| pre-close | ① mem → ② QuoteCache → ③ MarketDataCache → ④ Yahoo（保留原行為）|
+
+- stale 判定：`cached_at < 今日 14:30 TW threshold` → 視為盤前/盤中寫入、不可信、繞過
+- `_quote_cache` value 加 `_cached_at_utc` 內部欄位，回傳前以 `_strip_internal` 剝除底線開頭欄位
+- 自動修復：post-close 第一個 request 進來後既有壞 QuoteCache 會被自動覆寫
+
+**驗證：**
+- 新增 `tests/test_market_quote.py`：11 case（4 helper + 5 核心優先序 / stale 偵測 + 1 pre-close 不退化 + 1 mem invalidation + 1 Yahoo 失敗）全綠
+- 既有 65 case 全綠（pytest 76/76）
+- `py_compile app.py` OK
+- 用 DB 既有 MarketDataCache 拆 `daily_bars[-1]` 驗證 close 對得上 QuoteCache（6921.TW 5/12 → MATCH ✓）
+- **生產驗證**：commit push → Render auto-deploy → user refresh dashboard → 5/13 quote_cache **18/18 從凌晨 00:36 → 20:51 TPE**；`prev_close` 全部對得上 5/12 MDC 真實收盤 ✅
+
+**還沒解（不影響功能）：**
+- 凌晨 00:36 觸發源仍未確認（剩可能：Render warm-up / 外部 monitor / 手機分頁喚醒）
+- 但無論誰觸發，新邏輯都會在 post-close 第一次 request 自動修復，所以列為 nice-to-have
+
+**留給下次：**
+- 想根除凌晨觸發：查 Render 後台 cron / health-check 設定
+- 想 post-close 也走 ③ MDC 而非 fall through 到 Yahoo：跑一次「一鍵分析」讓今日 MDC populate（GitHub Actions 已停用，需手動觸發）
+
+---
+
+## 過往進度（2026-05-13 dashboard 卡片改版 + 工具鏈擴充）
+
+**狀態：HEAD = `37cc3e6`**
 
 **本次（2026-05-13）進度 — dashboard 卡片重新設計（5 輪 mockup → 正式上線）：**
 
