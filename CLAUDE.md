@@ -6,7 +6,96 @@
 - **架構決策**：討論完方案後，先更新 `plan.md`，再開始寫程式
 - `plan.md` 只在需要查架構細節時才讀（節省 token）
 
-## 當前進度（2026-05-13 收工 — 修 QuoteCache 鎖死 bug）
+## 當前進度（2026-05-13 收工 — 三 bug 徹底解決：股價格式 / NEWS 大盤 / P&F 目標）
+
+**所在週次：週7（UI 重整 + 設計層 bug 修復）**
+
+**狀態：HEAD = `00f5159`（已 push origin/main）**
+
+**本次（2026-05-13 第三輪）進度 — 用戶系統性除錯三個 bug：**
+
+### Commit `e601d3e` — fix(format): _format_price 依 TWSE tick 規則
+
+**用戶回報：** 創惟（6104）收盤 100.5 顯示 100、矽力-KY（6415）收盤 467.5 顯示 468
+
+**根本診斷：** `app.py:_format_price` line 73-78 對 ≥100 用 `f"{v:,.0f}"`，Python `:.0f` 採 IEEE 754 round-half-to-even（banker's rounding）：
+- `f"{100.5:,.0f}"` = `"100"`（100 偶數）→ 創惟案例
+- `f"{467.5:,.0f}"` = `"468"`（468 偶數）→ 矽力案例
+
+設計缺陷：TWSE tick 規則 100–500 元區間 tick=0.5，必然產生 .5 價位，整數格式必丟資訊。dashboard.js 用 `${q.close}` 顯示完整精度不受影響，僅 print_report.html 4 處（價格 + 撐/壓/目標 pill）受害。
+
+**修法（依 TWSE 申報價格升降單位）：**
+- `<50` 元（tick 0.01–0.05）→ 2 dp
+- `50–500` 元（tick 0.10–0.50）→ 1 dp
+- `≥500` 元（tick 1.00–5.00）→ 0 dp 千分位
+
+**驗證：** `tests/test_format_price.py` 新增 15 case（user bug case + tick 邊界 + Decimal/int 輸入）。
+
+### Commit `7ee7950` — fix(twii): NEWS 大盤數字昨日復發徹底解決
+
+**用戶回報：** 今日財經新聞的大盤數字是昨日的，前次 `fde93e5` / `f800c7f` 修法已做過卻又發生。
+
+**根本診斷：前次修法盲區**
+- `fde93e5` 只擋 AI 從訓練資料引用歷史數字（"1778點" / "破3萬點"）
+- 但若 `modules/data_fetcher.py:_fetch_ticker` 對 `^TWII` 回傳「昨日 bar」（盤前 / Render IP 限流 / Yahoo 1d chart 邊界），caller 盲拿 `iloc[-1]` 餵給 `analyze_daily_news` → AI 忠實複述「今日大盤 X 點」實際是昨日的 X
+- 這不是 AI 幻覺，是資料層說謊
+- 個股已透過 `32bf6af` 的 `_resolve_quote` 加 stale 偵測，TWII 卻無對等防護
+
+用戶 pushback「股價都可以抓取了，為何大盤指數不能抓?」一針見血 — 答案：個股有 freshness check、TWII 沒有。
+
+**修法（比照個股 stale 偵測 pattern，三件事）：**
+1. `modules/data_fetcher.py:_fetch_ticker` 回傳 dict 加 `last_date` 欄位（success / fallback 兩 path 都有）
+2. `run_daily_report.py` + `app.py:/api/news/regenerate` 取 `twii_data` 後檢查 `last_date == today_tw`：
+   - 一致 → 注入 `twii_price` 給 `analyze_daily_news`
+   - 不一致 → 不注入 + log 警告，AI prompt 無 `twii_block`，誠實 > 錯誤
+3. `templates/print_report.html` 範圍 chip 改顯示 `daily_news.summary_date` 而非 `date_str[:10]`，header 文案「今日財經新聞」改「財經新聞」配合 — 同時修了 Bug 6 (2026-05-08) 「fallback yesterday 但 UI 顯示今天」的雙重誤導
+
+**驗證：** `tests/test_twii_freshness.py` 新增 7 case（_fetch_ticker source 含 last_date / freshness logic 五情境 / analyze_daily_news 在 twii_price=None 時不注入 twii_block）。
+
+### Commit `00f5159` — fix(pnf): 目標價邏輯不通（target<現價）
+
+**用戶回報：** 6150 撼訊現價 73.1 但 P&F 概念目標 62（目標低於現價無意義）。質疑「其他沒有目標 = 尚未突破前高」邏輯：「照理說應該是往歷史回朔去找出現在的目標價才對」。
+
+**根本診斷：`modules/candlestick.py:512-575 calc_pnf_target` 兩面盲區**
+- 找到舊期窄箱後檢查 `cur > box_top × 1.02` 即過關
+- 但 target = box_top + (box_top - box_bottom) 可能已被 cur 遠超，**code 未檢查就 return**
+- 另一面：line 566-567 寫死「最近箱體未突破 → 直接 None，不往舊箱找」，違反用戶「回溯找歷史」期待
+
+**修法（Filter A + Filter B）：**
+- Filter A（既有調整）：`cur ≤ box_top × 1.02` → `continue` 往更早找（舊邏輯 `return None` 不再硬死）
+- Filter B（新增）：`target ≤ cur × 1.02` → `continue` 往更早找
+- 全歷史掃完都無有效箱才回 None
+
+**設計選擇：** 保留 Darvas 等幅量度（破鄉理論）而非重寫為 P&F 3-box reversal counting — 對 AI 報表觀感無實質差異、維護成本低、與既有 commit / CLAUDE.md 語意一致。若日後 None 頻繁出現再評估升級為 P&F counting，進 `plan.md`。
+
+**驗證：**
+- 既有 7 個 calc_pnf_target test 仍綠（`test_basic_breakout` / `test_stable_target_after_new_bar` 兩個 cur 微調以滿足 Filter B）
+- 新增 2 個 regression：`test_bug_c_target_below_current_rejected`（6150 風格）、`test_bug_c_unbroken_recent_falls_back_to_older_box`（用戶回溯期待）
+
+### 本輪共同 sanity 信號
+- pytest 46/46 全綠（37 candlestick + 7 TWII + 2 Bug C 新增）
+- 本機因 Flask 依賴未裝，`tests/test_format_price.py` 15 case 與 `tests/test_print_report.py` 在本機無法 collect；邏輯已 inline 驗證 13/13；CI / 主開發機可正常跑
+- py_compile candlestick / app / data_fetcher / run_daily_report / ai_analyzer_v2 全綠
+- 三 commit 已 push（`84d1e95..00f5159`），Render auto-deploy 觸發中
+
+### 留給下次
+
+**Bug D（討論題，下輪評估）：** 用戶提出個股 K 棒/量能應與大盤同期表現對比，避免 AI 誤將大盤連動歸因為個股訊號。本輪未實作，三方案待評估：
+- 最小版：dynamic_block 加 TWII 同期 change% + 鐵律 1 行（~$1.2 驗證 AI 重跑成本）
+- 中等版：加產業同期表現（需 industry classification）
+- 廣版：RS Rating（需 1 年歷史回填 + 持續維護）
+
+下輪先進 `plan.md` 評估後再實作。
+
+**待生產驗證（用戶 deploy 後實機操作）：**
+1. 印表報表 6104 收盤 100.5 顯示 100.5、6415 收盤 467.5 顯示 467.5
+2. 印表報表 6150 撼訊 P&F 目標欄位（看是顯示「—（尚未接近突破點）」還是合理的 > 73.1 數字）
+3. NEWS chip 顯示實際 `summary_date`（若昨日 fallback 則顯示昨日日期）
+4. 盤前清快取時 server log 出現「TWII 資料非今日」警告，AI 輸出不含大盤點位
+
+---
+
+## 過往進度（2026-05-13 收工 — 修 QuoteCache 鎖死 bug）
 
 **所在週次：週7（UI 重整 + 設計層 bug 修復）**
 
