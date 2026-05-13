@@ -562,11 +562,19 @@ def calc_pnf_target(bars: list, lookback: int = 12,
             if box_bottom <= 0 or (box_top - box_bottom) / box_bottom > max_range:
                 continue
 
-            # 突破確認：最近箱體未突破 → None，不往舊箱找
-            if cur is not None and cur <= box_top * 1.02:
-                return None
-
             target = box_top + (box_top - box_bottom)
+
+            # 兩道 filter 都失敗就往更早的箱體找（不再硬 return None）：
+            # Filter A：箱頂尚未突破（cur ≤ box_top × 1.02）→ 該箱還在形成中，
+            #          可能更早有箱體已突破且 target 仍領先 cur，繼續往回找
+            # Filter B：target 已被 cur 超過（target ≤ cur × 1.02）→ 該箱目標
+            #          已達成過、無預測力，繼續往回找更大/更早的有效箱體
+            if cur is not None:
+                if cur <= box_top * 1.02:
+                    continue
+                if target <= cur * 1.02:
+                    continue
+
             return round(target) if target >= 100 else round(target, 1)
 
         return None

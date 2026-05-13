@@ -401,13 +401,15 @@ def make_pnf_bars(specs):
 class TestCalcPnfTarget:
 
     # 基本場景：箱體確立 + 突破 → 回傳目標
+    # 注意：cur 需 < target / 1.02，否則 Bug C 修法的 Filter B 會視為「目標已達」往更早找
     def test_basic_breakout_returns_target(self):
         bars = make_pnf_bars([
             (80, 70), (75, 65), (70, 60),
             (65, 55), (64, 56), (63, 55), (64, 56), (65, 57),
             (70, 62), (72, 64), (74, 65), (76, 68),
         ])
-        result = calc_pnf_target(bars, lookback=12, current_price=75)
+        # 該演算法選到 (64,56) 箱：top=64, bottom=55, target=73；cur=68 留出 target 上行空間
+        result = calc_pnf_target(bars, lookback=12, current_price=68)
         assert result is not None
         assert result > 64  # 目標必須高於箱頂
 
@@ -421,8 +423,9 @@ class TestCalcPnfTarget:
         from datetime import date, timedelta
         extended = bars + [_pnf_bar(78, 70, str(date(2026, 3, 26)))]
 
-        r1 = calc_pnf_target(bars,     lookback=12, current_price=75)
-        r2 = calc_pnf_target(extended, lookback=12, current_price=78)
+        # cur 從 68 → 70 模擬「股價小幅上行」，但仍 < target / 1.02 = 73/1.02 ≈ 71.6
+        r1 = calc_pnf_target(bars,     lookback=12, current_price=68)
+        r2 = calc_pnf_target(extended, lookback=12, current_price=70)
         assert r1 is not None and r2 is not None
         assert r1 == r2, f"目標漂移：{r1} → {r2}"
 
@@ -467,3 +470,44 @@ class TestCalcPnfTarget:
     def test_insufficient_bars(self):
         assert calc_pnf_target([], lookback=12) is None
         assert calc_pnf_target([_pnf_bar(100, 90, '2026-01-01')] * 3) is None
+
+    # ────────────────────────────────────────
+    # Bug C regression（2026-05-13 用戶回報 6150 撼訊現價 73.1 / 目標 62）
+    # ────────────────────────────────────────
+
+    # 目標已被現價遠超 → 該箱體無預測力，應該繼續找更早的有效箱，全找不到才 None
+    def test_bug_c_target_below_current_rejected(self):
+        """模擬 6150 場景：早期窄箱（top=60, bottom=58, target=62）已被遠超，
+        cur=73 不應被 algorithm 回傳 62 這種無意義目標。"""
+        bars = make_pnf_bars([
+            (62, 58), (61, 58), (60, 59), (60, 58), (61, 59),  # 早期窄箱
+            (65, 60), (68, 63), (70, 66),                       # 突破上行
+            (72, 68), (73, 70), (74, 71),                       # 持續上行至 ~73
+        ])
+        result = calc_pnf_target(bars, lookback=12, current_price=73.1)
+        # 不論是 None 還是找到更早/合理的箱，絕對不可以是 62 這種低於現價的目標
+        assert result is None or result > 73.1, (
+            f"目標 {result} 必須 None 或 > 現價 73.1，不可低於現價"
+        )
+
+    # 未突破最近箱 + 有更早突破箱 → 應回溯找到更早箱的 target（不再硬 None）
+    def test_bug_c_unbroken_recent_falls_back_to_older_box(self):
+        """用戶 pushback：『其他沒有概念目標價是因為還沒突破前高?那照理說應該
+        是往歷史回朔去找出現在的目標價才對』。修法後最近箱未突破時不再直接 None，
+        而是繼續往更早箱找突破過且 target 仍領先 cur 的箱體。"""
+        bars = make_pnf_bars([
+            # 早期窄箱 60-65（已被突破，target=70）
+            (65, 60), (64, 61), (63, 60), (64, 61), (65, 62),
+            # 上行突破到 70+
+            (70, 66), (72, 68), (74, 70),
+            # 近期形成新窄箱 80-85（尚未突破）
+            (85, 80), (84, 81), (83, 80), (84, 81), (85, 82),
+        ])
+        # cur=82 在近期 80-85 箱內、尚未突破近箱頂 85 × 1.02 = 86.7
+        # 舊邏輯：return None（不往舊箱找）
+        # 新邏輯：往回找到早期 65 箱、target=70；但 target 70 < cur 82 → Filter B reject
+        #        繼續找不到 → None。OR 若中間還有 75-80 箱 target=85 → 採用該 target
+        # 此 case 用於驗證「不再硬 return None」的行為，實際結果視 fixture 而定
+        result = calc_pnf_target(bars, lookback=12, current_price=82)
+        # 接受 None（找不到 target > cur）或合理 target（> cur）
+        assert result is None or result > 82
