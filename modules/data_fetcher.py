@@ -47,11 +47,12 @@ def _fetch_ticker(name, symbol, days=90):
                 'change_14d': pct(14),
                 'change_30d': pct(30),
                 'change_60d': pct(60),
-                'symbol': symbol
+                'symbol': symbol,
+                'last_date': str(hist.index[-1].date() if hasattr(hist.index[-1], 'date') else hist.index[-1]),
             }
     except:
         pass
-    return name, {'price': 0, 'change': 0, 'symbol': symbol}
+    return name, {'price': 0, 'change': 0, 'symbol': symbol, 'last_date': None}
 
 def _fetch_taiwan_ticker(name, symbol):
     for attempt in range(2):

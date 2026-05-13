@@ -409,8 +409,8 @@
   {% elif daily_news and daily_news.html_content %}
   <div class="weekly-section">
     <div class="weekly-section-header">
-      <span>§ NEWS · 今日財經新聞</span>
-      <span class="range">{{ date_str[:10] }}</span>
+      <span>§ NEWS · 財經新聞</span>
+      <span class="range">{{ daily_news.summary_date.strftime('%Y-%m-%d') if daily_news.summary_date else '—' }}</span>
     </div>
     <div class="weekly-section-body">
       {{ daily_news.html_content | safe }}

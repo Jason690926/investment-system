@@ -896,8 +896,14 @@ def api_regenerate_news():
         try:
             markets = get_global_markets()
             twii_data = markets.get('台灣加權', {})
-            twii_price = twii_data.get('price')
-            twii_change_pct = twii_data.get('change')
+            # Freshness 驗證：last_date 必須是今日（TW），否則不注入給 AI，
+            # 避免 prompt 餵昨日數值導致 AI 忠實複述「今日大盤 X 點」實際是昨日的 X
+            twii_last = twii_data.get('last_date')
+            if twii_last == str(today):
+                twii_price = twii_data.get('price')
+                twii_change_pct = twii_data.get('change')
+            else:
+                print(f"[regenerate-news] TWII 資料非今日（{twii_last} vs {today}），不注入大盤點位")
         except Exception:
             pass
 

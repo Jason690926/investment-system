@@ -224,8 +224,12 @@ def main():
                 try:
                     markets = get_global_markets()
                     twii_data = markets.get('台灣加權', {})
-                    twii_price = twii_data.get('price')
-                    twii_change_pct = twii_data.get('change')
+                    twii_last = twii_data.get('last_date')
+                    if twii_last == str(today):
+                        twii_price = twii_data.get('price')
+                        twii_change_pct = twii_data.get('change')
+                    else:
+                        print(f"[batch] TWII 資料非今日（{twii_last} vs {today}），不注入大盤點位")
                 except Exception as _e:
                     print(f"[batch] TWII 資料抓取失敗，新聞摘要將無大盤數值: {_e}")
                 html_news = analyze_daily_news(news, twii_price=twii_price, twii_change_pct=twii_change_pct)
