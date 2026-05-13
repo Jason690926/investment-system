@@ -71,11 +71,20 @@ def _markdown_to_html(content):
 
 
 def _format_price(value):
-    """價格格式：>=100 用整數千分位，<100 顯示 2 位小數。"""
+    """價格格式依 TWSE 申報價格升降單位（tick）：
+    <50 元 → 2 位小數（tick 0.01–0.05）
+    50–500 元 → 1 位小數（tick 0.10–0.50）
+    ≥500 元 → 整數千分位（tick 1.00–5.00）
+    """
     if value is None:
         return '—'
     v = float(value)
-    return f'{v:,.0f}' if v >= 100 else f'{v:,.2f}'
+    if v < 50:
+        return f'{v:,.2f}'
+    elif v < 500:
+        return f'{v:,.1f}'
+    else:
+        return f'{v:,.0f}'
 
 
 def _render_one_block(s, a, q, idx, mode):
