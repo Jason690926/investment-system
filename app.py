@@ -247,8 +247,197 @@ def stock_detail(stock_id):
 
 # ── 市場資料 API ──────────────────────────────────────────
 
-# 輕量行情記憶體快取：{ 'SYMBOL_YYYY-MM-DD': {...} }
+# 輕量行情記憶體快取：{ 'SYMBOL_YYYY-MM-DD': {... , '_cached_at_utc': dt} }
 _quote_cache: dict = {}
+
+
+def _post_close_tw(now_utc=None) -> bool:
+    """台股 14:30 後（含 14:30）→ True；否則 False。now_utc 注入用於測試。"""
+    from datetime import datetime as _dt, timedelta as _td
+    n = now_utc if now_utc is not None else _dt.utcnow()
+    tw = n + _td(hours=8)
+    return tw.hour > 14 or (tw.hour == 14 and tw.minute >= 30)
+
+
+def _today_close_threshold_utc(now_utc=None):
+    """今日 TW 14:30 對應的 UTC datetime（naive，與 QuoteCache.cached_at 同型）。"""
+    from datetime import datetime as _dt, timedelta as _td
+    n = now_utc if now_utc is not None else _dt.utcnow()
+    today_tw = (n + _td(hours=8)).date()
+    return _dt(today_tw.year, today_tw.month, today_tw.day, 6, 30, 0)
+
+
+def _bars_to_spark(bars_list):
+    """daily_bars list[dict] → spark_bars list[20 個 OHLC]，給前端畫迷你日 K"""
+    if not bars_list:
+        return []
+    return [
+        {'o': b['open'], 'h': b['high'], 'l': b['low'], 'c': b['close']}
+        for b in bars_list[-20:]
+    ]
+
+
+def _strip_internal(d):
+    """剝除底線開頭的內部欄位（如 _cached_at_utc），不外露給 client。"""
+    return {k: v for k, v in d.items() if not k.startswith('_')}
+
+
+def _upsert_quote_cache(db, symbol, today_tw, data, now_utc=None):
+    """寫/覆寫 QuoteCache 一筆。失敗（含並發 IntegrityError）吃掉並 rollback。"""
+    from datetime import datetime as _dt
+    from modules.models import QuoteCache as _QC
+    stamp = now_utc if now_utc is not None else _dt.utcnow()
+    try:
+        exists = db.query(_QC).filter_by(symbol=symbol, cache_date=today_tw).first()
+        if exists:
+            exists.open       = data.get('open')
+            exists.high       = data.get('high')
+            exists.low        = data.get('low')
+            exists.close      = data.get('close')
+            exists.prev_close = data.get('prev_close')
+            exists.cached_at  = stamp
+        else:
+            db.add(_QC(
+                symbol=symbol, cache_date=today_tw,
+                open=data.get('open'), high=data.get('high'),
+                low=data.get('low'), close=data.get('close'),
+                prev_close=data.get('prev_close'),
+                cached_at=stamp,
+            ))
+        db.commit()
+    except Exception as e:
+        print(f"[quote] upsert QuoteCache 失敗 {symbol}: {e}")
+        try:
+            db.rollback()
+        except Exception:
+            pass
+
+
+def _try_market_data_cache(db, symbol, today_tw):
+    """從今日 MarketDataCache 拆 OHLC + spark。回 dict 或 None。"""
+    import json as _json
+    from modules.models import MarketDataCache as _MDC
+    mkt = db.query(_MDC).filter_by(symbol=symbol, cache_date=today_tw).first()
+    if not mkt:
+        return None
+    try:
+        bars = _json.loads(mkt.data_json).get('daily_bars', [])
+    except Exception:
+        return None
+    if len(bars) < 2:
+        return None
+    last, prev = bars[-1], bars[-2]
+    return {
+        'symbol':     symbol,
+        'open':       last['open'],
+        'high':       last['high'],
+        'low':        last['low'],
+        'close':      last['close'],
+        'prev_close': prev['close'],
+        'spark_bars': _bars_to_spark(bars),
+    }
+
+
+def _try_quote_cache_db(db, symbol, today_tw):
+    """從 QuoteCache 讀 + 從最近 MarketDataCache 補 spark。回 (dict, cached_at) 或 (None, None)。"""
+    import json as _json
+    from modules.models import QuoteCache as _QC, MarketDataCache as _MDC
+    qc = db.query(_QC).filter_by(symbol=symbol, cache_date=today_tw).first()
+    if not qc or qc.close is None:
+        return None, None
+    spark = []
+    mkt = (db.query(_MDC).filter_by(symbol=symbol)
+             .order_by(_MDC.cache_date.desc()).first())
+    if mkt:
+        try:
+            bars = _json.loads(mkt.data_json).get('daily_bars', [])
+            spark = _bars_to_spark(bars)
+        except Exception:
+            pass
+    data = {
+        'symbol':     symbol,
+        'open':       float(qc.open) if qc.open is not None else None,
+        'high':       float(qc.high) if qc.high is not None else None,
+        'low':        float(qc.low) if qc.low is not None else None,
+        'close':      float(qc.close),
+        'prev_close': float(qc.prev_close) if qc.prev_close is not None else None,
+        'spark_bars': spark,
+    }
+    return data, qc.cached_at
+
+
+def _resolve_quote(db, symbol, today_tw, now_utc, get_yahoo_quote=None):
+    """看板行情核心讀取邏輯。
+
+    Post-close（TW 14:30 後）：
+      1. 先試 MarketDataCache（14:30 batch 寫的權威收盤）→ 命中即 upsert QuoteCache 並回傳
+      2. 記憶體 / QuoteCache 若 cached_at < 今日 14:30 視為 stale → 繞過
+    Pre-close：照原行為 _quote_cache → QuoteCache → MarketDataCache → Yahoo。
+
+    Yahoo 命中時同步 upsert QuoteCache。失敗回 None。
+    """
+    key = f'{symbol}_{today_tw}'
+    post_close = _post_close_tw(now_utc=now_utc)
+    threshold = _today_close_threshold_utc(now_utc=now_utc)
+
+    # ① post-close：先試 MarketDataCache（權威收盤）
+    if post_close:
+        data = _try_market_data_cache(db, symbol, today_tw)
+        if data is not None:
+            data['_cached_at_utc'] = now_utc
+            _quote_cache[key] = data
+            _upsert_quote_cache(db, symbol, today_tw, data, now_utc=now_utc)
+            return _strip_internal(data)
+
+    # ② 記憶體：post-close 時需檢查 staleness
+    entry = _quote_cache.get(key)
+    if entry is not None:
+        cached_at = entry.get('_cached_at_utc')
+        if post_close and cached_at is not None and cached_at < threshold:
+            _quote_cache.pop(key, None)
+        else:
+            return _strip_internal(entry)
+
+    # ③ QuoteCache (DB)：post-close 時同樣檢查 staleness
+    data, cached_at = _try_quote_cache_db(db, symbol, today_tw)
+    if data is not None:
+        if not (post_close and cached_at is not None and cached_at < threshold):
+            data['_cached_at_utc'] = cached_at
+            _quote_cache[key] = data
+            return _strip_internal(data)
+
+    # ④ 非 post-close 時也試 MarketDataCache（保留舊 fallback）
+    if not post_close:
+        data = _try_market_data_cache(db, symbol, today_tw)
+        if data is not None:
+            data['_cached_at_utc'] = now_utc
+            _quote_cache[key] = data
+            return _strip_internal(data)
+
+    # ⑤ Yahoo
+    if get_yahoo_quote is None:
+        from modules.data_enricher import get_stock_quote as _yq
+        get_yahoo_quote = _yq
+    data = get_yahoo_quote(symbol)
+    if data is None:
+        return None
+    if 'spark_bars' not in data:
+        import json as _json
+        from modules.models import MarketDataCache as _MDC
+        try:
+            mkt = (db.query(_MDC).filter_by(symbol=symbol)
+                     .order_by(_MDC.cache_date.desc()).first())
+            if mkt:
+                bars = _json.loads(mkt.data_json).get('daily_bars', [])
+                data['spark_bars'] = _bars_to_spark(bars)
+        except Exception:
+            pass
+        data.setdefault('spark_bars', [])
+    data['_cached_at_utc'] = now_utc
+    _quote_cache[key] = data
+    _upsert_quote_cache(db, symbol, today_tw, data, now_utc=now_utc)
+    return _strip_internal(data)
+
 
 @app.route('/api/market/<symbol>/info')
 @login_required
@@ -290,108 +479,18 @@ def api_market_search():
 @app.route('/api/market/<symbol>/quote')
 @login_required
 def api_market_quote(symbol):
-    """輕量行情（OHLC + 漲跌）：看板用。讀取順序：
-       ① 記憶體 _quote_cache（同 process 同日命中即返回）
-       ② QuoteCache（DB，跨 process & Render 重啟有效）
-       ③ MarketDataCache（分析時寫入的完整資料，可推導 OHLC）
-       ④ Yahoo Finance；成功後寫入 QuoteCache 與 _quote_cache
-    """
-    import json as _json
+    """輕量行情（OHLC + 漲跌）：看板用。實際讀取邏輯見 _resolve_quote。"""
     from datetime import datetime as _dt, timedelta as _td
-    from modules.data_enricher import get_stock_quote
-    from modules.models import MarketDataCache, QuoteCache
-
-    # TW date：避免伺服器 UTC 在台灣 08:00 翻日造成 cache key 失準
-    today = (_dt.utcnow() + _td(hours=8)).date()
-    key = f'{symbol}_{today}'
-
-    def _bars_to_spark(bars_list):
-        """daily_bars list[dict] → spark_bars list[20 個 OHLC]，給前端畫迷你日 K"""
-        return [
-            {'o': b['open'], 'h': b['high'], 'l': b['low'], 'c': b['close']}
-            for b in bars_list[-20:]
-        ] if bars_list else []
-
-    if key not in _quote_cache:
-        db = SessionLocal()
-        try:
-            # ② QuoteCache 命中（無 bars 資料，從 MarketDataCache 補 spark_bars）
-            qc = db.query(QuoteCache).filter_by(symbol=symbol, cache_date=today).first()
-            if qc and qc.close is not None:
-                spark = []
-                mkt_for_spark = (
-                    db.query(MarketDataCache)
-                    .filter_by(symbol=symbol)
-                    .order_by(MarketDataCache.cache_date.desc())
-                    .first()
-                )
-                if mkt_for_spark:
-                    try:
-                        bars = _json.loads(mkt_for_spark.data_json).get('daily_bars', [])
-                        spark = _bars_to_spark(bars)
-                    except Exception:
-                        pass
-                _quote_cache[key] = {
-                    'symbol':     symbol,
-                    'open':       float(qc.open) if qc.open is not None else None,
-                    'high':       float(qc.high) if qc.high is not None else None,
-                    'low':        float(qc.low) if qc.low is not None else None,
-                    'close':      float(qc.close),
-                    'prev_close': float(qc.prev_close) if qc.prev_close is not None else None,
-                    'spark_bars': spark,
-                }
-            else:
-                # ③ MarketDataCache 命中（分析跑過後）
-                mkt = db.query(MarketDataCache).filter_by(symbol=symbol, cache_date=today).first()
-                if mkt:
-                    bars = _json.loads(mkt.data_json).get('daily_bars', [])
-                    if len(bars) >= 2:
-                        last, prev = bars[-1], bars[-2]
-                        _quote_cache[key] = {
-                            'symbol':     symbol,
-                            'open':       last['open'],
-                            'high':       last['high'],
-                            'low':        last['low'],
-                            'close':      last['close'],
-                            'prev_close': prev['close'],
-                            'spark_bars': _bars_to_spark(bars),
-                        }
-        except Exception as e:
-            print(f"[quote] DB 快取讀取失敗 {symbol}: {e}")
-        finally:
-            db.close()
-
-        # ④ 全部 miss → Yahoo
-        if key not in _quote_cache:
-            data = get_stock_quote(symbol)
-            if data is None:
-                return jsonify({'error': f'無法取得 {symbol} 行情'}), 404
-            _quote_cache[key] = data
-            # 寫 QuoteCache（下次同日 / Render 重啟後免再打 Yahoo）
-            db = SessionLocal()
-            try:
-                exists = db.query(QuoteCache).filter_by(symbol=symbol, cache_date=today).first()
-                if exists:
-                    exists.open = data.get('open')
-                    exists.high = data.get('high')
-                    exists.low  = data.get('low')
-                    exists.close = data.get('close')
-                    exists.prev_close = data.get('prev_close')
-                    exists.cached_at = _dt.utcnow()
-                else:
-                    db.add(QuoteCache(
-                        symbol=symbol, cache_date=today,
-                        open=data.get('open'), high=data.get('high'),
-                        low=data.get('low'), close=data.get('close'),
-                        prev_close=data.get('prev_close'),
-                    ))
-                db.commit()
-            except Exception as e:
-                print(f"[quote] QuoteCache 寫入失敗 {symbol}: {e}")
-            finally:
-                db.close()
-
-    return jsonify(_quote_cache[key])
+    now_utc = _dt.utcnow()
+    today = (now_utc + _td(hours=8)).date()
+    db = SessionLocal()
+    try:
+        result = _resolve_quote(db, symbol, today, now_utc)
+    finally:
+        db.close()
+    if result is None:
+        return jsonify({'error': f'無法取得 {symbol} 行情'}), 404
+    return jsonify(result)
 
 
 @app.route('/api/market/<symbol>/data')
