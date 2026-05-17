@@ -80,10 +80,11 @@
 
 ### 留給下次
 
-**Bug D（✅ 2026-05-17 已定案，方案見 `plan.md §十九`）：** 個股 K 棒/量能與大盤同期對比，避免 AI 把 beta 連動當 alpha 訊號。
-- **決策：採最小版** — dynamic_block 注入 TWII 同期 change% + 相對強度（pp）鎖定值 + 1 行大盤對比鐵律；零新 DB、零回填、零經常成本，僅一次性 ~$1.2 AI 重跑驗證
+**Bug D（✅ 2026-05-17 已完成，commit `095ea7a`，方案見 `plan.md §十九`）：** 個股 vs 大盤同期對比，避免 AI 把 beta 當 alpha。
+- 採最小版：`data_fetcher.get_index_daily_closes('^TWII')` + `ai_analyzer_v2._market_rs_block`（5/20日相對強度 pp 鎖定值 + 大盤對比鐵律）注入 dynamic_block；零新 DB/回填/經常成本
+- TWII 取得失敗/個股 bar 不足 → 不注入（誠實 > 錯誤）；測試 `tests/test_market_rs.py` 10 case
 - 中等版（產業分類）/ 廣版（RS Rating）暫不做，未來規模擴大再評估
-- 下輪可直接實作；涉及 `data_fetcher.py`（TWII bars helper）+ `ai_analyzer_v2.py`（dynamic_block）+ 測試
+- ⚠️ 待用戶 AI 重跑實機驗證大盤對比區塊有出現且 AI 有遵守鐵律
 
 **E（下輪討論）— 空方/賣空進場點與下行目標：** 目前系統只實作上漲方向（突破箱頂 → 等幅量度向上 target）。用戶需要反向思考：
 - 跌破箱底後的賣空進場點
@@ -95,10 +96,19 @@
 - **決策 1：`calc_pnf_target` 加 `direction='long'|'short'` 參數（預設 long）**，不做鏡像函式 — 等幅量度與 Filter A/B 掃描邏輯對稱共用，鏡像會雙倍維護剛修好的 `00f5159` 邏輯
 - **決策 2：維持單一三宗師框架**，prompt 內先判結構方向再套對應招式，不拆 long/short 兩套（拆者更貴、框架本就對稱）
 
-**實作拆三 commit（成本由低到高）：**
-- **E-1 ✅ 已完成**（2026-05-17，commit `6c5afa5`）：`calc_pnf_target` 加 `direction='long'|'short'` 參數（預設 long，向後相容、long 分支逐字保留零退化）+ short 幾何鏡像（target=box_bottom−(box_top−box_bottom)，Filter A/B 鏡像）+ 8 個 short regression 測試。全套 109 passed、py_compile OK。
-- **E-2 ⏸ 待做**（~$0.6–1.2 一次重跑，需用戶確認花預算）：`ai_analyzer_v2.py` prompt 方向判斷 + 三宗師空方招式 + 標準化 `DIRECTION: long|short|neutral` tag；**前置必做**：撈 DB 派發相位股 raw 輸出本機跑 cleanup/render 驗證再讓用戶重跑
-- **E-3 ⏸ 待做**（前端零成本，E-2 後）：`_render_one_block` pill 依 `DIRECTION` 動態切換（空方目標/空方停損）+ dashboard 方向 badge + 風險係數 direction-aware 重構（**nuance：順勢放空應低分，非高分**）
+**實作三 commit 全完成（2026-05-17）：**
+- **E-1 ✅**（commit `6c5afa5`）：`calc_pnf_target` 加 `direction` 參數（預設 long、long 分支逐字保留零退化）+ short 幾何鏡像 + 8 測試
+- **E-2 ✅**（commit `86c10f4`）：`ai_analyzer_v2` 兩分析函式 prompt 加結構方向判定 + 三宗師雙向招式 + direction-aware 風險評分 + `DIRECTION` tag + 雙向 P&F；`_clean_html_output` 剝除 DIRECTION。**零-migration 設計**：DIRECTION 持久化/渲染改由 `phase_to_direction(威科夫相位)` 反推（AI 的 DIRECTION 本質即相位之函數），不新增 StockAnalysis 欄位。成本紀律前置已完成（合成 + 真實 DB 6743/4958/6415 派發股 dry-run 零退化）
+- **E-3 ✅**（commit `8f4f943`）：`_render_one_block` pill 依相位反推方向翻轉（撐→空進/壓→空停/目標→空標）+ 方向 badge；`dashboard.js` 看板方向 chip（復用 wyckoff 色系，零新 CSS）。**plan §20 E-3 原文「壓力→空方目標」方向相反，已更正為財務正確映射**（壓力在上=空方停損、目標在下=空方目標），plan.md 同步更正
+- 風險係數 direction-aware 由 E-2 prompt 重構達成（後端僅存 AI int，無需另改評分）
+
+**⚠️ 待用戶決策（不在 plan §20 議定範圍，未擅自擴大）：** `generate_personal_recommendation` 仍純多方框架（加碼/進場買入），市場分析轉空方時個人建議會不一致。需決定是否補 direction-aware（它收 `wyckoff_phase` 參數，可比照 phase_to_direction 加空方 action_template；但屬 per-user 高頻呼叫、有成本）。
+
+**⚠️ 待用戶 AI 重跑實機驗證（E-2/Bug D）：**
+1. 派發/下跌股分析輸出有 `DIRECTION: short`、空方操作框架（賣空進場/回補/下行目標），非「不宜行動」
+2. 印表報表/看板 short 股 pill 顯示空進/空停/空標 + 方向 badge「空」
+3. dynamic_block 出現【大盤對比】區塊且 AI 遵守 beta≠alpha 鐵律
+4. neutral/long 股維持原行為（向後相容）
 
 **待生產驗證（用戶 deploy 後實機操作）：**
 1. 印表報表 6104 收盤 100.5 顯示 100.5、6415 收盤 467.5 顯示 467.5
