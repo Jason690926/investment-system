@@ -6,7 +6,50 @@
 - **架構決策**：討論完方案後，先更新 `plan.md`，再開始寫程式
 - `plan.md` 只在需要查架構細節時才讀（節省 token）
 
-## 當前進度（2026-05-13 收工 — 三 bug 徹底解決：股價格式 / NEWS 大盤 / P&F 目標）
+## 當前進度（2026-05-17 收工 — Bug D + Bug E(空方) 全實作）
+
+**所在週次：週7（UI 重整 + 設計層 bug 修復）**
+
+**狀態：HEAD = `95260e5`（已 push origin/main）**
+
+本次自上次同步落後 22 commit 已快轉，並完成 Bug D + Bug E 三 commit：
+
+| 項目 | Commit | 內容 |
+|------|--------|------|
+| E-1 | `6c5afa5` | `calc_pnf_target` 加 `direction='long'|'short'`（預設 long 逐字保留零退化；short 幾何鏡像 target=box_bottom−(box_top−box_bottom)，Filter A/B 鏡像）+ 8 short 測試 |
+| E-2 | `86c10f4` | `analyze_market_only`/`analyze_stock_three_masters` prompt 加結構方向判定（威科夫相位→方向，禁預設多頭，派發/下跌須給空方框架）+ 三宗師雙向招式 + direction-aware 風險評分（風險=逆勢程度，順勢放空低分）+ `DIRECTION: long|short|neutral` tag + 雙向 P&F 注入；`_clean_html_output` 剝除 DIRECTION |
+| E-3 | `8f4f943` | `_render_one_block` pill 由相位反推方向翻轉（撐→空進/壓→空停/目標→空標）+ 方向 badge；`dashboard.js` 看板方向 chip（復用 wyckoff 色系，零新 CSS） |
+| Bug D | `095ea7a` | `data_fetcher.get_index_daily_closes('^TWII')` + `_market_rs_block`/`_twii_close_on_or_before`：個股 vs TWII 5/20日相對強度(pp)鎖定值 + beta≠alpha 鐵律注入 dynamic_block；TWII 失敗/bar 不足不注入 |
+
+### 關鍵設計決策
+- **零-migration**：`StockAnalysis` 無 direction 欄位。新增 `phase_to_direction(威科夫相位)` 反推方向（AI 的 DIRECTION 本質即相位之函數），DIRECTION tag 仍驅動 AI 內部推理 + 雙 P&F 選取，僅持久化/渲染走相位反推，免動線上 Supabase schema。
+- **單一框架識別方向**（決策2），非拆 long/short 兩套 prompt（省成本、框架本就鏡像）。
+- **plan §20 E-3 映射更正**：原文「壓力→空方目標」方向相反，已更正為財務正確「壓力在上=空方停損、向下 target=空方目標」，plan.md 同步註記。
+
+### 驗證狀況
+- pytest **119/119 全綠**（37 candlestick + 8 E-1 short + 既有 TWII/quote/format + 10 新 Bug D）
+- py_compile（candlestick/ai_analyzer_v2/data_fetcher/app）+ `node -c dashboard.js` 全綠
+- E-2 成本紀律前置完成：合成 short 輸出 + **真實 DB 派發股 6743/4958/6415 dry-run**，`_clean_html_output` 零退化、DIRECTION 不外漏
+
+### 留給下次
+
+**⚠️ 待用戶決策（不在 plan §20 議定範圍，未擅自擴大）：** `generate_personal_recommendation` 仍純多方框架（加碼/進場買入）。市場分析轉空方時個人建議會不一致。它已收 `wyckoff_phase` 參數，可比照 `phase_to_direction` 加空方 action_template；但屬 per-user 高頻呼叫、有 AI 成本，需用戶拍板是否補。
+
+**⚠️ 待用戶 AI 重跑實機驗證（E-2 / Bug D，本次用戶將跑一次報表）：**
+1. 派發/下跌股輸出有 `DIRECTION: short` + 空方操作框架（賣空進場/回補停損/下行目標），非「不宜行動」
+2. 看板/印表 short 股 pill 顯示 空進/空停/空標 + 方向 badge「空」
+3. dynamic_block 出現【大盤對比】區塊且 AI 遵守 beta≠alpha 鐵律
+4. neutral/long 股維持原行為（向後相容）；DIRECTION 缺漏時由相位正確 fallback
+
+**待生產驗證（沿用，用戶 deploy 後實機操作）：**
+1. 印表報表 6104 收盤 100.5 顯示 100.5、6415 收盤 467.5 顯示 467.5
+2. 印表報表 6150 撼訊 P&F 目標欄位（合理 > 73.1 或「—」）
+3. NEWS chip 顯示實際 `summary_date`
+4. 盤前清快取時 server log「TWII 資料非今日」警告，AI 輸出不含大盤點位
+
+---
+
+## 過往進度（2026-05-13 收工 — 三 bug 徹底解決：股價格式 / NEWS 大盤 / P&F 目標）
 
 **所在週次：週7（UI 重整 + 設計層 bug 修復）**
 
