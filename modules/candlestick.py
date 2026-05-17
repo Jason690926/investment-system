@@ -510,23 +510,37 @@ def label_bars(bars: list) -> dict:
 
 
 def calc_pnf_target(bars: list, lookback: int = 12,
-                    current_price: float = None) -> float | None:
+                    current_price: float = None,
+                    direction: str = 'long') -> float | None:
     """Darvas 箱體突破目標（等幅量度 Measured Move）
 
-    掃描全部 bars，找最近一個有效盤整箱體：
+    掃描全部 bars，找最近一個有效盤整箱體，依 direction 決定方向：
+
+    direction='long'（預設，向後相容）— 突破箱頂向上：
       箱頂：某根 bar 的 high，後 confirm 根均未超過（阻力確認）
       箱底：箱頂後窗口內最低點，後 confirm 根均未跌破（支撐確認）
       箱寬 ≤ max_range（排除趨勢段）
-      current_price > 箱頂 × 1.02（突破確認）
+      目標 = 箱頂 + (箱頂 - 箱底)，突破後鎖定不漂移
+      Filter A：current_price > 箱頂 × 1.02（突破確認）
+      Filter B：target > current_price × 1.02（目標仍有預測力）
 
-    目標 = 箱頂 + (箱頂 - 箱底)，突破後鎖定不漂移。
-    找到最近箱體但尚未突破 → 直接 None（不往舊箱找）。
+    direction='short' — 跌破箱底向下（long 的幾何鏡像）：
+      箱底：某根 bar 的 low，後 confirm 根均未跌破（支撐確認）
+      箱頂：箱底後窗口內最高點，後 confirm 根均未超過（阻力確認）
+      箱寬 ≤ max_range（同 long）
+      目標 = 箱底 - (箱頂 - 箱底)，跌破後鎖定不漂移
+      Filter A：current_price < 箱底 × 0.98（跌破確認）
+      Filter B：target < current_price × 0.98（目標仍有預測力）
+
+    兩方向皆：找到箱體但未突破/跌破 → 往更早箱體找，全歷史無有效箱才回 None。
 
     lookback 決定確認週數與箱寬閾值（不截斷掃描範圍）：
       週K (lookback ≤ 14)：confirm=2，箱寬 ≤ 20%
       日K (lookback > 14)：confirm=3，箱寬 ≤ 15%
     """
     if not bars or len(bars) < 5:
+        return None
+    if direction not in ('long', 'short'):
         return None
     try:
         n         = len(bars)
@@ -538,42 +552,77 @@ def calc_pnf_target(bars: list, lookback: int = 12,
         cur   = float(current_price) if current_price is not None else None
 
         for i in range(n - confirm - 2, 0, -1):
-            box_top = highs[i]
+            if direction == 'long':
+                box_top = highs[i]
 
-            # 箱頂確認：後 confirm 根 high 均未超過
-            if not all(highs[j] <= box_top
-                       for j in range(i + 1, min(i + confirm + 1, n))):
-                continue
-
-            # 箱底：箱頂後窗口內最低點（confirm+4 根搜尋範圍）
-            search_end = min(i + confirm + 5, n)
-            window     = lows[i:search_end]
-            box_bottom = min(window)
-            low_idx    = i + window.index(box_bottom)
-
-            # 箱底確認：後 confirm 根 low 均未跌破
-            if low_idx + confirm >= n:
-                continue
-            if not all(lows[j] >= box_bottom
-                       for j in range(low_idx + 1, min(low_idx + confirm + 1, n))):
-                continue
-
-            # 箱寬：排除趨勢段
-            if box_bottom <= 0 or (box_top - box_bottom) / box_bottom > max_range:
-                continue
-
-            target = box_top + (box_top - box_bottom)
-
-            # 兩道 filter 都失敗就往更早的箱體找（不再硬 return None）：
-            # Filter A：箱頂尚未突破（cur ≤ box_top × 1.02）→ 該箱還在形成中，
-            #          可能更早有箱體已突破且 target 仍領先 cur，繼續往回找
-            # Filter B：target 已被 cur 超過（target ≤ cur × 1.02）→ 該箱目標
-            #          已達成過、無預測力，繼續往回找更大/更早的有效箱體
-            if cur is not None:
-                if cur <= box_top * 1.02:
+                # 箱頂確認：後 confirm 根 high 均未超過
+                if not all(highs[j] <= box_top
+                           for j in range(i + 1, min(i + confirm + 1, n))):
                     continue
-                if target <= cur * 1.02:
+
+                # 箱底：箱頂後窗口內最低點（confirm+4 根搜尋範圍）
+                search_end = min(i + confirm + 5, n)
+                window     = lows[i:search_end]
+                box_bottom = min(window)
+                low_idx    = i + window.index(box_bottom)
+
+                # 箱底確認：後 confirm 根 low 均未跌破
+                if low_idx + confirm >= n:
                     continue
+                if not all(lows[j] >= box_bottom
+                           for j in range(low_idx + 1, min(low_idx + confirm + 1, n))):
+                    continue
+
+                # 箱寬：排除趨勢段
+                if box_bottom <= 0 or (box_top - box_bottom) / box_bottom > max_range:
+                    continue
+
+                target = box_top + (box_top - box_bottom)
+
+                # 兩道 filter 都失敗就往更早的箱體找（不再硬 return None）：
+                # Filter A：箱頂尚未突破（cur ≤ box_top × 1.02）→ 該箱還在形成中，
+                #          可能更早有箱體已突破且 target 仍領先 cur，繼續往回找
+                # Filter B：target 已被 cur 超過（target ≤ cur × 1.02）→ 該箱目標
+                #          已達成過、無預測力，繼續往回找更大/更早的有效箱體
+                if cur is not None:
+                    if cur <= box_top * 1.02:
+                        continue
+                    if target <= cur * 1.02:
+                        continue
+            else:  # short — long 的幾何鏡像（箱底支撐錨點 → 跌破向下）
+                box_bottom = lows[i]
+
+                # 箱底確認：後 confirm 根 low 均未跌破
+                if not all(lows[j] >= box_bottom
+                           for j in range(i + 1, min(i + confirm + 1, n))):
+                    continue
+
+                # 箱頂：箱底後窗口內最高點（confirm+4 根搜尋範圍）
+                search_end = min(i + confirm + 5, n)
+                window     = highs[i:search_end]
+                box_top    = max(window)
+                high_idx   = i + window.index(box_top)
+
+                # 箱頂確認：後 confirm 根 high 均未超過
+                if high_idx + confirm >= n:
+                    continue
+                if not all(highs[j] <= box_top
+                           for j in range(high_idx + 1, min(high_idx + confirm + 1, n))):
+                    continue
+
+                # 箱寬：排除趨勢段（同 long）
+                if box_bottom <= 0 or (box_top - box_bottom) / box_bottom > max_range:
+                    continue
+
+                target = box_bottom - (box_top - box_bottom)
+
+                # Filter A：箱底尚未跌破（cur ≥ box_bottom × 0.98）→ 繼續往回找
+                # Filter B：target 已被 cur 跌穿（target ≥ cur × 0.98）→ 無預測力，往回找
+                if cur is not None:
+                    if cur >= box_bottom * 0.98:
+                        continue
+                    if target >= cur * 0.98:
+                        continue
 
             return round(target) if target >= 100 else round(target, 1)
 

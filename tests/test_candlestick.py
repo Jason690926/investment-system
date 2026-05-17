@@ -511,3 +511,93 @@ class TestCalcPnfTarget:
         result = calc_pnf_target(bars, lookback=12, current_price=82)
         # 接受 None（找不到 target > cur）或合理 target（> cur）
         assert result is None or result > 82
+
+
+# ────────────────────────────────────────
+# calc_pnf_target — direction='short'（E-1，2026-05-17）
+# long 的幾何鏡像：箱底支撐錨點 → 跌破向下等幅目標
+# ────────────────────────────────────────
+
+class TestCalcPnfTargetShort:
+
+    # 共用 fixture：support≈55 / resistance≈60 盤整箱，後跌破向下
+    # 手算：選到 i=5 箱 → box_bottom=55, box_top=60, target=55-(60-55)=50
+    def _breakdown_bars(self):
+        return make_pnf_bars([
+            (75, 70), (70, 62), (66, 58),          # 下跌進入箱體
+            (60, 55), (59, 56), (60, 55), (59, 56), (60, 57),  # 盤整箱
+            (56, 50), (54, 48), (52, 46),          # 跌破箱底向下
+        ])
+
+    # 向後相容：不傳 direction 等同 direction='long'，既有行為不變
+    def test_default_direction_is_long(self):
+        bars = make_pnf_bars([
+            (80, 70), (75, 65), (70, 60),
+            (65, 55), (64, 56), (63, 55), (64, 56), (65, 57),
+            (70, 62), (72, 64), (74, 65), (76, 68),
+        ])
+        r_default  = calc_pnf_target(bars, lookback=12, current_price=68)
+        r_explicit = calc_pnf_target(bars, lookback=12, current_price=68,
+                                     direction='long')
+        assert r_default == r_explicit
+        assert r_default is not None
+
+    # 無效 direction → None（防呆）
+    def test_invalid_direction_returns_none(self):
+        bars = self._breakdown_bars()
+        assert calc_pnf_target(bars, lookback=12, current_price=52,
+                               direction='bogus') is None
+
+    # 基本跌破：cur 已跌破箱底且 target 仍領先 → 回傳向下目標
+    def test_basic_breakdown_returns_target(self):
+        bars = self._breakdown_bars()
+        # cur=52：跌破 box_bottom=55（×0.98=53.9），target=50 < cur×0.98=50.96
+        result = calc_pnf_target(bars, lookback=12, current_price=52,
+                                 direction='short')
+        assert result == 50.0
+        # 經濟意義：目標必須低於箱底、低於現價、且為正值
+        assert 0 < result < 55
+        assert result < 52
+
+    # 尚未跌破箱底（Filter A）→ None
+    def test_no_breakdown_returns_none(self):
+        bars = self._breakdown_bars()
+        # cur=58 仍在/高於箱底 55×0.98=53.9 → 未跌破
+        assert calc_pnf_target(bars, lookback=12, current_price=58,
+                               direction='short') is None
+
+    # 目標已被現價跌穿（Filter B 鏡像）→ 該箱無預測力
+    def test_target_already_passed_rejected(self):
+        bars = self._breakdown_bars()
+        # cur=47：target=50 > cur×0.98=46.06 → 價已跌過目標，無意義，不得回 50
+        result = calc_pnf_target(bars, lookback=12, current_price=47,
+                                 direction='short')
+        assert result is None or result < 47
+
+    # 新增一根 bar 後目標不漂移（鎖定性，鏡像 long 的核心驗證）
+    def test_stable_target_after_new_bar(self):
+        from datetime import date, timedelta
+        bars = self._breakdown_bars()
+        extended = bars + [_pnf_bar(50, 44, str(date(2026, 4, 2)))]
+        r1 = calc_pnf_target(bars,     lookback=12, current_price=52,
+                             direction='short')
+        r2 = calc_pnf_target(extended, lookback=12, current_price=52,
+                             direction='short')
+        assert r1 is not None and r2 is not None
+        assert r1 == r2, f"空方目標漂移：{r1} → {r2}"
+
+    # 方向確實改變行為：同一跌破 fixture 用 long 不會回傳空方目標
+    def test_direction_changes_behavior(self):
+        bars = self._breakdown_bars()
+        short_r = calc_pnf_target(bars, lookback=12, current_price=52,
+                                  direction='short')
+        long_r  = calc_pnf_target(bars, lookback=12, current_price=52,
+                                  direction='long')
+        assert short_r == 50.0
+        assert long_r != 50.0  # 下跌盤面 long 不應產出向下目標（多為 None）
+
+    # 資料不足 / 空輸入 → None（兩方向一致）
+    def test_insufficient_bars_short(self):
+        assert calc_pnf_target([], lookback=12, direction='short') is None
+        assert calc_pnf_target([_pnf_bar(100, 90, '2026-01-01')] * 3,
+                               direction='short') is None
