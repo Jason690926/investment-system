@@ -95,10 +95,10 @@
 - **決策 1：`calc_pnf_target` 加 `direction='long'|'short'` 參數（預設 long）**，不做鏡像函式 — 等幅量度與 Filter A/B 掃描邏輯對稱共用，鏡像會雙倍維護剛修好的 `00f5159` 邏輯
 - **決策 2：維持單一三宗師框架**，prompt 內先判結構方向再套對應招式，不拆 long/short 兩套（拆者更貴、框架本就對稱）
 
-**下輪實作拆三 commit（成本由低到高）：**
-- **E-1**（純邏輯零成本，先做）：`calc_pnf_target` direction 參數 + short regression + long 向後相容測試
-- **E-2**（~$0.6–1.2 一次重跑）：`ai_analyzer_v2.py` prompt 方向判斷 + 三宗師空方招式 + 標準化 `DIRECTION: long|short|neutral` tag；**前置必做**：撈 DB 派發相位股 raw 輸出本機跑 cleanup/render 驗證再讓用戶重跑
-- **E-3**（前端零成本）：`_render_one_block` pill 依 `DIRECTION` 動態切換（空方目標/空方停損）+ dashboard 方向 badge + 風險係數 direction-aware 重構（**nuance：順勢放空應低分，非高分**）
+**實作拆三 commit（成本由低到高）：**
+- **E-1 ✅ 已完成**（2026-05-17，commit `6c5afa5`）：`calc_pnf_target` 加 `direction='long'|'short'` 參數（預設 long，向後相容、long 分支逐字保留零退化）+ short 幾何鏡像（target=box_bottom−(box_top−box_bottom)，Filter A/B 鏡像）+ 8 個 short regression 測試。全套 109 passed、py_compile OK。
+- **E-2 ⏸ 待做**（~$0.6–1.2 一次重跑，需用戶確認花預算）：`ai_analyzer_v2.py` prompt 方向判斷 + 三宗師空方招式 + 標準化 `DIRECTION: long|short|neutral` tag；**前置必做**：撈 DB 派發相位股 raw 輸出本機跑 cleanup/render 驗證再讓用戶重跑
+- **E-3 ⏸ 待做**（前端零成本，E-2 後）：`_render_one_block` pill 依 `DIRECTION` 動態切換（空方目標/空方停損）+ dashboard 方向 badge + 風險係數 direction-aware 重構（**nuance：順勢放空應低分，非高分**）
 
 **待生產驗證（用戶 deploy 後實機操作）：**
 1. 印表報表 6104 收盤 100.5 顯示 100.5、6415 收盤 467.5 顯示 467.5
