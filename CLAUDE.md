@@ -80,12 +80,10 @@
 
 ### 留給下次
 
-**Bug D（討論題，下輪評估）：** 用戶提出個股 K 棒/量能應與大盤同期表現對比，避免 AI 誤將大盤連動歸因為個股訊號。本輪未實作，三方案待評估：
-- 最小版：dynamic_block 加 TWII 同期 change% + 鐵律 1 行（~$1.2 驗證 AI 重跑成本）
-- 中等版：加產業同期表現（需 industry classification）
-- 廣版：RS Rating（需 1 年歷史回填 + 持續維護）
-
-下輪先進 `plan.md` 評估後再實作。
+**Bug D（✅ 2026-05-17 已定案，方案見 `plan.md §十九`）：** 個股 K 棒/量能與大盤同期對比，避免 AI 把 beta 連動當 alpha 訊號。
+- **決策：採最小版** — dynamic_block 注入 TWII 同期 change% + 相對強度（pp）鎖定值 + 1 行大盤對比鐵律；零新 DB、零回填、零經常成本，僅一次性 ~$1.2 AI 重跑驗證
+- 中等版（產業分類）/ 廣版（RS Rating）暫不做，未來規模擴大再評估
+- 下輪可直接實作；涉及 `data_fetcher.py`（TWII bars helper）+ `ai_analyzer_v2.py`（dynamic_block）+ 測試
 
 **E（下輪討論）— 空方/賣空進場點與下行目標：** 目前系統只實作上漲方向（突破箱頂 → 等幅量度向上 target）。用戶需要反向思考：
 - 跌破箱底後的賣空進場點
@@ -93,14 +91,14 @@
 - 等幅量度向下的下行目標空間：`box_bottom - (box_top - box_bottom)`
 - AI 三宗師框架的空方對應：威科夫派發/下跌/再派發 phase 該給賣空建議而非僅「不宜行動」；本間頂部反轉型態（黃昏之星/吊人/空頭吞噬）應觸發空方時機；李佛摩跌破前低 + 5日均下彎為空方 pivot
 
-涉及範圍（評估後可能拆多個 commit）：
-- `modules/candlestick.py:calc_pnf_target` 加 `direction='long'|'short'` 參數，或新增 `calc_pnf_target_short`
-- `modules/ai_analyzer_v2.py` prompt：分析方向不應預設多頭，補空方判斷邏輯與空方目標 span 標籤
-- `app.py:_render_one_block` pill 區：壓力轉成「空方目標」、撐位轉成「空方停損」（依方向動態切換顯示）
-- dashboard 卡片：方向標籤（多/空/觀望），漲跌色已是台股慣例（紅漲綠跌），對空方分析無需翻色
-- 風險係數評分：空方訊號加分（與既有多頭排列 -20 對稱）
+**✅ 2026-05-17 兩項優先決策已定（方案見 `plan.md §二十`）：**
+- **決策 1：`calc_pnf_target` 加 `direction='long'|'short'` 參數（預設 long）**，不做鏡像函式 — 等幅量度與 Filter A/B 掃描邏輯對稱共用，鏡像會雙倍維護剛修好的 `00f5159` 邏輯
+- **決策 2：維持單一三宗師框架**，prompt 內先判結構方向再套對應招式，不拆 long/short 兩套（拆者更貴、框架本就對稱）
 
-開工討論優先級：先決定「同一函式雙方向參數 vs 鏡像函式」+ AI prompt 該維持單一三宗師框架且 prompt 識別方向，還是拆分 long/short 兩套 prompt（後者更貴）。
+**下輪實作拆三 commit（成本由低到高）：**
+- **E-1**（純邏輯零成本，先做）：`calc_pnf_target` direction 參數 + short regression + long 向後相容測試
+- **E-2**（~$0.6–1.2 一次重跑）：`ai_analyzer_v2.py` prompt 方向判斷 + 三宗師空方招式 + 標準化 `DIRECTION: long|short|neutral` tag；**前置必做**：撈 DB 派發相位股 raw 輸出本機跑 cleanup/render 驗證再讓用戶重跑
+- **E-3**（前端零成本）：`_render_one_block` pill 依 `DIRECTION` 動態切換（空方目標/空方停損）+ dashboard 方向 badge + 風險係數 direction-aware 重構（**nuance：順勢放空應低分，非高分**）
 
 **待生產驗證（用戶 deploy 後實機操作）：**
 1. 印表報表 6104 收盤 100.5 顯示 100.5、6415 收盤 467.5 顯示 467.5
