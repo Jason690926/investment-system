@@ -141,15 +141,23 @@ def _render_one_block(s, a, q, idx, mode):
     <div><span class="label">RISK</span><br><strong class="amber">{risk_str}</strong></div>
   </div>"""
 
-    # Pills 列
+    # Pills 列（方向感知：由威科夫相位反推 long/short/neutral，零 migration）
     pills = []
     if a:
+        from modules.ai_analyzer_v2 import phase_to_direction
+        _dir = phase_to_direction(a.wyckoff_phase)
+        # short 時撐/壓/目標語意翻轉（壓力在上=停損、撐位=跌破進場、目標=下行）
+        if _dir == 'short':
+            sup_lbl, res_lbl, tgt_lbl, dir_badge = '空進 ', '空停 ', '空標 ', '空'
+        else:
+            sup_lbl, res_lbl, tgt_lbl, dir_badge = '撐 ', '壓 ', '目標 ', ('多' if _dir == 'long' else '觀望')
+        pills.append(f'<span class="pill pill-ink"><span class="lbl">方向 </span>{dir_badge}</span>')
         if a.support_price is not None:
-            pills.append(f'<span class="pill pill-support"><span class="lbl">撐 </span>{_format_price(a.support_price)}</span>')
+            pills.append(f'<span class="pill pill-support"><span class="lbl">{sup_lbl}</span>{_format_price(a.support_price)}</span>')
         if a.resistance_price is not None:
-            pills.append(f'<span class="pill pill-bull"><span class="lbl">壓 </span>{_format_price(a.resistance_price)}</span>')
+            pills.append(f'<span class="pill pill-bull"><span class="lbl">{res_lbl}</span>{_format_price(a.resistance_price)}</span>')
         if a.target_price is not None:
-            pills.append(f'<span class="pill pill-amber"><span class="lbl">目標 </span>{_format_price(a.target_price)}</span>')
+            pills.append(f'<span class="pill pill-amber"><span class="lbl">{tgt_lbl}</span>{_format_price(a.target_price)}</span>')
         if a.wyckoff_phase:
             pills.append(f'<span class="pill pill-ink"><span class="lbl">威科夫 </span>{a.wyckoff_phase}</span>')
     # 觀察版把風險合進 pills

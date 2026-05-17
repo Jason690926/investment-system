@@ -94,6 +94,16 @@ function wyckoffBadgeCls(phase) {
   return 'wyckoff-neutral';
 }
 
+// 威科夫相位 → 結構方向標籤（與後端 phase_to_direction 同步；復用 wyckoff 色系）
+function phaseDirection(phase) {
+  if (!phase) return null;
+  const bull = ['上漲', '積累', '再積累'];
+  const bear = ['派發', '下跌', '再派發'];
+  if (bear.some(p => phase.includes(p))) return { t: '空', c: 'wyckoff-bear' };
+  if (bull.some(p => phase.includes(p))) return { t: '多', c: 'wyckoff-bull' };
+  return { t: '觀望', c: 'wyckoff-neutral' };
+}
+
 function buildCard(s) {
   const riskPct    = s.risk_pct  ?? null;
   const wyckoff    = s.wyckoff_phase ?? '';
@@ -101,15 +111,19 @@ function buildCard(s) {
   const badgeText  = s.status === 'holding' ? '已持有' : '觀察中';
   const isAnalyzed = riskPct != null;
 
-  // Status row: wyckoff badge + risk inline chip（並排）
+  // Status row: 方向標籤 + wyckoff badge + risk inline chip（並排）
+  const _dir = wyckoff ? phaseDirection(wyckoff) : null;
+  const dirChip = _dir
+    ? `<span class="wyckoff-badge ${_dir.c}" title="結構方向">${_dir.t}</span>`
+    : '';
   const wyckoffChip = wyckoff
     ? `<span class="wyckoff-badge ${wyckoffBadgeCls(wyckoff)}">${wyckoff}</span>`
     : '';
   const riskChip = riskPct != null
     ? `<span class="risk-inline ${riskClass(riskPct)}">RISK ${riskPct}%</span>`
     : (wyckoff ? '' : '<span class="risk-inline-empty">尚未分析</span>');
-  const statusRowHtml = (wyckoffChip || riskChip)
-    ? `<div class="card-status-row">${wyckoffChip}${riskChip}</div>`
+  const statusRowHtml = (dirChip || wyckoffChip || riskChip)
+    ? `<div class="card-status-row">${dirChip}${wyckoffChip}${riskChip}</div>`
     : '';
 
   // Meta row：holding 顯示張數+成本；watching 顯示「觀察中」
