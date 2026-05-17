@@ -206,6 +206,72 @@ def _dual_pnf(enriched_data: dict, price_f):
     return pnf_long, pnf_short, block
 
 
+def _twii_close_on_or_before(twii: dict, date_str: str):
+    """twii: {YYYY-MM-DD: close} 舊→新。回傳該日或最近較早交易日收盤，無則 None。"""
+    if not twii:
+        return None
+    if date_str in twii:
+        return twii[date_str]
+    best = None
+    for d, c in twii.items():       # 插入序由舊到新
+        if d <= date_str:
+            best = c
+        else:
+            break
+    return best
+
+
+def _market_rs_block(daily_bars: list) -> str:
+    """Bug D：個股 vs 大盤(TWII)同期相對強度，注入 dynamic_block 為鎖定值。
+    TWII 取得失敗 / 個股 bar 不足 → 回 ''（不注入，誠實 > 錯誤）。"""
+    if not daily_bars or len(daily_bars) < 6:
+        return ''
+    try:
+        from modules.data_fetcher import get_index_daily_closes
+        twii = get_index_daily_closes('^TWII', lookback=40)
+    except Exception:
+        twii = {}
+    if not twii:
+        return ''
+    lines = []
+    for w in (5, 20):
+        if len(daily_bars) <= w:
+            continue
+        cur, past = daily_bars[-1], daily_bars[-1 - w]
+        try:
+            sc, sp = float(cur['close']), float(past['close'])
+            if sp <= 0:
+                continue
+            stock_chg = (sc / sp - 1) * 100
+            tc = _twii_close_on_or_before(twii, str(cur.get('date', '')))
+            tp = _twii_close_on_or_before(twii, str(past.get('date', '')))
+            if tc is None or tp is None or tp <= 0:
+                continue
+            twii_chg = (tc / tp - 1) * 100
+            rs = stock_chg - twii_chg
+            if rs > 0.3:
+                tag = '跑贏大盤' if stock_chg >= 0 else '抗跌'
+            elif rs < -0.3:
+                tag = '落後大盤'
+            else:
+                tag = '與大盤同步'
+            lines.append(
+                f"個股{w}日 {stock_chg:+.1f}% vs TWII{w}日 {twii_chg:+.1f}%"
+                f" → 相對強度 {rs:+.1f}pp（{tag}）"
+            )
+        except (TypeError, ValueError, KeyError):
+            continue
+    if not lines:
+        return ''
+    body = '\n'.join(lines)
+    return (
+        f"【大盤對比（程式計算，禁止更改）】\n{body}\n"
+        f"⚠️【大盤對比鐵律】判斷個股強弱前先扣除大盤同期漲跌幅；個股與大盤"
+        f"同向且幅度相近時，不得歸因為個股獨立訊號（beta 連動非 alpha）。"
+        f"相對強度欄為程式精確計算，禁止自行推估。"
+    )
+
+
 # ── 個股三宗師分析 ────────────────────────────────────────────
 
 def analyze_stock_three_masters(
@@ -269,6 +335,8 @@ def analyze_stock_three_masters(
     except (TypeError, ValueError):
         _price_f = None
     _pnf_long, _pnf_short, pnf_block = _dual_pnf(enriched_data, _price_f)
+    _rs_block = _market_rs_block(enriched_data.get('daily_bars', []))
+    _rs_section = f"\n\n{_rs_block}" if _rs_block else ""
 
     # 威科夫突破量能門檻（程式計算，禁止 AI 更改）
     try:
@@ -373,7 +441,7 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
 成交量：今日 {vol_today} 張 ｜ 5日均量 {vol_5avg} 張
 【突破最低量能門檻（程式計算，禁止更改）】突破：{_vol_breakout} 張（5日均量×1.5）｜ 春天/測試：{_vol_spring} 張（5日均量×1.2）
 
-{pnf_block}
+{pnf_block}{_rs_section}
 
 {monthly_text}
 
@@ -528,6 +596,8 @@ def analyze_market_only(
     except (TypeError, ValueError):
         _price_f = None
     _pnf_long, _pnf_short, pnf_block = _dual_pnf(enriched_data, _price_f)
+    _rs_block = _market_rs_block(enriched_data.get('daily_bars', []))
+    _rs_section = f"\n\n{_rs_block}" if _rs_block else ""
 
     try:
         _v5 = float(vol_5avg)
@@ -650,7 +720,7 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
 成交量：今日 {vol_today} 張 ｜ 5日均量 {vol_5avg} 張
 【突破最低量能門檻（程式計算，禁止更改）】突破：{_vol_breakout} 張（5日均量×1.5）｜ 春天/測試：{_vol_spring} 張（5日均量×1.2）
 
-{pnf_block}
+{pnf_block}{_rs_section}
 
 {monthly_text}
 

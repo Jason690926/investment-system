@@ -153,6 +153,35 @@ def _fetch_macro_ticker(name, symbol):
         pass
     return name, {'price': 0, 'change': 0, 'symbol': symbol}
 
+def get_index_daily_closes(symbol: str = '^TWII', lookback: int = 40) -> dict:
+    """取指數（預設大盤 ^TWII）近期日收盤，回傳 {'YYYY-MM-DD': close} 由舊到新。
+
+    Bug D 大盤同期對比用：個股 daily_bars 依日期對齊此 dict 算相對強度。
+    失敗回 {}（呼叫端據此不注入大盤對比區塊，誠實 > 錯誤，
+    比照 7ee7950 twii freshness pattern）。"""
+    try:
+        import requests as _rq
+        _r = _rq.get(
+            f'https://query1.finance.yahoo.com/v8/finance/chart/{symbol}',
+            headers={'User-Agent': 'Mozilla/5.0'},
+            params={'interval': '1d', 'range': '3mo'}, timeout=15)
+        _d = _r.json()['chart']['result'][0]
+        _ts = _d['timestamp']
+        _cl = _d['indicators']['quote'][0]['close']
+        out = {}
+        for t, c in zip(_ts, _cl):
+            if c is None:
+                continue
+            out[datetime.fromtimestamp(t).strftime('%Y-%m-%d')] = round(float(c), 2)
+        if not out:
+            return {}
+        # 只留最後 lookback 個交易日（dict 在 py3.7+ 保留插入序）
+        items = list(out.items())[-lookback:]
+        return dict(items)
+    except Exception:
+        return {}
+
+
 def get_global_markets():
     symbols = {
         '美國道瓊': '^DJI',
