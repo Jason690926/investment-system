@@ -10,7 +10,7 @@
 
 **所在週次：週7（UI 重整 + 設計層 bug 修復）**
 
-**狀態：本次 commit 後 push origin/main（前一 HEAD `b4654bf`）**
+**狀態：HEAD = `90338c5`（已 push origin/main；前一 HEAD `b4654bf`）**
 
 ### 本次重點 — 用戶提供報表實機驗證 + persona 討論 + 兩項實作
 
