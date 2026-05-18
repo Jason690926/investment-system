@@ -6,7 +6,55 @@
 - **架構決策**：討論完方案後，先更新 `plan.md`，再開始寫程式
 - `plan.md` 只在需要查架構細節時才讀（節省 token）
 
-## 當前進度（2026-05-17 收工 — Bug D + Bug E(空方) 全實作）
+## 當前進度（2026-05-18 收工 — persona 選擇性併入 + 個人建議空方化 + Bug D 觀察）
+
+**所在週次：週7（UI 重整 + 設計層 bug 修復）**
+
+**狀態：本次 commit 後 push origin/main（前一 HEAD `b4654bf`）**
+
+### 本次重點 — 用戶提供報表實機驗證 + persona 討論 + 兩項實作
+
+**E-2 / E-3 實機驗證通過（2026-05-17 報表，15 支）：**
+- E-2 方向判定：派發/再派發股全 `DIRECTION=short`，三宗師雙向招式正確（空方進場/回補/下行目標），neutral/long 無退化
+- E-2 風險評分：6789「個股強於大盤，放空需留意反彈風險」— direction-aware 生效
+- E-3 前端：持股/觀察 pill 全翻 空進/空停/空標 + 方向 badge「空」，相位反推方向正確
+
+**Bug D 部分失效 — 已定位、用戶決定先不修（memory 記錄）：**
+- 15 支只有 3 支出現【大盤對比】（6789、3515/6150、2489 區；含「非 beta 連動」鐵律遵守）
+- 根因：`_market_rs_block` 每股各自呼叫 `get_index_daily_closes('^TWII')`，15 支報表=15 次相同 Yahoo 請求，Render IP 限流 ~12/15 回 `{}`（誠實>錯誤如實觸發）。本機實測 code 正確，純架構缺陷
+- 用戶決定列觀察，「以後偏離真實太多再修」。最小修法（module-level TTL 快取）記於 `memory/bug-d-twii-rs-rate-limit.md`
+
+**架構決策（plan.md §二十一）— AI persona 選擇性併入：**
+- 用戶草擬完整「股票分析師」persona，評估後**不當全系統 persona、不取代現有 block**（會破壞 news/產業/個人建議多任務、回退 Bug E 雙向、缺程式計算鐵律、「主動要求數據」對批次有害）
+- 只把 3 個加分元素併入 `analyze_stock_three_masters` + `analyze_market_only` 兩 static_block
+- 核心調和：**威科夫定方向（第一層，不可被推翻）/ 李佛摩階梯定時機（第二層，趨勢>結構>訊號>確認）** — 兩者不同層非競爭，補上現有 block 缺的進場時機仲裁
+
+### 本次改動（未 commit → 本次一併）
+
+| 檔案 | 修改點 | 退化驗證 |
+|------|--------|----------|
+| `modules/ai_analyzer_v2.py` | 兩 static_block 併入 Darvas Box 雙向框架 + 兩層決策分工 + 交易原則（純 +18 行 0 刪除對稱）；`generate_personal_recommendation` 空方化（`phase_to_direction` 反推，short 加 holding/watching 空方模板 + `_dir_note`，零退化巢狀法 `if`→`elif` 既有模板 byte-identical）| diff 僅刪 2 行（控制流），long/neutral 輸出 byte-identical |
+| `plan.md` | §二十一 記架構決策 | — |
+| `CLAUDE.md` | 本快照 | — |
+| `memory/` | Bug D 觀察 + MEMORY.md 索引（新增 memory 機制首次使用）| — |
+
+### 驗證狀況
+- pytest **119/119 全綠**、py_compile OK
+- 消費/解析端零退化由 git diff 靜態證明（結構化標記/`_clean_html_output`/風險評分/DIRECTION 判定全未動）
+- **AI 輸出端為 prompt 改動，需真實重跑驗證**（風險低：純加性、不矛盾既有鐵律、第一行標記指令未動）
+
+### 留給下次 — ⚠️ 待用戶 AI 重跑實機驗證
+1. long/neutral 股個人建議與改前一致（向後相容）
+2. 派發/下跌股個人建議出現空方框架（放空/回補/減碼/出場、禁加碼），非「加碼買入」
+3. 個股/大盤分析仍正確輸出第一行 `RISK_PCT/DIRECTION...` 標記（static_block 加長未影響）
+4. 報表出現 Darvas Box 箱頂/箱底語意，空方股寫「跌破箱底=空方進場」非「轉弱」
+5. （沿用）Bug D 大盤對比仍只少數股出現 — 觀察是否偏離真實過大需啟動 TTL 快取修法
+
+**待生產驗證（沿用，用戶 deploy 後實機）：** 6104 收 100.5 / 6415 收 467.5 印表正確；NEWS chip 顯示實際 `summary_date`；盤前清快取 server log「TWII 非今日」警告
+
+---
+
+## 過往進度（2026-05-17 收工 — Bug D + Bug E(空方) 全實作）
 
 **所在週次：週7（UI 重整 + 設計層 bug 修復）**
 
