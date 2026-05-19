@@ -893,12 +893,35 @@ def generate_personal_recommendation(
         ]
         bars_text = "【近期日K（最後5根）】\n" + "\n".join(lines)
 
+    _direction = phase_to_direction(wyckoff_phase)
+
+    from modules.candlestick import calc_swing_levels
+    try:
+        _cp = float(current_price)
+    except (TypeError, ValueError):
+        _cp = None
+    _sl = calc_swing_levels(recent_bars or [], _direction, _cp)
+    if _sl and _direction in ('long', 'short'):
+        _ez = _sl['entry_zone']
+        _tg = f"{_sl['target']:.2f}" if isinstance(_sl['target'], (int, float)) else '—'
+        _swing_line = (
+            f"\n【波段錨點（程式計算，禁止更改，價位須引用）】"
+            f"失效/停損 {_sl['invalidation']:.2f} ｜ 加碼觸發 {_sl['add_trigger']:.2f} ｜ "
+            f"進場區 {_ez[0]:.2f}~{_ez[1]:.2f} ｜ 波段目標 {_tg}"
+        )
+    elif _sl and _direction == 'neutral':
+        _swing_line = (
+            f"\n【波段錨點】無波段方向，區間 {_sl['range_low']:.2f}~"
+            f"{_sl['range_high']:.2f}（突破上緣轉多/跌破下緣轉空，區間內不操作）"
+        )
+    else:
+        _swing_line = "\n【波段錨點】資料不足，本期不給波段框架（誠實 > 錯誤）"
+
     market_summary = (
         f"威科夫階段：{wyckoff_phase} | 風險係數：{risk_pct}%\n"
         f"關鍵支撐：{support or '--'} 元 | 關鍵壓力：{resistance or '--'} 元 | P&F目標：{target_pnf or '--'} 元"
+        f"{_swing_line}"
     )
-
-    _direction = phase_to_direction(wyckoff_phase)
     if _direction == 'short':
         _dir_note = (
             f"⚠️ 本股結構為空方（威科夫 {wyckoff_phase}）。建議須為空方框架："
@@ -925,13 +948,13 @@ def generate_personal_recommendation(
 <span class="stop-loss">⚠ 停損位：___元 — 跌破請執行，不要猶豫（距現價約-___% ）</span>
 <p>設在支撐位 ___元 下方約2-3%</p>
 
-<h3>▶ 今日K棒提醒</h3>
+<h3>▶ 盤面提醒（不構成當日進出依據）</h3>
 <p>（結合最後一根K棒型態+量能，一句話說明當下最值得注意的盤面訊號）</p>"""
     elif _direction == 'short':
         action_template = """<h3>▶ 現在適合放空嗎？</h3>
-<p>（只選一個）<span class="short-term-title"><strong>可伺機放空 / 等待確認 / 不建議放空</strong></span> — 理由（不超過40字）</p>
+<p>（只選一個）<span class="short-term-title"><strong>可布局放空 / 等跌破確認 / 條件未到不放空</strong></span> — 理由（不超過40字）</p>
 
-<h3>▶ 短線放空條件（1-5日）</h3>
+<h3>▶ 波段放空框架（2週-1個月+）</h3>
 <ul>
   <li>放空觸發：跌破 ___元，且量超過 ___張（5日均量的___倍）</li>
   <li>回測壓力放空區：___元附近（原箱底反轉為壓力）</li>
@@ -972,13 +995,13 @@ def generate_personal_recommendation(
 <span class="stop-loss">⚠ 停損位：___元 — 跌破請執行，不要猶豫（距現價約-___% ）</span>
 <p>設在支撐位 ___元 下方約2-3%</p>
 
-<h3>▶ 今日K棒提醒</h3>
+<h3>▶ 盤面提醒（不構成當日進出依據）</h3>
 <p>（結合最後一根K棒型態+量能，一句話說明當下最值得注意的盤面訊號）</p>"""
     else:
         action_template = """<h3>▶ 現在適合進場嗎？</h3>
-<p>（只選一個）<span class="short-term-title"><strong>立刻可入 / 等待確認 / 不建議進場</strong></span> — 理由（不超過40字）</p>
+<p>（只選一個）<span class="short-term-title"><strong>可布局 / 等突破確認 / 條件未到不進場</strong></span> — 理由（不超過40字）</p>
 
-<h3>▶ 短線介入條件（1-5日）</h3>
+<h3>▶ 波段介入框架（2週-1個月+）</h3>
 <ul>
   <li>進場觸發：突破 ___元，且量超過 ___張（5日均量的___倍）</li>
   <li>首批建倉位：___元附近，建議 ___張</li>
@@ -999,8 +1022,11 @@ def generate_personal_recommendation(
 <h3>▶ 風險提示</h3>
 <p>（根據風險係數 {risk_pct}% 說明最主要潛在風險，不超過2句）</p>""".replace('{risk_pct}', str(risk_pct))
 
-    prompt = f"""你是台股操作顧問，提供具體、有數字、可執行的操作策略。
+    prompt = f"""你是台股操作顧問，提供具體、有數字、可執行的波段操作策略。
 每個建議都必須有具體價格數字，絕不說「視情況而定」。
+⚠️ 波段紀律：建議為 2 週-1 個月以上定位，不做當沖。所有價位必須引用
+market_summary 中【波段錨點】的鎖定值，禁自行估算。失效價未破前論點
+不變，禁因單日漲跌翻轉方向或重設價位，禁輸出「今日宜/不宜」當日結論。
 
 股票：{name}（{symbol}）現價：{current_price} 元
 
