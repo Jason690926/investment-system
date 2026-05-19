@@ -206,6 +206,40 @@ def _dual_pnf(enriched_data: dict, price_f):
     return pnf_long, pnf_short, block
 
 
+def _dual_swing_block(enriched_data: dict, price_f) -> str:
+    """波段操作錨點注入塊（鏡像 _dual_pnf）：同時算 long/short/neutral
+    三組程式鎖定錨點，AI 依其判定的 DIRECTION 取對應組。資料不足→誠實提示。"""
+    from modules.candlestick import calc_swing_levels
+    dk = enriched_data.get('daily_bars', [])
+    sl_long  = calc_swing_levels(dk, 'long',    price_f)
+    sl_short = calc_swing_levels(dk, 'short',   price_f)
+    sl_neu   = calc_swing_levels(dk, 'neutral', price_f)
+    if not (sl_long or sl_short or sl_neu):
+        return "【波段操作錨點】本期資料不足，不給波段框架（誠實 > 錯誤）。"
+
+    def _f(v):
+        return f'{v:.2f}' if isinstance(v, (int, float)) else '—'
+
+    lines = ["【波段操作錨點（程式計算，禁止更改）｜依你判定的 DIRECTION 取對應組】"]
+    if sl_long:
+        ez = sl_long['entry_zone']
+        lines.append(
+            f"· long：失效/停損 {_f(sl_long['invalidation'])} ｜ 加碼觸發 "
+            f"{_f(sl_long['add_trigger'])} ｜ 進場區 {_f(ez[0])}~{_f(ez[1])} ｜ "
+            f"波段目標 {_f(sl_long['target'])}")
+    if sl_short:
+        ez = sl_short['entry_zone']
+        lines.append(
+            f"· short：失效/回補 {_f(sl_short['invalidation'])} ｜ 加空觸發 "
+            f"{_f(sl_short['add_trigger'])} ｜ 放空區 {_f(ez[0])}~{_f(ez[1])} ｜ "
+            f"下行目標 {_f(sl_short['target'])}")
+    if sl_neu:
+        lines.append(
+            f"· neutral：區間 {_f(sl_neu['range_low'])}~{_f(sl_neu['range_high'])}"
+            f"（突破上緣+量轉多 / 跌破下緣+量轉空，區間內不操作）")
+    return "\n".join(lines)
+
+
 def _twii_close_on_or_before(twii: dict, date_str: str):
     """twii: {YYYY-MM-DD: close} 舊→新。回傳該日或最近較早交易日收盤，無則 None。"""
     if not twii:
@@ -337,6 +371,7 @@ def analyze_stock_three_masters(
     _pnf_long, _pnf_short, pnf_block = _dual_pnf(enriched_data, _price_f)
     _rs_block = _market_rs_block(enriched_data.get('daily_bars', []))
     _rs_section = f"\n\n{_rs_block}" if _rs_block else ""
+    _swing_block = _dual_swing_block(enriched_data, _price_f)
 
     # 威科夫突破量能門檻（程式計算，禁止 AI 更改）
     try:
@@ -354,18 +389,23 @@ def analyze_stock_three_masters(
 
     # 持倉狀態對應的建議區塊
     if status == 'holding':
-        action_section = f"""### 五、操作建議（已持有，依 DIRECTION）
-- long：續抱/加碼/減碼；short：減碼/出場/反手放空（依方向擇一）
-- <span class="short-term-title">▶ 短期（1-5日）</span>：依方向給具體進出場
-- long 加碼：突破壓力且量 > {_vol_breakout} 張（5日均量×1.5，程式計算，禁止更改）
-- short 進場：跌破撐位或回測壓力線放空，量能引用上方門檻
-- <span class="stop-loss">停損：long 跌破撐位停損 / short 站回壓力線回補（XX 元，不要猶豫）</span>"""
+        action_section = f"""### 五、波段操作框架（2週-1個月+，依 DIRECTION）
+⚠️ 所有價位必須引用上方【波段操作錨點】鎖定值，禁止自行估算或改數字。
+- 波段論點：一句話說明本波段做多/做空/觀望的核心理由（≤30字）
+- long：續抱/加碼/減碼擇一；short：減碼/出場/反手放空擇一（依方向）
+- <span class="stop-loss">▶ 失效/停損價：[錨點 invalidation] 元 — 跌破(long)/站回(short)即論點作廢，執行不猶豫</span>
+- ▶ 加碼觸發：突破[錨點 add_trigger](long) / 跌破[錨點 add_trigger](short) 且量 > {_vol_breakout} 張（程式計算，禁止更改）
+- ▶ 波段目標：[錨點 target] 元（等幅量度，可能為 — 表示尚無）
+- neutral：明講無波段方向，[range_low]~[range_high] 區間內不操作，僅標突破/跌破轉向條件"""
     else:
-        action_section = f"""### 五、操作建議（觀察中，依 DIRECTION）
-- <span class="short-term-title">▶ 短線進場條件（1-5日）</span>：long 突破 XX 元做多 / short 跌破 XX 元放空，量 > {_vol_breakout} 張（程式計算，禁止更改）
-- <span class="mid-term-title">▶ 中線布局（月線角度）</span>：long 積累完成 Spring 縮量需達 {_vol_spring} 張 / short 派發確認反彈無量
-- <span class="stop-loss">預設停損：long 跌破 XX 元出場 / short 站回 XX 元回補</span>
-- 依 DIRECTION 說明目前是否適合進場（做多或放空）及理由"""
+        action_section = f"""### 五、波段操作框架（2週-1個月+，依 DIRECTION）
+⚠️ 所有價位必須引用上方【波段操作錨點】鎖定值，禁止自行估算或改數字。
+- 波段論點：一句話說明本波段做多/做空/觀望的核心理由（≤30字）
+- ▶ 進場區：[錨點 entry_zone] 元；觸發須量 > {_vol_breakout} 張（程式計算，禁止更改）
+- <span class="stop-loss">▶ 失效/停損價：[錨點 invalidation] 元 — 跌破(long)/站回(short)即論點作廢</span>
+- ▶ 加碼觸發：[錨點 add_trigger] 元　▶ 波段目標：[錨點 target] 元
+- long/short：說明目前是否到進場區及理由（波段角度，非當日）
+- neutral：明講無波段方向，[range_low]~[range_high] 區間內不操作，僅標突破[range_high]+量轉多 / 跌破[range_low]+量轉空"""
 
     static_block = f"""你是融合三大宗師智慧的台股分析師。分析日期：{today}
 
@@ -399,6 +439,11 @@ DIRECTION: [long|short|neutral]
 
 ## ⚠️ 交易原則（融入操作判斷）
 不預測只依訊號行動；沒突破不追價；沒設停損不進場；風險優先於報酬。
+
+## ⚠️ 波段論點穩定性（最高紀律，凌駕單日盤面）
+本框架為 2 週-1 個月以上波段定位，不做當沖。失效價未被觸及前，方向與
+進出場價維持不變；每日重跑只更新「現價距失效價還有多遠」，禁止因單日
+紅綠或漲跌改變方向或重設價位。禁止輸出「今日宜/不宜進場」這類當日結論。
 
 ## 風險係數評分原則（0=低風險/順勢 100=高風險/逆勢）
 ⚠️ 風險 = 建議動作對抗主結構的程度，與多空無關：順勢操作（上漲做多 / 下跌放空）低分，逆勢操作（下跌搶反彈做多 / 上漲放空）高分。
@@ -451,6 +496,8 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
 【突破最低量能門檻（程式計算，禁止更改）】突破：{_vol_breakout} 張（5日均量×1.5）｜ 春天/測試：{_vol_spring} 張（5日均量×1.2）
 
 {pnf_block}{_rs_section}
+
+{_swing_block}
 
 {monthly_text}
 
