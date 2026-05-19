@@ -33,6 +33,84 @@ def _find_local_troughs(arr, min_gap: int = 3) -> list:
     return troughs
 
 
+def calc_swing_levels(bars: list, direction: str,
+                       current_price: float = None) -> dict | None:
+    """波段操作錨點（程式計算，AI 禁改）— spec 2026-05-19。
+
+    取最後 60 根日K（不足 60 用全部，<20 回 None）的真實局部峰谷，
+    取窗口內『最近一個』局部峰=波段高、最近一個局部谷=波段低。
+    波段高低點僅在新局部峰谷形成時才變（=失效事件本身），故價格未
+    觸及失效線時每日重跑錨點不動 → 論點不漂移（根治翻來覆去）。
+
+    回傳 dict（資料不足回 None）：
+      long :  invalidation=波段低  add_trigger=波段高  entry_zone=(波段低, mid)
+      short:  invalidation=波段高  add_trigger=波段低  entry_zone=(mid, 波段高)
+      neutral: range_low/range_high + flip_long(=波段高)/flip_short(=波段低)
+      target: long/short 串 calc_pnf_target 對應方向；neutral=None
+    """
+    if direction not in ('long', 'short', 'neutral'):
+        return None
+    if not bars or len(bars) < 20:
+        return None
+    try:
+        window = bars[-60:]
+        highs = [float(b['high']) for b in window]
+        lows  = [float(b['low'])  for b in window]
+        peaks   = _find_local_peaks(highs, min_gap=3)
+        troughs = _find_local_troughs(lows, min_gap=3)
+        if not peaks or not troughs:
+            return None
+        swing_high = peaks[-1][1]      # 最近一個局部峰
+        swing_low  = troughs[-1][1]    # 最近一個局部谷
+        if swing_high <= swing_low:
+            return None
+        mid = (swing_low + swing_high) / 2.0
+
+        if direction == 'neutral':
+            return {
+                'direction':   'neutral',
+                'range_low':   swing_low,
+                'range_high':  swing_high,
+                'flip_long':   swing_high,
+                'flip_short':  swing_low,
+                'invalidation': None,
+                'add_trigger':  None,
+                'entry_zone':   None,
+                'target':       None,
+            }
+
+        target = calc_pnf_target(bars, lookback=20,
+                                 current_price=current_price,
+                                 direction=direction)
+        if direction == 'long':
+            return {
+                'direction':    'long',
+                'range_low':    swing_low,
+                'range_high':   swing_high,
+                'invalidation': swing_low,
+                'add_trigger':  swing_high,
+                'entry_zone':   (swing_low, mid),
+                'flip_long':    None,
+                'flip_short':   None,
+                'target':       target,
+            }
+        # short（long 幾何鏡像）
+        return {
+            'direction':    'short',
+            'range_low':    swing_low,
+            'range_high':   swing_high,
+            'invalidation': swing_high,
+            'add_trigger':  swing_low,
+            'entry_zone':   (mid, swing_high),
+            'flip_long':    None,
+            'flip_short':   None,
+            'target':       target,
+        }
+    except (KeyError, TypeError, ValueError, IndexError) as e:
+        print(f'[candlestick] calc_swing_levels 失敗: {e}')
+        return None
+
+
 def detect_patterns(hist):
     """偵測K線型態，回傳發現的型態清單（酒田五法強化版）"""
     if len(hist) < 5:
