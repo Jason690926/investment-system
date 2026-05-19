@@ -6,7 +6,60 @@
 - **架構決策**：討論完方案後，先更新 `plan.md`，再開始寫程式
 - `plan.md` 只在需要查架構細節時才讀（節省 token）
 
-## 當前進度（2026-05-19 收工 — Bug F：NEWS 自 5/12 凍結修復 + 12h 新聞窗口）
+## 當前進度（2026-05-19 收工 — 中長期波段框架：穩定論點 + 程式鎖定錨點）
+
+**所在週次：週7（UI 重整 + 設計層 bug 修復）**
+
+**狀態：HEAD = `b710dac`（未 push → 本次一併 push；前一 HEAD `2fb5c7c`）**
+
+### 本次 — 用戶 5/18 報表回饋三項：缺雙向支撐壓力、太短期翻來覆去、要中長期
+
+走完整 brainstorming → spec → writing-plans → subagent 逐 Task 執行流程。
+
+**三骨架決策（用戶 2026-05-19 拍板，plan.md §二十三 / spec 2026-05-19）：**
+- D1 穩定論點 + 失效價位（失效未破論點不變，每日重跑只更新「距失效距離」）
+- D2 程式鎖定錨點（復用 candlestick.py，非 AI 每日推斷 → 根治漂移）
+- D3 neutral → 誠實不操作 + 雙向條件觸發（根除「都是買多」偏見）
+
+**根因：** `ai_analyzer_v2.py:359/365/720` prompt 寫死短線(1-5日)/今日時機；支撐壓力 AI 每日推斷 → 漂移 → 論點漂移。
+
+### 本次 commits（7 個，spec→plan→Task1-5）
+
+| commit | 內容 |
+|--------|------|
+| `73229f4` | spec 設計文件 |
+| `410b144` | 6-task TDD 實作計畫 |
+| `88b332f` | Task1：`calc_swing_levels()`（復用 `_find_local_peaks/_troughs`+`calc_pnf_target`，long/short 鏡像、neutral 區間+雙向 flip）+ 8 測試（含穩定性回歸：尾端加未觸及失效 bar 後錨點不變）|
+| `7675261` | Task2：`_dual_swing_block`（鏡像 `_dual_pnf`）+ `analyze_stock_three_masters` action_section 移除▶短期(1-5日)換波段框架 + 波段穩定鐵律 |
+| `2dade2c` | Task3：`analyze_market_only` 對齊（注入錨點 + `今日時機`→波段定位 + 穩定鐵律；守「不含操作建議」邊界不加 entry/add 段）|
+| `291df02` | Task4：`generate_personal_recommendation` 注入錨點到 market_summary + 5 模板去當沖化 + prompt 波段紀律（short 禁加碼/neutral 模板結構未動）|
+| `b710dac` | Task5：DB raw 推演 + 靜態證明 + plan.md §二十三 |
+
+### 驗證狀況
+- pytest **127/127 全綠**（119 既有 + 8 新 `test_swing_levels.py`，零退化）
+- py_compile（ai_analyzer_v2 / candlestick）OK
+- DB 8 筆真實 `StockAnalysis` raw 跑 `_clean_html_output`/`_parse_tagged` 無 crash；git diff 靜態證明標記定義/解析/清理函式體零改動 → 解析端零退化
+- 每 Task 全新 subagent 執行、Task 間審查（commit 範圍 + 全測試 + 關鍵 grep）
+
+### 留給下次 — ⚠️ Task 6 只能用戶做（AI 行為無法靜態證明）
+deploy 後燒 ~$0.6 重跑一鍵分析，驗收 6 點：
+1. 出現「波段操作框架（2週-1個月+）」，無「短期(1-5日)」/「今日時機」
+2. long/short 各有明確失效(停損)+加碼觸發價，與 dynamic_block【波段操作錨點】鎖定值一致
+3. neutral 寫「無方向+區間+雙向 flip」，非「等回檔買進」
+4. 個人建議去當沖化、價位與分析錨點一致
+5. **連兩日重跑同股（失效未破）→ 方向與價位不變**（翻來覆去根治實證）
+6. 第一行結構化標記/pill/方向 badge 全正常
+
+回滾：純 prompt + 加性 helper，無 migration → AI 不遵守則 revert 對應 commit，無資料污染。
+
+**沿用未驗（持續待用戶 deploy / AI 重跑）：**
+- Bug F：一鍵分析後 NEWS chip = 當日、近 12h；regen 失敗 toast（spec/plan §二十二）
+- persona 併入：long/neutral 個人建議向後相容、Darvas Box 語意
+- Bug D 大盤對比仍少數股出現（`memory/bug-d-twii-rs-rate-limit.md`）
+
+---
+
+## 過往進度（2026-05-19 收工 — Bug F：NEWS 自 5/12 凍結修復 + 12h 新聞窗口）
 
 **所在週次：週7（UI 重整 + 設計層 bug 修復）**
 
