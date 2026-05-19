@@ -6,7 +6,49 @@
 - **架構決策**：討論完方案後，先更新 `plan.md`，再開始寫程式
 - `plan.md` 只在需要查架構細節時才讀（節省 token）
 
-## 當前進度（2026-05-18 收工 — persona 選擇性併入 + 個人建議空方化 + Bug D 觀察）
+## 當前進度（2026-05-19 收工 — Bug F：NEWS 自 5/12 凍結修復 + 12h 新聞窗口）
+
+**所在週次：週7（UI 重整 + 設計層 bug 修復）**
+
+**狀態：HEAD = `79cca6a`（已 push origin/main；前一 HEAD `90338c5`）**
+
+### 本次 — 用戶提供 5/18 20:35 報表，NEWS chip 顯示 5/12（6 天前）
+
+**根本診斷（systematic-debugging）— 非 AI 幻覺/freshness，是架構操作斷層：**
+- `DailyMarketSummary`（NEWS 來源）全系統只有兩條產生路徑：① `run_daily_report.py` 14:30 批次（cron 自 2026-05-03 停用，`.github/workflows/daily_report.yml:5-6` 註解，1 人手動模式）② `/api/news/regenerate`（只有「🗑 清快取」按鈕觸發）
+- 用戶日常「一鍵分析 → 開報表」中 `analyzeAll()` **完全不碰 NEWS** → 從最後一次清快取（5/12）凍結 6 天；`print-report` 誠實取最新一筆 = 5/12
+- 設計原假設「14:30 批次每天跑」，cron 停用後該假設破裂、`analyzeAll` 未補
+
+**用戶決策（plan.md §二十二）：選項 1 + 12h 窗口；不做過期警示、不重啟 cron（違背手動省成本初衷）**
+
+### 本次改動（commit `79cca6a`，3 檔 +65/-2）
+
+| 檔案 | 修改點 |
+|------|--------|
+| `modules/data_fetcher.py` | F-1：`get_tw_news_rss` cutoff `hours=48`→`12` + docstring（用戶要求「報表產生時間前 12h 新聞才列入」） |
+| `static/js/dashboard.js` | F-2/F-3：`analyzeAll()` 非週末視窗→背景並行射 `/api/news/regenerate`（比照週末→週報 pattern），個股完成後 await NEWS 就緒才宣告完成（避免太早開報表又拿舊摘要）；**每次**一鍵分析都重生（單次 ~$0.01，唯有每次重生保證前 12h） |
+| `plan.md` | §二十二 記架構決策（含殘留風險 + 12h 副作用取捨） |
+
+`/api/news/regenerate` 端點本身不動（已冪等 delete+insert(today)）。
+
+### 驗證狀況
+- pytest **119/119 全綠**、`node -c dashboard.js` OK、`py_compile data_fetcher.py` OK
+- 12h cutoff 邊界本機實測：11.5h 保留 / 12.5h 剔除 / pubDate 解析失敗保留（沿用既有 except→pass）
+
+### 留給下次 — ⚠️ 待用戶 deploy 後實機驗證
+1. 一鍵分析跑完 → 開報表，NEWS chip 顯示**當天日期**、內容為近 12 小時新聞
+2. regen 失敗時出現 toast「財經新聞更新失敗，報表將顯示前次摘要」
+3. 12h 窗口副作用觀察：盤前/隔夜/連假新聞是否過少導致摘要偏薄（屬已知取捨，太誇張再議）
+4. **殘留風險（用戶已知）：** 未做選項 2 過期警示，regen 失敗時 print-report 仍 fallback 最新一筆（可能舊），僅靠 toast 提示
+
+**沿用未驗（持續待用戶 AI 重跑 / deploy 實機）：**
+- persona 併入：long/neutral 個人建議向後相容、派發股出現空方框架、第一行 `RISK_PCT/DIRECTION` 標記未受 static_block 加長影響、Darvas Box 箱頂/箱底語意
+- Bug D 大盤對比仍只少數股出現（觀察是否偏離真實過大需啟動 TTL 快取修法，見 `memory/bug-d-twii-rs-rate-limit.md`）
+- 生產：6104 收 100.5 / 6415 收 467.5 印表正確；盤前清快取 server log「TWII 非今日」警告
+
+---
+
+## 過往進度（2026-05-18 收工 — persona 選擇性併入 + 個人建議空方化 + Bug D 觀察）
 
 **所在週次：週7（UI 重整 + 設計層 bug 修復）**
 
