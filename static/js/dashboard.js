@@ -309,6 +309,9 @@ async function analyzeAll() {
   progress.style.display = 'flex';
 
   // 週末視窗：先射出週報背景產生，與個股並行
+  // 非週末：背景並行重生 NEWS（plan §22 F-2/F-3）— 確保報表 NEWS = 一鍵
+  // 分析當下前 12h 新聞，補回 14:30 cron 停用後沒有自動刷新 NEWS 的斷層
+  let newsPromise = null;
   if (isWeeklyWindow()) {
     try {
       await api('/api/weekly-report/generate', { method: 'POST' });
@@ -316,6 +319,10 @@ async function analyzeAll() {
     } catch (e) {
       toast('週報觸發失敗，繼續個股分析', 'error');
     }
+  } else {
+    newsPromise = api('/api/news/regenerate', { method: 'POST' })
+      .then(() => toast('財經新聞已更新（近 12 小時）'))
+      .catch(() => toast('財經新聞更新失敗，報表將顯示前次摘要', 'error'));
   }
 
   const queue   = [...stocks];
@@ -356,6 +363,15 @@ async function analyzeAll() {
 
   // 同時啟動 CONCURRENCY 個 worker，共用同一個 queue
   await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+
+  // NEWS 重生與個股並行跑，這裡 await 確保「分析完成」前 NEWS 已就緒，
+  // 避免用戶在 regen 還沒寫入 DB 時就開報表又拿到舊摘要
+  if (newsPromise) {
+    progress.innerHTML =
+      `<div class="spinner" style="width:14px;height:14px;border-width:2px;flex-shrink:0"></div>` +
+      `個股完成，財經新聞更新中…`;
+    await newsPromise;
+  }
 
   isAnalyzing = false;
   const cacheMsg = cached > 0 ? `，其中 ${cached} 支來自快取` : '';

@@ -256,7 +256,10 @@ def get_taiwan_stocks(symbols=None):
 
 def get_tw_news_rss(n: int = 15) -> list:
     """Google News RSS 抓台股財經新聞（免費，無需 API Key）。
-    只保留 48 小時內的新聞，避免舊文章混入導致 AI 引用過期市場數據。
+    只保留 12 小時內的新聞（plan §22 F-1）：用戶要求「財經分析必須是報表
+    產生時間前 12 小時的新聞才列入」。一鍵分析會即時重生 NEWS，故 cutoff
+    相對於本呼叫時刻 ≈ 報表產生時刻。盤前/隔夜可能很少甚至 0 筆，屬刻意
+    取捨（誠實精簡 > 補舊文導致 AI 引用過期市場數據）。
     """
     import urllib.request
     import xml.etree.ElementTree as ET
@@ -264,7 +267,7 @@ def get_tw_news_rss(n: int = 15) -> list:
     from email.utils import parsedate_to_datetime
     from datetime import datetime, timezone, timedelta
 
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=48)
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=12)
     query = urllib.parse.quote('台股 投資 財經 科技股 半導體')
     url = f'https://news.google.com/rss/search?q={query}&hl=zh-TW&gl=TW&ceid=TW:zh-TW'
     try:
