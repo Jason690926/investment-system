@@ -672,6 +672,19 @@ def calc_pnf_target(bars: list, lookback: int = 12,
         lows  = [float(b['low'])  for b in bars]
         cur   = float(current_price) if current_price is not None else None
 
+        # Filter C reference：用相同 _find_local_peaks/_troughs（min_gap=3，與
+        # calc_swing_levels 一致）取最近一個程式版「壓力線/支撐線」作為交叉檢查
+        # 基準。修撼訊 case：P&F target=74 < AI 標壓力 74.7（兩來源不一致）。
+        # long  ：target 必須 > swing_high × 1.02（突破壓力之上才有預測力）
+        # short ：target 必須 < swing_low  × 0.98（跌破支撐之下才有預測力）
+        swing_ref = None
+        if direction == 'long':
+            peaks = _find_local_peaks(highs, min_gap=3)
+            swing_ref = peaks[-1][1] if peaks else None
+        else:
+            troughs = _find_local_troughs(lows, min_gap=3)
+            swing_ref = troughs[-1][1] if troughs else None
+
         for i in range(n - confirm - 2, 0, -1):
             if direction == 'long':
                 box_top = highs[i]
@@ -710,6 +723,9 @@ def calc_pnf_target(bars: list, lookback: int = 12,
                         continue
                     if target <= cur * 1.02:
                         continue
+                # Filter C：target 必須突破程式版壓力之上才有預測力
+                if swing_ref is not None and target <= swing_ref * 1.02:
+                    continue
             else:  # short — long 的幾何鏡像（箱底支撐錨點 → 跌破向下）
                 box_bottom = lows[i]
 
@@ -744,6 +760,9 @@ def calc_pnf_target(bars: list, lookback: int = 12,
                         continue
                     if target >= cur * 0.98:
                         continue
+                # Filter C：target 必須跌破程式版支撐之下才有預測力
+                if swing_ref is not None and target >= swing_ref * 0.98:
+                    continue
 
             return round(target) if target >= 100 else round(target, 1)
 

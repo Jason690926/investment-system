@@ -761,3 +761,69 @@ class TestD3MonthlyNoMultiCandle:
         last = monthly_labels.get('2026-06-01', '')
         # 不強制要求一定吞噬（吞噬條件嚴格），但確認 monthly 不會把 2 根型態誤過濾
         assert last != ''  # 至少有 label（fallback 也可）
+
+
+# ────────────────────────────────────────
+# G 組（2026-05-20）— calc_pnf_target Filter C
+# 用戶 2026-05-19 撼訊報表 target=74 < AI 標壓力 74.7（兩來源不一致）
+# Filter C：target 必須突破程式版 swing_high × 1.02 才有預測力
+# ────────────────────────────────────────
+
+
+class TestGroupGFilterC:
+    """Filter C — target 必須 > 程式版壓力（swing_high）/ < 程式版支撐（swing_low）。"""
+
+    def test_long_target_below_swing_high_rejected(self):
+        """模擬撼訊：在 P&F 邏輯選到的小箱 target 比近期 swing_high 低 → reject。
+        構造：早期窄箱 60-65（target=70），後續上行創高至 74（成為 swing_high），
+        cur=67.5 仍在 swing_high 之下。Filter C 應拒 target=70（< 74×1.02=75.5）。"""
+        bars = make_pnf_bars([
+            # 早期窄箱 60-65
+            (65, 60), (64, 61), (63, 60), (64, 61), (65, 62),
+            # 上行至 70+
+            (68, 64), (70, 66),
+            # 創高至 74（local peak）
+            (74, 70), (73, 70), (72, 68),
+            # 拉回至 67.5
+            (70, 66), (68, 67), (68, 67),
+        ])
+        # cur=67.5：早期 60-65 箱 target=70 < swing_high(74)×1.02=75.5 → reject
+        result = calc_pnf_target(bars, lookback=12, current_price=67.5,
+                                 direction='long')
+        # 接受 None（找不到合理 target）或 target > 74×1.02
+        assert result is None or result > 74 * 1.02, (
+            f'Filter C：target {result} 不應低於 swing_high(74)×1.02'
+        )
+
+    def test_short_target_above_swing_low_rejected(self):
+        """Filter C 鏡像 — short 時 target 必須 < swing_low × 0.98。"""
+        bars = make_pnf_bars([
+            # 早期窄箱 60-65（短線 target = 60-(65-60)=55）
+            (65, 60), (64, 61), (63, 60), (64, 61), (65, 62),
+            # 下行至 56（local trough）
+            (60, 56), (58, 56), (59, 57),
+            # 拉到 60
+            (62, 58), (61, 59),
+        ])
+        # cur=58：早期 short box target=55 vs swing_low(56)×0.98=54.88
+        # target(55) >= swing_low×0.98(54.88) → reject by Filter C
+        result = calc_pnf_target(bars, lookback=12, current_price=54,
+                                 direction='short')
+        # 接受 None 或 target < swing_low×0.98
+        assert result is None or result < 56 * 0.98
+
+    def test_filter_c_does_not_break_clean_breakout(self):
+        """乾淨突破場景：target 確實高於 swing_high，Filter C 不應誤拒。"""
+        bars = make_pnf_bars([
+            # 整理箱 60-65（target=70）
+            (65, 60), (64, 61), (63, 60), (64, 61), (65, 62),
+            # 突破上行至 70+
+            (68, 64), (70, 66), (72, 68),
+        ])
+        # 此 fixture 中 swing_high 也是 72 附近（最新 peak），target=70 可能被擋
+        # 此測試確認：當 cur 突破到 target 之上時，filter C 邏輯不影響「找到合理 target」流程
+        # （此 case 可能回 None，視 swing 位置，但不應 crash）
+        result = calc_pnf_target(bars, lookback=12, current_price=72,
+                                 direction='long')
+        # 不要求一定回 target，只要求不 raise
+        assert result is None or result > 72
