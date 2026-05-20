@@ -6,7 +6,78 @@
 - **架構決策**：討論完方案後，先更新 `plan.md`，再開始寫程式
 - `plan.md` 只在需要查架構細節時才讀（節省 token）
 
-## 當前進度（2026-05-19 收工 — 中長期波段框架：穩定論點 + 程式鎖定錨點）
+## 當前進度（2026-05-20 — 投資建議書 15 Bug 全面修法）
+
+**所在週次：週7（UI 重整 + 設計層 bug 修復）**
+
+**狀態：HEAD = `cad66f3`（未 push → 本次收工一併 push）**
+
+### 本次 — 用戶 5/19 22:09 報表 PDF（22 頁、15 支股）審視找 15 Bug，全做
+
+走完整 spec → plan.md → 7-commit TDD 執行 → 驗證流程。spec 見
+`docs/superpowers/specs/2026-05-20-report-quality-fixes-design.md`、plan §二十四。
+
+**致命三件（會直接誤導決策）：**
+- #1 持股部位處理建議缺位（晶心科 -39.6% / 創惟 -18.6% 多單虧損，分析給「建新空單」）
+- #2 Pill 價位 ↔ 內文錯位（short 股「空進=支撐線、空標=目標」，家人讀 pill 進場=目標）
+- #3 K 棒重複/缺漏（5 支股同日列兩次「(補充)/(最新)」、技嘉日 K 只 3 根）
+
+**用戶 5/20 拍板：** B1c（加 stop_loss 欄位，schema 永遠中性語意，1 migration）+ Personal 全部包含（持股+觀察）。
+
+### 本次 commits（9 個：spec + plan + 7 fix + 驗證）
+
+| commit | 內容 |
+|--------|------|
+| `1d8aecf` | spec + plan.md §二十四 |
+| `fc04aa3` | Task1 D 組型態誤判（D1 多根去重 + D2 tick 容差 + D3 月 K skip） |
+| `58be033` | Task2 C 組 K 棒去重（_fmt_bars dedup + prompt 行數鐵律） |
+| `a999bf5` | Task3 H 組字型 fallback（mono 加 Noto Sans TC 修半形 glyph） |
+| `5dcb80f` | Task4 G 組 PnF Filter C + 月 K 表注入 |
+| `31c70d5` | Task5 B 組 stop_loss 欄位 + swing 注入 + pill mapping（**需 Supabase migration**） |
+| `089484f` | Task6 A 組 print PDF 含 Personal + 持倉診斷段（**需 Supabase migration**） |
+| `0de57dc` | Task7 E+F 組 操作框架強制 schema + 量價術語方向 qualify |
+| `cad66f3` | Task8 驗證測試（short pill 順序 + personal_html render，6 case） |
+
+### 驗證狀況
+- pytest **158/158 全綠**（原 127 + 新 31：D 12 + C 7 + G 3 + B 5 + B/A 整合 6 + 既有 print_report 一致）
+- py_compile（app.py / ai_analyzer_v2 / candlestick / models / data_enricher / run_daily_report）全綠
+- B 組核心斷言：short pill 順序「空標 < 空進 < 空停」價位邏輯通（防「進場=目標」誤導）
+- E+F 組純 prompt，需 AI 重跑驗
+
+### ⚠️ Deploy 步驟（用戶必執行）
+
+**Step 1：跑 Supabase migration（兩個 SQL，零 downtime）**
+1. `migrations/2026-05-20-add-stop-loss-column.sql` — `ALTER TABLE stock_analyses ADD COLUMN stop_loss`
+2. `migrations/2026-05-20-add-personal-recommendations-table.sql` — `CREATE TABLE personal_recommendations`
+
+**Step 2：deploy（Render auto-deploy on push）**
+
+**Step 3：燒 ~$0.6 跑一鍵分析驗 commit 5/6/7 AI 行為（共 6 點）：**
+1. short 股 pill 順序「空進 > 空停 > 空標」三價位邏輯通（空進在上、空停最高、空標最低）
+2. long 股 pill「撐 < 壓 ≤ 目標」與改前一致，neutral 不顯示 stop_loss
+3. 三宗師結論第五段「操作框架」三模板擇一輸出 + 3 結構化 bullets 都有
+4. short 股「等待條件」用「跌破量/賣壓確認量」字眼，非「突破量門檻」
+5. 無「放量失敗」字面、無「努力大結果差」誤套到下跌量大場景、無「月 K 早晨之星」幻覺
+6. PDF：持股段（晶心科/創惟）有「持倉診斷（方向衝突警示）」三 bullets；按過「個人建議」按鈕的觀察股 PDF 含 personal 章節
+
+**Step 4：刷 PDF 視覺驗（不燒 token）：**
+- 字型：「⼗字星/⼤陰線/⽇期」改為正常「十/大/日」（H 組修法）
+- 第二節 K 線 table：月 K 6 + 週 K 3 + 日 K 5 共 3 張表（G2 修法）
+- 日 K 表無「(補充)/(最新)」補充行（C 組修法）
+- 撼訊三川底非連 3 天觸發（D1 修法）；華星光 5/19 不誤判平頭頂（D2 修法）
+
+### 回滾策略
+純 prompt 改動 + 加性欄位 + 加性 helper → AI 不遵守則 revert 對應 commit；stop_loss 欄位保留為 NULL 向後相容；PersonalRecommendation 表獨立，不影響既有功能。
+
+### 沿用未驗（持續，待用戶實機）
+- 中長期波段框架 Task 6（spec 2026-05-19）：6 點 AI 行為驗證（連兩日重跑同股方向不變等）—— 已大部分被本次 commit 5/6/7 覆蓋
+- Bug F NEWS chip：當日、近 12h、regen 失敗 toast
+- persona 併入：long/neutral 個人建議向後相容、Darvas Box 語意
+- Bug D 大盤對比仍少數股出現（memory/bug-d-twii-rs-rate-limit.md）
+
+---
+
+## 過往進度（2026-05-19 收工 — 中長期波段框架：穩定論點 + 程式鎖定錨點）
 
 **所在週次：週7（UI 重整 + 設計層 bug 修復）**
 
