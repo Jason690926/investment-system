@@ -110,3 +110,59 @@ class TestResolveSwingAnchors:
         if result['stop_loss_anchor'] is not None:
             # ≥ 100 應為整數
             assert result['stop_loss_anchor'] == round(result['stop_loss_anchor'], 0)
+
+
+# ────────────────────────────────────────
+# E 組（2026-05-20）— 進場區距現價過近警示
+# 華星光 5/19 收 523 / short 進場區上緣 551 只差 5.4%、臻鼎差 1.6%
+# → 反彈一日就觸發停損的真實案例
+# ────────────────────────────────────────
+
+from modules.ai_analyzer_v2 import _dual_swing_block
+
+
+class TestEntryProximityWarning:
+    """進場區距現價 < 3% 時 swing block 應加警示語。"""
+
+    def _bars_short_near_entry(self):
+        """構造 short 情境：cur ~= entry_high，進場區極近。"""
+        # 高位震盪後拉回，現價在 swing_high 附近
+        return [
+            _bar(f'2026-04-{i:02d}', 100, 95) for i in range(1, 26)
+        ] + [
+            _bar('2026-04-26', 110, 105),
+            _bar('2026-04-27', 112, 106),
+            _bar('2026-04-28', 115, 108),  # swing_high = 115
+            _bar('2026-04-29', 113, 109),
+            _bar('2026-04-30', 110, 105),
+            _bar('2026-05-01', 108, 102),
+            _bar('2026-05-02', 105, 100),
+            _bar('2026-05-03', 102, 95),
+            _bar('2026-05-04', 100, 92),
+            _bar('2026-05-05', 98, 90),    # swing_low = 90
+            _bar('2026-05-06', 102, 95),
+            _bar('2026-05-07', 108, 102),
+            _bar('2026-05-08', 112, 106, c=112),  # cur=112 vs entry_high=115 差 2.6%
+        ]
+
+    def test_short_entry_proximity_warning_appears(self):
+        """short 進場區上緣距現價 < 3% → 出現警示語。"""
+        bars = self._bars_short_near_entry()
+        # cur=112，swing_high=115，差 2.6% < 3% → 觸發警示
+        result = _dual_swing_block({'daily_bars': bars}, 112.0)
+        # 警示語含「過近」字眼
+        assert '過近' in result, f'cur 距 entry_high 過近時應有警示，實際：\n{result}'
+        assert 'neutral' in result, '警示應建議標 neutral 觀望'
+
+    def test_short_entry_far_no_warning(self):
+        """short 進場區距現價 > 3% → 不出警示。"""
+        bars = self._bars_short_near_entry()
+        # cur=100，swing_high=115，差 15% > 3% → 不觸發
+        result = _dual_swing_block({'daily_bars': bars}, 100.0)
+        assert '過近' not in result, f'距離足夠時不應出警示，實際：\n{result}'
+
+    def test_warning_only_when_data_complete(self):
+        """資料不足時不會 crash，靜默回傳基本 block。"""
+        result = _dual_swing_block({'daily_bars': []}, 100.0)
+        # 資料不足 → 「本期資料不足」訊息
+        assert '資料不足' in result or '波段操作錨點' in result

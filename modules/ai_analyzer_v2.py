@@ -273,6 +273,34 @@ def _dual_swing_block(enriched_data: dict, price_f) -> str:
     def _f(v):
         return f'{v:.2f}' if isinstance(v, (int, float)) else '—'
 
+    # E 組 2026-05-20：計算「進場區距現價%」— short 看 entry_high vs cur、
+    # long 看 cur vs entry_low；< 3% 視為過近（華星光 5/19 收 523 / 進場區
+    # 551 只差 5.4%、臻鼎差 1.6% → 反彈一日就觸發停損的真實案例）。
+    def _entry_proximity_warning(direction: str, sl: dict, cur) -> str:
+        if not sl or not cur:
+            return ''
+        try:
+            cur_f = float(cur)
+            if cur_f <= 0:
+                return ''
+            if direction == 'short':
+                entry_high = sl['entry_zone'][1]
+                gap = (float(entry_high) - cur_f) / cur_f * 100
+                if 0 < gap < 3:
+                    return (f"⚠️ short 進場區上緣 {entry_high:.2f} 距現價僅 "
+                            f"{gap:+.2f}%（< 3% 過近），反彈一日即觸發停損機率高，"
+                            f"優先標 neutral 觀望或等更明確反彈訊號")
+            else:  # long
+                entry_low = sl['entry_zone'][0]
+                gap = (cur_f - float(entry_low)) / cur_f * 100
+                if 0 < gap < 3:
+                    return (f"⚠️ long 進場區下緣 {entry_low:.2f} 距現價僅 "
+                            f"{gap:+.2f}%（< 3% 過近），跌破一日即觸發停損機率高，"
+                            f"優先標 neutral 觀望或等更明確支撐確認")
+        except (KeyError, TypeError, ValueError, IndexError):
+            pass
+        return ''
+
     lines = ["【波段操作錨點（程式計算，禁止更改）｜依你判定的 DIRECTION 取對應組】"]
     if sl_long:
         ez = sl_long['entry_zone']
@@ -280,12 +308,18 @@ def _dual_swing_block(enriched_data: dict, price_f) -> str:
             f"· long：失效/停損 {_f(sl_long['invalidation'])} ｜ 加碼觸發 "
             f"{_f(sl_long['add_trigger'])} ｜ 進場區 {_f(ez[0])}~{_f(ez[1])} ｜ "
             f"波段目標 {_f(sl_long['target'])}")
+        w = _entry_proximity_warning('long', sl_long, price_f)
+        if w:
+            lines.append(w)
     if sl_short:
         ez = sl_short['entry_zone']
         lines.append(
             f"· short：失效/回補 {_f(sl_short['invalidation'])} ｜ 加空觸發 "
             f"{_f(sl_short['add_trigger'])} ｜ 放空區 {_f(ez[0])}~{_f(ez[1])} ｜ "
             f"下行目標 {_f(sl_short['target'])}")
+        w = _entry_proximity_warning('short', sl_short, price_f)
+        if w:
+            lines.append(w)
     if sl_neu:
         lines.append(
             f"· neutral：區間 {_f(sl_neu['range_low'])}~{_f(sl_neu['range_high'])}"
@@ -359,6 +393,68 @@ def _market_rs_block(daily_bars: list) -> str:
     )
 
 
+def _oversold_warning_block(daily_bars: list) -> str:
+    """A 組 2026-05-20：短期超賣警示（程式計算，注入 dynamic_block）。
+
+    用戶 5/19→5/20 觀察：大盤前日跌 -1.75% 後 8 支股大反彈，AI 報表卻仍給
+    short 進場區、進場區距現價過近被均值回歸觸發停損。
+
+    觸發條件（任一）：
+    - 大盤(TWII) 前一交易日跌 ≥ 1.5%
+    - 個股 5 日累跌 ≥ 5%
+
+    資料不足 / TWII 抓不到 → 回 ''（誠實 > 錯誤）。
+    """
+    if not daily_bars or len(daily_bars) < 6:
+        return ''
+
+    triggers = []
+    # 1) 個股 5 日累跌
+    try:
+        cur = float(daily_bars[-1]['close'])
+        ref = float(daily_bars[-6]['close'])
+        if ref > 0:
+            stk_5d = (cur / ref - 1) * 100
+            if stk_5d <= -5:
+                triggers.append(f"個股 5 日累跌 {stk_5d:+.1f}%（≥5% 超賣）")
+    except (KeyError, TypeError, ValueError, IndexError):
+        pass
+
+    # 2) 大盤 TWII 前一交易日漲跌幅
+    try:
+        from modules.data_fetcher import get_index_daily_closes
+        twii = get_index_daily_closes('^TWII', lookback=10)
+    except Exception:
+        twii = {}
+    if twii:
+        try:
+            items = sorted(twii.items())  # [(date, close), ...] 由舊到新
+            if len(items) >= 2:
+                prev_close, last_close = items[-2][1], items[-1][1]
+                if prev_close > 0:
+                    twii_1d = (last_close / prev_close - 1) * 100
+                    if twii_1d <= -1.5:
+                        triggers.append(
+                            f"大盤(TWII) 前日 {twii_1d:+.2f}%（≥-1.5% 急跌）"
+                        )
+        except (KeyError, TypeError, ValueError, IndexError):
+            pass
+
+    if not triggers:
+        return ''
+
+    return (
+        f"【短期超賣警示（程式計算，禁止忽略）】\n"
+        f"觸發條件：{' / '.join(triggers)}\n"
+        f"⚠️【超賣警示鐵律】當前處於短期超賣期，**均值回歸反彈機率偏高**：\n"
+        f"- short 場景：禁止把『等回測壓力放空』寫成『現在可放空』；放空進場\n"
+        f"  必須**等回測壓力**後**確認反彈失敗**（如壓力線縮量觸及+轉黑K確認）才動手\n"
+        f"- 「結構空方」屬波段定位（2 週-1 個月），**不代表明日續跌**；可能 1-3\n"
+        f"  週內出現反彈，反彈期間放空應**更耐心**等回測壓力區\n"
+        f"- 若進場區距現價過近（< 3%），優先標 neutral 觀望，禁急著給空方框架"
+    )
+
+
 # ── 個股三宗師分析 ────────────────────────────────────────────
 
 def analyze_stock_three_masters(
@@ -424,6 +520,8 @@ def analyze_stock_three_masters(
     _pnf_long, _pnf_short, pnf_block = _dual_pnf(enriched_data, _price_f)
     _rs_block = _market_rs_block(enriched_data.get('daily_bars', []))
     _rs_section = f"\n\n{_rs_block}" if _rs_block else ""
+    _oversold_block = _oversold_warning_block(enriched_data.get('daily_bars', []))
+    _oversold_section = f"\n\n{_oversold_block}" if _oversold_block else ""
     _swing_block = _dual_swing_block(enriched_data, _price_f)
 
     # 威科夫突破量能門檻（程式計算，禁止 AI 更改）
@@ -471,11 +569,21 @@ DIRECTION: [long|short|neutral]
 ---
 
 ## ⚠️ 結構方向判定（最優先，決定全篇多空視角）
-先由威科夫月K相位判定本次分析方向，DIRECTION 標記須與此一致，**禁止預設多頭**：
+先由威科夫月K相位判定本次分析方向，DIRECTION 標記須與此一致：
 - 積累 / 上漲 / 再積累 → DIRECTION=long（多方：突破箱頂進場、向上等幅目標）
 - 派發 / 下跌 / 再派發 → DIRECTION=short（空方：跌破箱底放空、回測壓力線、向下等幅目標）
-- 不明 / 多空交戰 → DIRECTION=neutral（觀望）
-⚠️ 派發/下跌相位禁止只寫「不宜行動」，必須給出空方操作框架（賣空進場價、回補停損、下行目標）。
+- 不明 / 多空交戰 / **派發+短期超賣+進場區距現價過近 / 結構空方但短期反彈風險高** → DIRECTION=neutral（觀望）
+
+⚠️ **方向對稱鐵律（雙向，禁止任一方向預設）**：
+- **禁止預設多頭**（積累期未確立前不寫 long）
+- **禁止預設空頭**（派發期遇短期超賣 / 進場區距現價 <3% / 1-3 週內反彈風險高，**允許並建議標 neutral**，不必強行給空方框架）
+- 派發/下跌相位**可寫「結構為空方但短期反彈風險高，本期觀望」**而非機械強行 short — 結構方向 ≠ 隔日方向
+- 若上方資料區出現【短期超賣警示】或【進場區距現價過近】，**優先標 neutral**
+
+⚠️ **「結構方向」≠「隔日方向」（用戶誤讀風險最高處）**：
+- 「DIRECTION=short」= **波段（2 週-1 個月）結構偏空**，**不代表明日續跌**
+- 派發相位股可能 1-3 週內出現反彈（均值回歸），反彈期間放空進場應**更耐心**等回測壓力區
+- 報表結論禁出現「明日宜放空」「隔日繼續看跌」這類短線預測 — 只能說「波段結構為空方，等回測壓力 X 元確認反彈失敗才進場」
 
 ## 三大宗師主從架構（雙向，依 DIRECTION 套用）
 1. 【威科夫】（骨幹）：月K定相位 → 多方看積累→上漲、空方看派發→下跌 → 日K量價驗證 → 5日均確認動能
@@ -563,7 +671,7 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
 - ⚠️ 鐵律：long 用「突破量」、short 用「跌破量/賣壓確認量」術語，禁混用（修「放量跌破=突破門檻」語意倒置）
 - ⚠️ 名詞鐵律：威科夫 Spring = 「彈簧」（測試箱底支撐後反彈），非「春天」/季節；Upthrust = 「假突破」（測試箱頂壓力後反轉）。報表禁出現「春天」一詞。
 
-{pnf_block}{_rs_section}
+{pnf_block}{_rs_section}{_oversold_section}
 
 {_swing_block}
 
@@ -725,6 +833,8 @@ def analyze_market_only(
     _pnf_long, _pnf_short, pnf_block = _dual_pnf(enriched_data, _price_f)
     _rs_block = _market_rs_block(enriched_data.get('daily_bars', []))
     _rs_section = f"\n\n{_rs_block}" if _rs_block else ""
+    _oversold_block = _oversold_warning_block(enriched_data.get('daily_bars', []))
+    _oversold_section = f"\n\n{_oversold_block}" if _oversold_block else ""
     _swing_block = _dual_swing_block(enriched_data, _price_f)
 
     try:
@@ -905,7 +1015,7 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
 - ⚠️ 鐵律：long 用「突破量」、short 用「跌破量/賣壓確認量」術語，禁混用（修「放量跌破=突破門檻」語意倒置）
 - ⚠️ 名詞鐵律：威科夫 Spring = 「彈簧」（測試箱底支撐後反彈），非「春天」/季節；Upthrust = 「假突破」（測試箱頂壓力後反轉）。報表禁出現「春天」一詞。
 
-{pnf_block}{_rs_section}
+{pnf_block}{_rs_section}{_oversold_section}
 
 {_swing_block}
 
