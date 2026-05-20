@@ -250,3 +250,94 @@ def test_render_block_handles_real_world_mixed_content():
     assert '<table>' in html
     assert '<td class="bull">看漲</td>' in html
     assert '###' not in html
+
+
+# ────────────────────────────────────────
+# B + A 組（2026-05-20）報表 15 bug 修法 驗證
+# B：short 股 pill 順序 + stop_loss 整合
+# A：personal_html cache 渲染
+# ────────────────────────────────────────
+
+def _make_short_analysis(**overrides):
+    """模擬 short 方向（派發相位）的 StockAnalysis fixture。"""
+    defaults = dict(
+        symbol='6533', risk_pct=42,
+        wyckoff_phase='派發',  # phase_to_direction → short
+        support_price=Decimal('208'),     # 中性語意 = 箱底 = 空標
+        resistance_price=Decimal('227'),  # 中性語意 = 箱頂 = 空進
+        target_price=Decimal('190'),      # P&F 下行目標
+        stop_loss=Decimal('234'),         # range_high × 1.03 = 空停
+        analysis_date=date(2026, 5, 19),
+        html_content='<p>派發股分析</p>',
+    )
+    defaults.update(overrides)
+    return SimpleNamespace(**defaults)
+
+
+def test_short_stock_pill_shows_short_labels():
+    """B 組：short 股 pill 顯示「空進/空停/空標」而非「撐/壓/目標」。"""
+    a = _make_short_analysis()
+    html = _render_one_block(_make_stock(symbol='6533'), a, None, idx=1, mode='holding')
+    assert '空進 ' in html, 'short 股應顯示「空進」label'
+    assert '空停 ' in html, 'short 股應顯示「空停」label'
+    assert '空標 ' in html, 'short 股應顯示「空標」label'
+    assert '方向 空' in html or '>空<' in html, 'short 方向 badge 應為「空」'
+    # 不應出現 long 用詞
+    assert '撐 ' not in html or '空' in html.split('撐 ')[0]
+    assert '目標 ' not in html.replace('空標 ', '')
+
+
+def test_short_stock_pill_price_order_correct():
+    """B 組（核心驗證）：short pill 顯示順序與價位邏輯通 —
+    空進（壓力 227） < 空停（前高×1.03 234）；空標（支撐 208）最低。
+    避免「進場 = 目標 = 208」這種誤導決策的錯位。"""
+    a = _make_short_analysis()
+    html = _render_one_block(_make_stock(symbol='6533'), a, None, idx=1, mode='holding')
+    # 從 HTML 中按出現順序取出 pill 文字
+    import re
+    pill_matches = re.findall(r'(?:空進|空停|空標)\s</span>([0-9.]+)', html)
+    assert len(pill_matches) == 3, f'應有 3 個 short pill，實際 {len(pill_matches)}：{html[:500]}'
+    空進_val, 空停_val, 空標_val = [float(v) for v in pill_matches]
+    # 核心斷言：空進 < 空停（停損在進場上方），空標最低
+    assert 空進_val < 空停_val, f'空進 {空進_val} 應 < 空停 {空停_val}（停損在進場上方）'
+    assert 空標_val < 空進_val, f'空標 {空標_val} 應 < 空進 {空進_val}（目標在最下方）'
+
+
+def test_long_stock_pill_unchanged_backward_compat():
+    """B 組向後相容：long 股 pill 仍顯示「撐/壓/目標」不受 stop_loss 影響。"""
+    a = _make_analysis(wyckoff_phase='上漲')  # → long
+    html = _render_one_block(_make_stock(), a, None, idx=1, mode='holding')
+    assert '撐 ' in html
+    assert '壓 ' in html
+    assert '目標 ' in html
+    assert '空進' not in html
+    assert '空停' not in html
+
+
+def test_short_stock_without_stop_loss_skips_pill():
+    """B 組防呆：short 股若 stop_loss=None（資料不足），空停 pill 不顯示但其他 pill 仍正常。"""
+    a = _make_short_analysis(stop_loss=None)
+    html = _render_one_block(_make_stock(symbol='6533'), a, None, idx=1, mode='holding')
+    assert '空進 ' in html
+    assert '空標 ' in html
+    assert '空停 ' not in html, 'stop_loss=None 時不應顯示空停 pill'
+
+
+def test_personal_html_rendered_when_provided():
+    """A 組：personal_html 有 cache 時，PDF block 末尾渲染 personal-rec 區塊。"""
+    a = _make_analysis()
+    personal = '<h3>▶ 整體判斷</h3><p>續抱</p>'
+    html = _render_one_block(_make_stock(), a, None, idx=1, mode='holding',
+                              personal_html=personal)
+    assert 'personal-rec' in html
+    assert '個人化操作建議' in html
+    assert '<h3>▶ 整體判斷</h3>' in html
+    assert '續抱' in html
+
+
+def test_personal_html_skipped_when_none():
+    """A 組：personal_html=None 時不渲染 personal-rec（PDF 不阻塞）。"""
+    a = _make_analysis()
+    html = _render_one_block(_make_stock(), a, None, idx=1, mode='holding')
+    assert 'personal-rec' not in html
+    assert '個人化操作建議' not in html
