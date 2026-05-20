@@ -50,9 +50,24 @@ def _generate(content, max_tokens: int = 2500, retries: int = 1) -> str:
                 return f"AI分析失敗: {err}"
 
 
+def _dedup_bars_by_date(bars: list) -> list:
+    """按 date 去重，保留同 date 最末出現項（防 yfinance / merge 偶發同日重複）。"""
+    if not bars:
+        return []
+    seen_idx: dict = {}
+    for i, b in enumerate(bars):
+        d = b.get('date')
+        if d is not None:
+            seen_idx[d] = i
+    return [bars[i] for i in sorted(seen_idx.values())]
+
+
 def _fmt_bars(bars: list, label: str, n: int, pattern_labels: dict = None) -> str:
     if not bars:
         return f"【{label}】：資料不足"
+    # 防呆 dedup：避免下游 prompt 看到同日重複行（用戶 2026-05-19 報表 5 支股
+    # 日K 表出現「2026-05-19 同日列兩次」+「(補充)」「(最新)」標記）
+    bars = _dedup_bars_by_date(bars)
     rows = bars[-n:]
 
     # 20-bar baselines for 特徵 computation
@@ -754,6 +769,7 @@ DIRECTION: [long|short|neutral]
 ### 二、本間宗久K線確認（⚠️ 必須輸出 HTML table）
 ⚠️ 【K線型態命名鐵律】K棒資料中 ▶型態名稱 為程式依數學公式精確計算，禁止更改或自行重新命名。table 的「型態」欄必須直接使用 ▶標注 的名稱，你的任務是解讀含意，不是命名型態。
 ⚠️ 【特徵欄鐵律】table 的「特徵」欄必須直接抄 K棒資料中 【特徵=...】 的值，禁止自行判斷，禁止只因陽線/陰線填寫看漲/看跌。
+⚠️ 【行數鐵律】每張 table 每行=一個獨立交易日，禁止輸出「(補充)/(最新)/(昨前)」等補充行或同日重複行。週K 取最近 3 個獨立交易週、日K 取最近 5 個獨立交易日；若上方 K棒資料實際少於該數量，照實少輸出（例：實際只有 3 日資料則表頭改寫「日K最近 3 根 table」+ 輸出 3 行，禁止用補充行湊滿 5 行）。
 K棒型態含意速查（僅供解讀參考，必須結合特徵欄的量能·位置）：
 錘子（下影≥實體2倍/低位看漲·高位需謹慎）、吊人（錘子型/高位看跌訊號）、射擊之星（上影≥實體2倍/高位看跌）、
 早晨之星（長黑+小K+長紅/底部反轉）、黃昏之星（長紅+小K+長黑/頂部反轉）、
