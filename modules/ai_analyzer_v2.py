@@ -992,7 +992,15 @@ def generate_personal_recommendation(
         _dir_note = ""
 
     if _direction == 'short' and status == 'holding':
-        action_template = """<h3>▶ 整體判斷</h3>
+        # A 組 2026-05-20：方向衝突診斷段（明確 3 bullets）+ 既有減碼/停損段
+        action_template = """<h3>▶ 持倉診斷（方向衝突警示）</h3>
+<ul>
+  <li><span class="key-point">⚠ 您持有多單，但分析結構為空方派發/下跌</span> — 成本方向與當前結構衝突，需立即評估</li>
+  <li>出場條件：跌破 ___元（程式版波段低/失效價）立即減碼 ___成；反彈至 ___元（程式版波段高/回測壓力）全數出場</li>
+  <li>續抱條件：站穩 ___元（波段高×1.02）上方且量超過 ___張（5日均量×1.5）— 方向反轉訊號出現才可續抱</li>
+</ul>
+
+<h3>▶ 整體判斷</h3>
 <p>（只選一個）<strong>減碼 / 出場 / 觀望持有</strong> — 結構為空方，說明理由（不超過40字）</p>
 
 <h3>▶ 減碼／出場計劃</h3>

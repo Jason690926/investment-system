@@ -132,6 +132,26 @@ class StockAnalysis(Base):
     )
 
 
+class PersonalRecommendation(Base):
+    """個人化操作建議 cache（A 組 2026-05-20）— per-user × per-stock × per-day。
+    避免 print PDF 為每支股重複呼叫 Claude。dashboard「個人建議」按鈕觸發產生
+    時寫入；print PDF 從此表讀，沒有則該股 personal 段 skip（不阻塞印表）。
+    """
+    __tablename__ = 'personal_recommendations'
+
+    id            = Column(Integer, primary_key=True)
+    user_id       = Column(Integer, ForeignKey('users.id'), nullable=False)
+    symbol        = Column(String(32), nullable=False)
+    analysis_date = Column(Date, nullable=False)
+    html          = Column(Text, nullable=False)
+    generated_at  = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint('user_id', 'symbol', 'analysis_date',
+                         name='uq_personal_recommendation'),
+    )
+
+
 class EmailContact(Base):
     """每個用戶的 email 通訊錄（分享 PDF 報表用）"""
     __tablename__ = 'email_contacts'

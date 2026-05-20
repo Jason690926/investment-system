@@ -87,8 +87,10 @@ def _format_price(value):
         return f'{v:,.0f}'
 
 
-def _render_one_block(s, a, q, idx, mode):
+def _render_one_block(s, a, q, idx, mode, personal_html=None):
     """產出單一持股/觀察區塊 HTML。
+    personal_html: A 組 2026-05-20 — PersonalRecommendation.html cache 結果，
+    若用戶尚未產生個人建議則為 None（PDF 該股 personal 段 skip）。
 
     s: Stock 物件（symbol, name, status, avg_cost, total_zhang, trades）
     a: StockAnalysis 物件 or None
@@ -186,6 +188,20 @@ def _render_one_block(s, a, q, idx, mode):
     else:
         body_html = '<div class="no-analysis">尚無分析資料</div>'
 
+    # A 組 2026-05-20：個人建議區塊（從 PersonalRecommendation cache 注入）
+    if personal_html:
+        personal_clean = _strip_inline_styles(personal_html)
+        personal_html_block = (
+            f'<div class="personal-rec">'
+            f'<div class="personal-rec-title">▍ 個人化操作建議</div>'
+            f'<div class="personal-rec-body">{personal_clean}</div>'
+            f'</div>'
+        )
+    else:
+        personal_html_block = ''
+    # 變數名稱與 f-string template 對齊
+    personal_html = personal_html_block
+
     # 組裝
     return f"""
 <div class="stock-block">
@@ -207,15 +223,19 @@ def _render_one_block(s, a, q, idx, mode):
   </div>{data_row_html}
   {pills_html}
   {body_html}
+  {personal_html}
 </div>"""
 
 
-def _render_stock_blocks(stocks, analyses, quotes, mode):
+def _render_stock_blocks(stocks, analyses, quotes, mode, personals=None):
+    """A 組 2026-05-20：personals = {symbol: PersonalRecommendation.html} 從 print_report 注入。"""
+    personals = personals or {}
     parts = []
     for idx, s in enumerate(stocks, start=1):
         a = analyses.get(s.symbol)
         q = quotes.get(s.symbol)
-        parts.append(_render_one_block(s, a, q, idx=idx, mode=mode))
+        parts.append(_render_one_block(s, a, q, idx=idx, mode=mode,
+                                       personal_html=personals.get(s.symbol)))
     return ''.join(parts)
 
 
@@ -713,9 +733,11 @@ def api_analyze_stock(stock_id):
 @app.route('/api/stocks/<int:stock_id>/recommend', methods=['POST'])
 @login_required
 def api_recommend_stock(stock_id):
-    """產生個人化操作建議（第二段），使用市場快取資料，不另外存入 DB"""
+    """產生個人化操作建議（第二段），使用市場快取資料。
+    A 組 2026-05-20：結果寫入 PersonalRecommendation cache，print PDF 從此表讀。
+    """
     from datetime import date as dt_date
-    from modules.models import Stock, StockAnalysis
+    from modules.models import Stock, StockAnalysis, PersonalRecommendation
     from modules.data_enricher import get_stock_info
     from modules.ai_analyzer_v2 import generate_personal_recommendation
 
@@ -731,6 +753,13 @@ def api_recommend_stock(stock_id):
         ).first()
         if not cached or not cached.html_content:
             return jsonify({'error': '尚無市場分析，請先產生分析'}), 404
+
+        # 嘗試讀今日既有 cache（同 user × symbol × date 已產生過則直接回）
+        existing_rec = db.query(PersonalRecommendation).filter_by(
+            user_id=current_user.id, symbol=stock.symbol, analysis_date=today
+        ).first()
+        if existing_rec:
+            return jsonify({'html': existing_rec.html, 'from_cache': True})
 
         info = get_stock_info(stock.symbol)
         current_price = info['price'] if info else 0
@@ -764,7 +793,15 @@ def api_recommend_stock(stock_id):
             total_zhang=total,
             recent_bars=recent_bars,
         )
-        return jsonify({'html': html})
+
+        # 寫入 cache（同 key 已存在則 update，理論上前面 existing_rec 已 return）
+        db.add(PersonalRecommendation(
+            user_id=current_user.id, symbol=stock.symbol,
+            analysis_date=today, html=html,
+        ))
+        db.commit()
+
+        return jsonify({'html': html, 'from_cache': False})
     finally:
         db.close()
 
@@ -1043,11 +1080,20 @@ def print_report():
         )
         quotes = {q.symbol: q for q in quote_rows}
 
+        # A 組 2026-05-20：讀 PersonalRecommendation cache（per user × per stock × today）
+        from modules.models import PersonalRecommendation
+        rec_rows = (db.query(PersonalRecommendation)
+                    .filter(PersonalRecommendation.user_id == current_user.id,
+                            PersonalRecommendation.symbol.in_(symbols),
+                            PersonalRecommendation.analysis_date == _analysis_day_tw())
+                    .all())
+        personals = {r.symbol: r.html for r in rec_rows}
+
         # 拆 holdings / watching
         holdings = [s for s in stocks if s.status == 'holding']
         watching = [s for s in stocks if s.status == 'watching']
-        holdings_html = _render_stock_blocks(holdings, analyses, quotes, mode='holding')
-        watching_html = _render_stock_blocks(watching, analyses, quotes, mode='watching')
+        holdings_html = _render_stock_blocks(holdings, analyses, quotes, mode='holding', personals=personals)
+        watching_html = _render_stock_blocks(watching, analyses, quotes, mode='watching', personals=personals)
 
         return render_template(
             'print_report.html',
