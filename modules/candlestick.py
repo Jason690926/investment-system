@@ -11,6 +11,19 @@ _MULTI_CANDLE = {
 }
 
 
+def _twse_tick_size(price: float) -> float:
+    """TWSE 申報價格升降單位（依股價區間決定最小變動單位）。
+    用於平頭頂/底「同高」判定 — 兩根高點差 < 1 tick 才算同 tick 等高。
+    """
+    p = abs(float(price))
+    if p < 10:    return 0.01
+    if p < 50:    return 0.05
+    if p < 100:   return 0.1
+    if p < 500:   return 0.5
+    if p < 1000:  return 1.0
+    return 5.0
+
+
 def _find_local_peaks(arr, min_gap: int = 3) -> list:
     """局部高點：左右各 min_gap 根都嚴格不超過它才算真實峰頂"""
     peaks = []
@@ -340,23 +353,24 @@ def detect_patterns(hist):
                 'strength': 'strong'
             })
 
-        # 平頭頂（頂部壓力確認）：連兩根最高點相同 + 前陽後陰
+        # 平頭頂（頂部壓力確認）：連兩根最高點同 tick + 前陽後陰
+        # 容差改為 TWSE 申報單位（< 1 tick = 同 tick 等高），避免高價股 1 元誤判
         if (c1 > o1 and c0 < o0 and
-                abs(h0 - h1) / max(h1, 1e-9) < 0.003):
+                abs(h0 - h1) < _twse_tick_size(h1)):
             patterns.append({
                 'name': '平頭頂',
                 'type': 'bearish',
-                'desc': '酒田戰法：連兩根最高點相同，多方兩次衝高均受壓回落，頂部壓力確認，注意轉折',
+                'desc': '酒田戰法：連兩根最高點同 tick，多方兩次衝高均受壓回落，頂部壓力確認，注意轉折',
                 'strength': 'medium'
             })
 
-        # 平頭底（底部支撐確認）：連兩根最低點相同 + 前陰後陽
+        # 平頭底（底部支撐確認）：連兩根最低點同 tick + 前陰後陽
         if (c1 < o1 and c0 > o0 and
-                abs(l0 - l1) / max(l1, 1e-9) < 0.003):
+                abs(l0 - l1) < _twse_tick_size(l1)):
             patterns.append({
                 'name': '平頭底',
                 'type': 'bullish',
-                'desc': '酒田戰法：連兩根最低點相同，空方兩次打壓均被守住，底部支撐確認，可考慮布局',
+                'desc': '酒田戰法：連兩根最低點同 tick，空方兩次打壓均被守住，底部支撐確認，可考慮布局',
                 'strength': 'medium'
             })
 
@@ -542,15 +556,41 @@ def detect_from_bars(daily_bars: list) -> list:
         return []
 
 
-def label_bars(bars: list) -> dict:
+def _fallback_label(bar: dict) -> str:
+    """無型態時的 fallback 標籤：陽/陰線(體型%) / 平盤。"""
+    o = float(bar['open'])
+    c = float(bar['close'])
+    h = float(bar['high'])
+    lv = float(bar['low'])
+    total = h - lv
+    if total <= 0:
+        return '平盤'
+    br = abs(c - o) / total
+    if c > o:
+        return f'陽線({br:.0%})'
+    if c < o:
+        return f'陰線({br:.0%})'
+    return '平盤'
+
+
+def label_bars(bars: list, timeframe: str = 'daily') -> dict:
     """
     為 bars 中每根 K 棒計算型態標籤，回傳 {date: 型態名稱} dict。
     供 _fmt_bars() 使用，讓 AI 不需自行命名型態。
     bars 需與 data_enricher 的 daily_bars / weekly_bars / monthly_bars 同格式。
+
+    timeframe='monthly' 時排除「3+ 根組合型態」（早晨之星/黃昏之星/三白兵
+    /三黑鴉/三川底/三山頂/三空/三法）— 月 K 一根=一個月，3 根組合在月線
+    語境上構不成型態（語意不通）。
+
+    D1 去重：當某根標到 `_MULTI_CANDLE[name] >= 3` 的多根組合型態時，若該
+    型態在前 `_MULTI_CANDLE[name]` 根內已標過，當前根 fallback 為陽/陰線
+    型態 — 避免撼訊「三川底連 3 天觸發」這種「整體型態被重複貼到每根」。
     """
     if not bars or len(bars) < 5:
         return {}
     result = {}
+    label_history: list = []  # 平行 list，順序與 bars[4:] 對齊
     try:
         df = pd.DataFrame([{
             'Open':   float(b['open']),
@@ -562,26 +602,29 @@ def label_bars(bars: list) -> dict:
         for i in range(4, len(df)):
             patterns = detect_patterns(df.iloc[:i + 1].copy())
             date = bars[i]['date']
+
+            # D3：monthly 時過濾 3+ 根組合型態（語意上月線不適用）
+            if timeframe == 'monthly':
+                patterns = [p for p in patterns
+                            if _MULTI_CANDLE.get(p['name'], 0) < 3]
+
+            chosen_name = None
             if patterns:
                 strong = [p for p in patterns if p['strength'] == 'strong']
                 chosen = strong[0] if strong else patterns[0]
-                result[date] = chosen['name']
+                chosen_name = chosen['name']
+
+                # D1 去重：3+ 根組合型態在前 N 根已標過 → fallback
+                span = _MULTI_CANDLE.get(chosen_name, 0)
+                if span >= 3 and chosen_name in label_history[-span:]:
+                    chosen_name = None  # 觸發 fallback
+
+            if chosen_name:
+                result[date] = chosen_name
+                label_history.append(chosen_name)
             else:
-                o = float(bars[i]['open'])
-                c = float(bars[i]['close'])
-                h = float(bars[i]['high'])
-                lv = float(bars[i]['low'])
-                total = h - lv
-                if total > 0:
-                    br = abs(c - o) / total
-                    if c > o:
-                        result[date] = f'陽線({br:.0%})'
-                    elif c < o:
-                        result[date] = f'陰線({br:.0%})'
-                    else:
-                        result[date] = '平盤'
-                else:
-                    result[date] = '平盤'
+                result[date] = _fallback_label(bars[i])
+                label_history.append(None)
     except Exception as e:
         print(f'[candlestick] label_bars 失敗: {e}')
     return result

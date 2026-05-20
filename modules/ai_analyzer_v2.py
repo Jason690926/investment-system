@@ -356,7 +356,7 @@ def analyze_stock_three_masters(
     else:
         position_block = "持倉狀態：已持有"
 
-    _monthly_labels = label_bars(enriched_data.get('monthly_bars', []))
+    _monthly_labels = label_bars(enriched_data.get('monthly_bars', []), timeframe='monthly')
     _weekly_labels  = label_bars(enriched_data.get('weekly_bars', []))
     _daily_labels   = label_bars(enriched_data.get('daily_bars', []))
     monthly_text = _fmt_bars(enriched_data.get('monthly_bars', []), "月K", 6, _monthly_labels)
@@ -640,7 +640,7 @@ def analyze_market_only(
     vol_today = enriched_data.get('volume_zhang', '--')
     vol_5avg  = enriched_data.get('volume_5d_avg_zhang', '--')
 
-    _monthly_labels = label_bars(enriched_data.get('monthly_bars', []))
+    _monthly_labels = label_bars(enriched_data.get('monthly_bars', []), timeframe='monthly')
     _weekly_labels  = label_bars(enriched_data.get('weekly_bars', []))
     _daily_labels   = label_bars(enriched_data.get('daily_bars', []))
     monthly_text = _fmt_bars(enriched_data.get('monthly_bars', []), "月K", 6, _monthly_labels)
@@ -1226,7 +1226,7 @@ def analyze_weekly_taiwan_v2(twii_enriched: dict, global_weekly_summary: str, we
     vol5  = twii_enriched.get('volume_5d_avg_zhang', '--')
 
     _weekly_labels  = label_bars(twii_enriched.get('weekly_bars', []))
-    _monthly_labels = label_bars(twii_enriched.get('monthly_bars', []))
+    _monthly_labels = label_bars(twii_enriched.get('monthly_bars', []), timeframe='monthly')
     weekly_text  = _fmt_bars(twii_enriched.get('weekly_bars',  []), "加權指數週K",  8, _weekly_labels)
     monthly_text = _fmt_bars(twii_enriched.get('monthly_bars', []), "加權指數月K",  4, _monthly_labels)
 
