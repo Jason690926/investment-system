@@ -119,12 +119,19 @@ def cache_market_analysis(db, symbol: str, name: str) -> bool:
         symbol=symbol, analysis_date=today, analysis_type='daily'
     ).first()
 
+    # B 組 2026-05-20：DB 寫入 anchor 優先（程式鎖定），AI tag 當 fallback
+    _sup = result.get('support_anchor')    or result.get('support')
+    _res = result.get('resistance_anchor') or result.get('resistance')
+    _tgt = result.get('target_anchor')     or result.get('target_pnf')
+    _stp = result.get('stop_loss_anchor')
+
     if existing:
         existing.html_content     = result['html']
         existing.risk_pct         = result['risk_pct']
-        existing.support_price    = Decimal(str(result['support']))    if result['support']    else None
-        existing.resistance_price = Decimal(str(result['resistance'])) if result['resistance'] else None
-        existing.target_price     = Decimal(str(result['target_pnf'])) if result['target_pnf'] else None
+        existing.support_price    = Decimal(str(_sup)) if _sup else None
+        existing.resistance_price = Decimal(str(_res)) if _res else None
+        existing.target_price     = Decimal(str(_tgt)) if _tgt else None
+        existing.stop_loss        = Decimal(str(_stp)) if _stp else None
         existing.wyckoff_phase    = result['wyckoff_phase']
         existing.generated_at     = datetime.utcnow()
     else:
@@ -132,9 +139,10 @@ def cache_market_analysis(db, symbol: str, name: str) -> bool:
             symbol=symbol, analysis_date=today, analysis_type='daily',
             html_content=result['html'],
             risk_pct=result['risk_pct'],
-            support_price=Decimal(str(result['support']))    if result['support']    else None,
-            resistance_price=Decimal(str(result['resistance'])) if result['resistance'] else None,
-            target_price=Decimal(str(result['target_pnf'])) if result['target_pnf'] else None,
+            support_price=Decimal(str(_sup)) if _sup else None,
+            resistance_price=Decimal(str(_res)) if _res else None,
+            target_price=Decimal(str(_tgt)) if _tgt else None,
+            stop_loss=Decimal(str(_stp)) if _stp else None,
             wyckoff_phase=result['wyckoff_phase'],
         ))
     db.commit()

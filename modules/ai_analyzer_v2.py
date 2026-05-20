@@ -221,6 +221,44 @@ def _dual_pnf(enriched_data: dict, price_f):
     return pnf_long, pnf_short, block
 
 
+def _resolve_swing_anchors(enriched_data: dict, price_f, direction: str) -> dict:
+    """依方向取對應 swing_levels，回傳 DB 寫入用的 anchor dict（B 組 2026-05-20）。
+
+    回傳 keys（資料不足時對應值為 None，呼叫端可 fallback 至 AI tag）：
+      - support_anchor    : long=range_low（真支撐），short=range_low（下方=空方目標）
+      - resistance_anchor : long=range_high（真壓力），short=range_high（回測壓力=空進）
+      - target_anchor     : swing.target（long P&F 上行 / short P&F 下行）
+      - stop_loss_anchor  : short=range_high × 1.03（前高之上 3% 失效）；long/neutral=None
+
+    語意設計：support/resistance/target 三欄永遠中性（箱底/箱頂/measured target），
+    stop_loss 新欄位（B1c 路徑，零語意污染）。pill render 對 short 翻牌
+    label：撐→空標、壓→空進、stop_loss→空停。
+    """
+    from modules.candlestick import calc_swing_levels
+    dk = enriched_data.get('daily_bars', [])
+    sl = calc_swing_levels(dk, direction, price_f) if direction in ('long', 'short') else None
+    if not sl:
+        return {
+            'support_anchor':    None,
+            'resistance_anchor': None,
+            'target_anchor':     None,
+            'stop_loss_anchor':  None,
+        }
+    out = {
+        'support_anchor':    sl.get('range_low'),
+        'resistance_anchor': sl.get('range_high'),
+        'target_anchor':     sl.get('target'),
+        'stop_loss_anchor':  None,
+    }
+    if direction == 'short':
+        # 空停 = 前高 × 1.03（3% buffer above 失效點，避免 stop 太緊被掃）
+        rh = sl.get('range_high')
+        if rh:
+            out['stop_loss_anchor'] = round(float(rh) * 1.03,
+                                            1 if rh < 100 else 0)
+    return out
+
+
 def _dual_swing_block(enriched_data: dict, price_f) -> str:
     """波段操作錨點注入塊（鏡像 _dual_pnf）：同時算 long/short/neutral
     三組程式鎖定錨點，AI 依其判定的 DIRECTION 取對應組。資料不足→誠實提示。"""
@@ -567,6 +605,9 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
     except Exception as e:
         print(f"[ai_analyzer_v2] 解析結構化輸出失敗: {e}")
 
+    # B 組 2026-05-20：依方向注入 swing anchor（覆寫 DB 寫入語意，AI tag 當 fallback）
+    result.update(_resolve_swing_anchors(enriched_data, _price_f, result['direction']))
+
     return result
 
 
@@ -859,6 +900,9 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
         result['target_pnf'] = _pnf_short if dr == 'short' else _pnf_long
     except Exception as e:
         print(f"[ai_analyzer_v2] 解析結構化輸出失敗: {e}")
+
+    # B 組 2026-05-20：依方向注入 swing anchor（覆寫 DB 寫入語意，AI tag 當 fallback）
+    result.update(_resolve_swing_anchors(enriched_data, _price_f, result['direction']))
 
     return result
 

@@ -141,25 +141,38 @@ def _render_one_block(s, a, q, idx, mode):
     <div><span class="label">RISK</span><br><strong class="amber">{risk_str}</strong></div>
   </div>"""
 
-    # Pills 列（方向感知：由威科夫相位反推 long/short/neutral，零 migration）
+    # Pills 列（B 組 2026-05-20：DB schema 中性語意 + stop_loss 獨立欄）
+    # long  : 撐=support_price / 壓=resistance_price / 目標=target_price
+    # short : 空標=support_price（下方目標）/ 空進=resistance_price（回測壓力）/
+    #         空停=stop_loss（前高之上失效，B1c）
     pills = []
     if a:
         from modules.ai_analyzer_v2 import phase_to_direction
         _dir = phase_to_direction(a.wyckoff_phase)
-        # short 時撐/壓/目標語意翻轉（壓力在上=停損、撐位=跌破進場、目標=下行）
         if _dir == 'short':
-            sup_lbl, res_lbl, tgt_lbl, dir_badge = '空進 ', '空停 ', '空標 ', '空'
+            dir_badge = '空'
+            pills.append(f'<span class="pill pill-ink"><span class="lbl">方向 </span>{dir_badge}</span>')
+            # 順序：空進（最先看到的進場價）/ 空停 / 空標
+            if a.resistance_price is not None:
+                pills.append(f'<span class="pill pill-bull"><span class="lbl">空進 </span>{_format_price(a.resistance_price)}</span>')
+            stop = getattr(a, 'stop_loss', None)
+            if stop is not None:
+                pills.append(f'<span class="pill pill-amber"><span class="lbl">空停 </span>{_format_price(stop)}</span>')
+            if a.support_price is not None:
+                pills.append(f'<span class="pill pill-support"><span class="lbl">空標 </span>{_format_price(a.support_price)}</span>')
+            if a.wyckoff_phase:
+                pills.append(f'<span class="pill pill-ink"><span class="lbl">威科夫 </span>{a.wyckoff_phase}</span>')
         else:
-            sup_lbl, res_lbl, tgt_lbl, dir_badge = '撐 ', '壓 ', '目標 ', ('多' if _dir == 'long' else '觀望')
-        pills.append(f'<span class="pill pill-ink"><span class="lbl">方向 </span>{dir_badge}</span>')
-        if a.support_price is not None:
-            pills.append(f'<span class="pill pill-support"><span class="lbl">{sup_lbl}</span>{_format_price(a.support_price)}</span>')
-        if a.resistance_price is not None:
-            pills.append(f'<span class="pill pill-bull"><span class="lbl">{res_lbl}</span>{_format_price(a.resistance_price)}</span>')
-        if a.target_price is not None:
-            pills.append(f'<span class="pill pill-amber"><span class="lbl">{tgt_lbl}</span>{_format_price(a.target_price)}</span>')
-        if a.wyckoff_phase:
-            pills.append(f'<span class="pill pill-ink"><span class="lbl">威科夫 </span>{a.wyckoff_phase}</span>')
+            dir_badge = '多' if _dir == 'long' else '觀望'
+            pills.append(f'<span class="pill pill-ink"><span class="lbl">方向 </span>{dir_badge}</span>')
+            if a.support_price is not None:
+                pills.append(f'<span class="pill pill-support"><span class="lbl">撐 </span>{_format_price(a.support_price)}</span>')
+            if a.resistance_price is not None:
+                pills.append(f'<span class="pill pill-bull"><span class="lbl">壓 </span>{_format_price(a.resistance_price)}</span>')
+            if a.target_price is not None:
+                pills.append(f'<span class="pill pill-amber"><span class="lbl">目標 </span>{_format_price(a.target_price)}</span>')
+            if a.wyckoff_phase:
+                pills.append(f'<span class="pill pill-ink"><span class="lbl">威科夫 </span>{a.wyckoff_phase}</span>')
     # 觀察版把風險合進 pills
     if mode == 'watching' and a and a.risk_pct is not None:
         pills.append(f'<span class="pill pill-amber-outline"><span class="lbl">風險 </span>{a.risk_pct}%</span>')
@@ -657,21 +670,29 @@ def api_analyze_stock(stock_id):
             enriched_data=enriched, news_list=[],
         )
 
+        # B 組 2026-05-20：DB 寫入 anchor 優先（程式鎖定），AI tag 當 fallback
+        _sup = result.get('support_anchor')    or result.get('support')
+        _res = result.get('resistance_anchor') or result.get('resistance')
+        _tgt = result.get('target_anchor')     or result.get('target_pnf')
+        _stp = result.get('stop_loss_anchor')
+
         if existing:
             existing.html_content     = result['html']
             existing.risk_pct         = result['risk_pct']
-            existing.support_price    = Decimal(str(result['support']))    if result['support']    else None
-            existing.resistance_price = Decimal(str(result['resistance'])) if result['resistance'] else None
-            existing.target_price     = Decimal(str(result['target_pnf'])) if result['target_pnf'] else None
+            existing.support_price    = Decimal(str(_sup)) if _sup else None
+            existing.resistance_price = Decimal(str(_res)) if _res else None
+            existing.target_price     = Decimal(str(_tgt)) if _tgt else None
+            existing.stop_loss        = Decimal(str(_stp)) if _stp else None
             existing.wyckoff_phase    = result['wyckoff_phase']
             existing.generated_at     = _dt.datetime.utcnow()
         else:
             db.add(StockAnalysis(
                 symbol=stock.symbol, analysis_date=today, analysis_type='daily',
                 html_content=result['html'], risk_pct=result['risk_pct'],
-                support_price=Decimal(str(result['support']))    if result['support']    else None,
-                resistance_price=Decimal(str(result['resistance'])) if result['resistance'] else None,
-                target_price=Decimal(str(result['target_pnf'])) if result['target_pnf'] else None,
+                support_price=Decimal(str(_sup)) if _sup else None,
+                resistance_price=Decimal(str(_res)) if _res else None,
+                target_price=Decimal(str(_tgt)) if _tgt else None,
+                stop_loss=Decimal(str(_stp)) if _stp else None,
                 wyckoff_phase=result['wyckoff_phase'],
             ))
         db.commit()
