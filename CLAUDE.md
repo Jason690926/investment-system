@@ -55,6 +55,9 @@ plan `docs/superpowers/plans/2026-05-21-report-6-bug-fixes.md`。
 ### 回滾策略
 純加性 + prompt 改寫，無 DB/migration 改動。任一修法有問題 `git revert` 對應 commit。
 
+### 下次待辦（已記錄 plan.md §二十七）
+**Dashboard 迷你 K 線圖快取漏洞** — 用戶 5/21 發現 9 支觀察股「近20日K」迷你圖空白。根因：迷你圖資料只來自 `MarketDataCache`，而該表只在使用者點進個股詳情頁時才寫入；今日 14:30 批次完全沒刷新它（連「正常」6 支都是 2-3 週前舊圖）。**非當日 deploy 造成**（`get_full_stock_data` live 測正常）。修法方向 A+B：A=每日批次刷新所有股 `MarketDataCache`；B=dashboard miss 時即時補抓。下次走 spec→plan→subagent。
+
 ---
 
 ## 過往進度（2026-05-20 — 投資建議書 15 Bug 全面修法）
