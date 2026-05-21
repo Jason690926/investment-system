@@ -881,6 +881,7 @@ def analyze_market_only(
     _oversold_block = _oversold_warning_block(enriched_data.get('daily_bars', []))
     _oversold_section = f"\n\n{_oversold_block}" if _oversold_block else ""
     _swing_block = _dual_swing_block(enriched_data, _price_f)
+    _structure_block_text = _structure_block(enriched_data, _price_f)
 
     try:
         _v5 = float(vol_5avg)
@@ -920,7 +921,13 @@ DIRECTION: [long|short|neutral]
 - 積累 / 上漲 / 再積累 → DIRECTION=long（多方視角：突破箱頂進場、向上等幅目標）
 - 派發 / 下跌 / 再派發 → DIRECTION=short（空方視角：跌破箱底放空、回測壓力線、向下等幅目標）
 - 不明 / 多空交戰 → DIRECTION=neutral（觀望，不強行給方向）
-⚠️ 派發/下跌相位禁止只寫「不宜行動」，必須給出空方操作框架（賣空進場價、回補停損、下行目標）。
+⚠️ 派發/下跌相位若已確立，須給出空方操作框架（賣空進場價、回補停損、下行目標）；但相位判定須先過下方結構閘。
+
+⚠️ **結構閘（硬護欄，最優先，凌駕一切短線訊號）**：下方股票資料含【月線結構客觀事實】，其「結構旗標」由程式計算，**禁止 AI 推翻**：
+- 結構旗標=`結構未轉弱` → **禁止**標派發/再派發/下跌，WYCKOFF_PHASE 只能在 積累/上漲/再積累/不明 之中選
+- 結構旗標=`結構轉折中` → 可標派發，但須在「一、威科夫骨幹分析」列出具體派發訊號（高位量增不漲／高位放量收長黑或長上影／跌破前波明顯低點伴隨放量），**不得僅憑單月收陰+量縮**判派發
+- 結構旗標=`結構已轉弱` → 允許標空方相位，仍須量價證據佐證
+⚠️ **正向型態**：若【月線結構客觀事實】「守穩支撐=是」且回測時量縮、反彈時量增 → 屬吸籌/再積累的次級測試(SOT)，偏多，禁標派發。
 
 ## 三大宗師主從架構（雙向，依 DIRECTION 套用）
 1. 【威科夫】（骨幹）：月K定相位 → 多方看積累→上漲、空方看派發→下跌 → 日K量價驗證 → 5日均確認動能
@@ -1063,6 +1070,8 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
 {pnf_block}{_rs_section}{_oversold_section}
 
 {_swing_block}
+
+{_structure_block_text}
 
 {monthly_text}
 
