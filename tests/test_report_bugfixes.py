@@ -31,3 +31,27 @@ def test_patch_still_drops_fully_empty_row():
     })
     out = _patch_missing_close(df)
     assert len(out) == 1
+
+
+# ---------- Bug 4: 空停 fallback ----------
+from modules.ai_analyzer_v2 import _resolve_swing_anchors
+
+
+def _flat_bars(n=30, h=100, l=95):
+    """全平盤 K 棒：無有效局部峰谷，calc_swing_levels 會回 None。"""
+    return [{'date': f'2026-{(i // 28) + 1:02d}-{(i % 28) + 1:02d}',
+             'open': (h + l) / 2, 'high': h, 'low': l,
+             'close': (h + l) / 2, 'volume_zhang': 1000} for i in range(n)]
+
+
+def test_short_stop_loss_fallback_when_no_swing():
+    """short：日K 充足(≥20)但算不出 swing → 空停 fallback 近20日高×1.03。"""
+    r = _resolve_swing_anchors({'daily_bars': _flat_bars(30)}, 97.0, 'short')
+    assert r['stop_loss_anchor'] is not None, 'short 充足資料應 fallback 出空停'
+    assert r['stop_loss_anchor'] == 103.0  # max high 100 × 1.03
+
+
+def test_short_no_fallback_when_data_insufficient():
+    """short：日K < 20 根（真不足）→ 仍全 None，不亂補。"""
+    r = _resolve_swing_anchors({'daily_bars': _flat_bars(5)}, 97.0, 'short')
+    assert all(v is None for v in r.values())

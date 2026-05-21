@@ -238,25 +238,23 @@ def _resolve_swing_anchors(enriched_data: dict, price_f, direction: str) -> dict
     from modules.candlestick import calc_swing_levels
     dk = enriched_data.get('daily_bars', [])
     sl = calc_swing_levels(dk, direction, price_f) if direction in ('long', 'short') else None
-    if not sl:
-        return {
-            'support_anchor':    None,
-            'resistance_anchor': None,
-            'target_anchor':     None,
-            'stop_loss_anchor':  None,
-        }
     out = {
-        'support_anchor':    sl.get('range_low'),
-        'resistance_anchor': sl.get('range_high'),
-        'target_anchor':     sl.get('target'),
+        'support_anchor':    sl.get('range_low')  if sl else None,
+        'resistance_anchor': sl.get('range_high') if sl else None,
+        'target_anchor':     sl.get('target')     if sl else None,
         'stop_loss_anchor':  None,
     }
     if direction == 'short':
-        # 空停 = 前高 × 1.03（3% buffer above 失效點，避免 stop 太緊被掃）
-        rh = sl.get('range_high')
+        rh = sl.get('range_high') if sl else None
         if rh:
-            out['stop_loss_anchor'] = round(float(rh) * 1.03,
-                                            1 if rh < 100 else 0)
+            # 空停 = 前高 × 1.03（3% buffer above 失效點）
+            out['stop_loss_anchor'] = round(float(rh) * 1.03, 1 if rh < 100 else 0)
+        elif len(dk) >= 20:
+            # Bug4 fallback：swing 算不出但日K 充足 → 用近 20 日最高 × 1.03 補空停
+            highs = [float(b['high']) for b in dk[-20:] if b.get('high') is not None]
+            if highs:
+                rhf = max(highs)
+                out['stop_loss_anchor'] = round(rhf * 1.03, 1 if rhf < 100 else 0)
     return out
 
 
