@@ -559,6 +559,7 @@ def analyze_stock_three_masters(
     _oversold_block = _oversold_warning_block(enriched_data.get('daily_bars', []))
     _oversold_section = f"\n\n{_oversold_block}" if _oversold_block else ""
     _swing_block = _dual_swing_block(enriched_data, _price_f)
+    _structure_block_text = _structure_block(enriched_data, _price_f)
 
     # 威科夫突破量能門檻（程式計算，禁止 AI 更改）
     try:
@@ -615,6 +616,12 @@ DIRECTION: [long|short|neutral]
 - **禁止預設空頭**（派發期遇短期超賣 / 進場區距現價 <3% / 1-3 週內反彈風險高，**允許並建議標 neutral**，不必強行給空方框架）
 - 派發/下跌相位**可寫「結構為空方但短期反彈風險高，本期觀望」**而非機械強行 short — 結構方向 ≠ 隔日方向
 - 若上方資料區出現【短期超賣警示】或【進場區距現價過近】，**優先標 neutral**
+
+⚠️ **結構閘（硬護欄，最優先，凌駕一切短線訊號）**：下方股票資料含【月線結構客觀事實】，其「結構旗標」由程式計算，**禁止 AI 推翻**：
+- 結構旗標=`結構未轉弱` → **禁止**標派發/再派發/下跌，WYCKOFF_PHASE 只能在 積累/上漲/再積累/不明 之中選
+- 結構旗標=`結構轉折中` → 可標派發，但須在「一、威科夫骨幹分析」列出具體派發訊號（高位量增不漲／高位放量收長黑或長上影／跌破前波明顯低點伴隨放量），**不得僅憑單月收陰+量縮**判派發
+- 結構旗標=`結構已轉弱` → 允許標空方相位，仍須量價證據佐證
+⚠️ **正向型態**：若【月線結構客觀事實】「守穩支撐=是」且回測時量縮、反彈時量增 → 屬吸籌/再積累的次級測試(SOT)，偏多，禁標派發。
 
 ⚠️ **「結構方向」≠「隔日方向」（用戶誤讀風險最高處）**：
 - 「DIRECTION=short」= **波段（2 週-1 個月）結構偏空**，**不代表明日續跌**
@@ -710,6 +717,8 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
 {pnf_block}{_rs_section}{_oversold_section}
 
 {_swing_block}
+
+{_structure_block_text}
 
 {monthly_text}
 
