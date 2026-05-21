@@ -8,6 +8,14 @@ import pandas as pd
 from datetime import datetime
 
 
+def _patch_missing_close(df):
+    """Bug5：Yahoo 偶爾對某日漏回 Close，整列 dropna 會少一根 K 棒。
+    若 Close 缺但 High/Low 在，用當日 (High+Low)/2 補；High/Low 也缺才 drop。"""
+    mask = df['Close'].isna() & df['High'].notna() & df['Low'].notna()
+    df.loc[mask, 'Close'] = (df.loc[mask, 'High'] + df.loc[mask, 'Low']) / 2
+    return df.dropna(subset=['Close'])
+
+
 def _yahoo_ohlcv(symbol: str, interval: str, range_: str) -> pd.DataFrame | None:
     """從 Yahoo Finance v8 API 抓指定週期的 OHLCV"""
     try:
@@ -27,7 +35,7 @@ def _yahoo_ohlcv(symbol: str, interval: str, range_: str) -> pd.DataFrame | None
             'Volume': q['volume'],
         }, index=pd.to_datetime([datetime.fromtimestamp(t) for t in d['timestamp']]))
         df.index.name = 'Date'
-        return df.dropna(subset=['Close'])
+        return _patch_missing_close(df)
     except Exception as e:
         print(f"[data_enricher] 抓取失敗 {symbol} {interval}: {e}")
         return None
