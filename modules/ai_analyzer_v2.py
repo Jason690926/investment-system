@@ -10,6 +10,7 @@ import time
 import anthropic
 from dotenv import load_dotenv
 from modules.candlestick import detect_from_bars, label_bars, calc_pnf_target
+from modules.data_enricher import compute_monthly_structure
 
 load_dotenv()
 
@@ -452,6 +453,41 @@ def _oversold_warning_block(daily_bars: list) -> str:
         f"- 「結構空方」屬波段定位（2 週-1 個月），**不代表明日續跌**；可能 1-3\n"
         f"  週內出現反彈，反彈期間放空應**更耐心**等回測壓力區\n"
         f"- 若進場區距現價過近（< 3%），優先標 neutral 觀望，禁急著給空方框架"
+    )
+
+
+def _structure_block(enriched_data: dict, price_f) -> str:
+    """【月線結構客觀事實】prompt 區塊（結構閘）。
+
+    spec: docs/superpowers/specs/2026-05-21-wyckoff-phase-gate-design.md
+    資料不足回 '' （誠實 > 錯誤）。
+    """
+    ms = compute_monthly_structure(
+        enriched_data.get('monthly_bars', []),
+        enriched_data.get('weekly_bars', []),
+        price_f,
+        enriched_data.get('ma60'),
+    )
+    flag = ms['structure_flag']
+    if flag == '資料不足':
+        return ''
+    gate_hint = {
+        '結構未轉弱': '→ 禁止標派發/再派發/下跌，相位只能在 積累/上漲/再積累/不明',
+        '結構轉折中': '→ 可標派發，但須在分析附具體量價證據',
+        '結構已轉弱': '→ 允許標空方相位（仍須量價證據佐證）',
+    }.get(flag, '')
+    dd = ms['drawdown_from_peak']
+    dd_txt = f'{dd:+.1f}%' if dd is not None else '—'
+    hold = '是' if ms['weekly_hold_support'] else '否'
+    return (
+        "【月線結構客觀事實】（程式計算，禁止 AI 推翻）\n"
+        f"- 月K結構（近3根已收盤）：{ms['monthly_structure']}\n"
+        f"- 連續月陰線：{ms['consecutive_bear_months']}\n"
+        f"- 距峰值回落：{dd_txt}\n"
+        f"- 現價 vs 季線MA60：{ms['price_vs_ma60']}\n"
+        f"- 結構旗標：{flag} {gate_hint}\n"
+        f"- 週K近期動能（唯讀，供時機判斷）：{ms['weekly_momentum']}"
+        f" ｜ 守穩支撐：{hold}"
     )
 
 

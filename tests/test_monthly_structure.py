@@ -149,3 +149,27 @@ def test_compute_insufficient_data():
     r = compute_monthly_structure([], [], price=100, ma60=90)
     assert r['monthly_structure'] == '資料不足'
     assert r['structure_flag'] == '資料不足'
+
+
+# ---------- _structure_block 格式化 ----------
+from modules.ai_analyzer_v2 import _structure_block
+
+
+def test_structure_block_not_weak_contains_ban():
+    completed = _mbars([
+        (200, 234, 157, 220),
+        (300, 421, 213, 400),
+        (429, 471, 372, 408),
+    ])
+    inprogress = [_bar(412, 448, 402, 439, date='2026-05-01')]
+    enriched = {'monthly_bars': completed + inprogress, 'weekly_bars': [],
+                'ma60': 300}
+    block = _structure_block(enriched, 439)
+    assert '月線結構客觀事實' in block
+    assert '結構未轉弱' in block
+    assert '禁止標派發' in block
+
+
+def test_structure_block_empty_when_insufficient():
+    enriched = {'monthly_bars': [], 'weekly_bars': [], 'ma60': None}
+    assert _structure_block(enriched, 100) == ''
