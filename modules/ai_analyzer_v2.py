@@ -170,6 +170,8 @@ def _clean_html_output(raw: str) -> str:
 
     # ── 步驟4：剝除所有 inline style 屬性 ────────────────────
     html = re.sub(r'\s+style\s*=\s*(?:"[^"]*"|\'[^\']*\')', '', html, flags=re.IGNORECASE)
+    # ── 步驟5：砍字串尾端殘破未閉合標籤（Bug1：max_tokens 截斷在 <span ...）──
+    html = re.sub(r'<[a-zA-Z][^>]*$', '', html).rstrip()
     return html
 
 
@@ -1087,7 +1089,7 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
             {"type": "text", "text": static_block, "cache_control": {"type": "ephemeral"}},
             {"type": "text", "text": dynamic_block},
         ],
-        max_tokens=2000,
+        max_tokens=3000,
     )
 
     result = {

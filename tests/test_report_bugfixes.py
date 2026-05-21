@@ -87,3 +87,22 @@ def test_single_candle_pattern_no_suffix():
     labels = label_bars(bars)
     for name in labels.values():
         assert '根組合）' not in name
+
+
+# ---------- Bug 1: 殘破未閉合標籤清理 ----------
+from modules.ai_analyzer_v2 import _clean_html_output
+
+
+def test_clean_strips_trailing_broken_tag():
+    """輸出被截斷在殘破 <span ... → 清掉，不外洩到頁面。"""
+    raw = '<p>分析內容正常</p>\n<span class="key-point'
+    out = _clean_html_output(raw)
+    assert '<span' not in out
+    assert '分析內容正常' in out
+
+
+def test_clean_keeps_complete_tags():
+    """完整標籤不受影響。"""
+    raw = '<p>正常</p><span class="key-point">結論</span>'
+    out = _clean_html_output(raw)
+    assert '<span class="key-point">結論</span>' in out
