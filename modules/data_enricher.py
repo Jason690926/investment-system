@@ -64,6 +64,36 @@ def _ohlcv_to_list(df: pd.DataFrame, n: int) -> list:
     return result
 
 
+def _hl_trend(bars: list) -> str:
+    """3 根 K 棒的高低點趨勢 → 升 / 跌 / 轉折 / 橫。bars 由舊到新。"""
+    if not bars or len(bars) < 3:
+        return '資料不足'
+    h = [float(b['high']) for b in bars]
+    l = [float(b['low']) for b in bars]
+    highs_up = h[2] >= h[1] >= h[0]
+    highs_dn = h[2] <= h[1] <= h[0]
+    lows_up  = l[2] >= l[1] >= l[0]
+    lows_dn  = l[2] <= l[1] <= l[0]
+    if highs_up and lows_up:
+        return '升'
+    if highs_dn and lows_dn:
+        return '跌'
+    if highs_up or highs_dn or lows_up or lows_dn:
+        return '轉折'
+    return '橫'
+
+
+def _consecutive_bear(bars: list) -> int:
+    """從最新一根往回數，連續收陰（close<open）的根數。"""
+    cnt = 0
+    for b in reversed(bars):
+        if float(b['close']) < float(b['open']):
+            cnt += 1
+        else:
+            break
+    return cnt
+
+
 def _normalize_symbol(symbol: str) -> str:
     """純數字代號自動補 .TW（台股）"""
     s = symbol.strip().upper()
