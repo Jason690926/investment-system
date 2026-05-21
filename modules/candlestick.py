@@ -620,8 +620,13 @@ def label_bars(bars: list, timeframe: str = 'daily') -> dict:
                     chosen_name = None  # 觸發 fallback
 
             if chosen_name:
-                result[date] = chosen_name
-                label_history.append(chosen_name)
+                span = _MULTI_CANDLE.get(chosen_name, 1)
+                if span >= 3:
+                    # Bug6a：多根組合型態加跨度後綴，避免被誤讀為單根型態
+                    result[date] = f"{chosen_name}（{span}根組合）"
+                else:
+                    result[date] = chosen_name
+                label_history.append(chosen_name)  # 去重比對仍用原名
             else:
                 result[date] = _fallback_label(bars[i])
                 label_history.append(None)

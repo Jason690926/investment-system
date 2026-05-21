@@ -55,3 +55,35 @@ def test_short_no_fallback_when_data_insufficient():
     """short：日K < 20 根（真不足）→ 仍全 None，不亂補。"""
     r = _resolve_swing_anchors({'daily_bars': _flat_bars(5)}, 97.0, 'short')
     assert all(v is None for v in r.values())
+
+
+# ---------- Bug 6a: 多根型態跨度標註 ----------
+from modules.candlestick import label_bars
+
+
+def test_multi_candle_pattern_has_span_suffix():
+    """3 根組合型態（三白兵）標註應帶「（3根組合）」後綴。"""
+    # 4 根 filler + 三白兵（連三陽、開盤收斂於前根實體內、無上影）
+    bars = [
+        {'date': '2026-05-01', 'open': 50,  'high': 51,  'low': 49,  'close': 50,  'volume_zhang': 100},
+        {'date': '2026-05-02', 'open': 50,  'high': 51,  'low': 49,  'close': 50,  'volume_zhang': 100},
+        {'date': '2026-05-03', 'open': 50,  'high': 51,  'low': 49,  'close': 50,  'volume_zhang': 100},
+        {'date': '2026-05-04', 'open': 50,  'high': 51,  'low': 49,  'close': 50,  'volume_zhang': 100},
+        {'date': '2026-05-05', 'open': 100, 'high': 105, 'low': 99,  'close': 105, 'volume_zhang': 200},
+        {'date': '2026-05-06', 'open': 103, 'high': 108, 'low': 102, 'close': 108, 'volume_zhang': 200},
+        {'date': '2026-05-07', 'open': 106, 'high': 111, 'low': 105, 'close': 111, 'volume_zhang': 200},
+    ]
+    labels = label_bars(bars)
+    assert labels.get('2026-05-07', '') == '三白兵（3根組合）', \
+        f"末根三白兵應帶跨度後綴，實際 labels={labels}"
+
+
+def test_single_candle_pattern_no_suffix():
+    """單根型態（如十字星）不加後綴。"""
+    bars = [
+        {'date': f'2026-05-{i:02d}', 'open': 50, 'high': 52, 'low': 48,
+         'close': 50, 'volume_zhang': 100} for i in range(1, 8)
+    ]
+    labels = label_bars(bars)
+    for name in labels.values():
+        assert '根組合）' not in name
