@@ -6,11 +6,62 @@
 - **架構決策**：討論完方案後，先更新 `plan.md`，再開始寫程式
 - `plan.md` 只在需要查架構細節時才讀（節省 token）
 
-## 當前進度（2026-05-20 — 投資建議書 15 Bug 全面修法）
+## 當前進度（2026-05-21 — 威科夫結構閘 + 報表 6 bug 修法）
+
+**所在週次：週8（AI 偏空校正 + 報表品質）**
+
+**狀態：HEAD = `9c51600`（已 push origin/main，本地與遠端同步）**
+
+### 緣起
+用戶 5/20 報表 PDF（22 頁、15 股）對照 5/21 股價 — 15 股判 10 空，5/21 卻 14 股漲。發現兩件事：AI 系統性偏空（多月大漲股只因單月收陰就被打成派發）+ 6 個殘留 bug。
+
+### A. 威科夫結構閘（修系統性偏空）
+spec `docs/superpowers/specs/2026-05-21-wyckoff-phase-gate-design.md`、plan §二十六。
+方案 B：程式算【月線結構客觀事實】+ prompt 雙閘，`結構未轉弱` 硬禁 AI 標派發/再派發/下跌。
+- `data_enricher.compute_monthly_structure()`：月K結構（近3根升/跌/轉折/橫）+ 連續月陰線 + 距峰值回落 + 現價vsMA60 + 結構旗標 + 週K動能（唯讀）
+- `結構未轉弱` = 現價在MA60上 且 月K結構∈{升,橫} 且 連續月陰線≤1（≥2 黑或跌破MA60 或 月K跌 → 結構已轉弱）
+- `ai_analyzer_v2._structure_block()` 注入 analyze_stock_three_masters / analyze_market_only 兩函式
+
+### B. 報表 6 bug 修法
+plan `docs/superpowers/plans/2026-05-21-report-6-bug-fixes.md`。
+| Bug | 修法 |
+|-----|------|
+| 1+2 HTML外洩 / 第四節截斷 | analyze_market_only max_tokens 2000→3000 + _clean_html_output 清殘破標籤 |
+| 3+6b K表欄序錯亂 / 型態欄錯位 | 第二節 K 表改程式產生（_render_ktables_html/_inject_ktables），prompt 用 `[[K_TABLES]]` 佔位 |
+| 4 缺空停 | _resolve_swing_anchors：swing 失敗時用近20日高×1.03 補空停 |
+| 5 日K缺根 | _yahoo_ohlcv 補 null 收盤價（(H+L)/2，不再整列 dropna）|
+| 6a 多根型態標單根 | label_bars 多根組合型態加「（N根組合）」後綴 |
+
+### C. Supabase migration 確認
+連 information_schema 查證：`stock_analyses.stop_loss` 欄位、`personal_recommendations` 表（含唯一索引）皆已執行，不需補跑。
+
+### 本次 commits（14 個，已 push）
+- 結構閘：`10f577f`(spec+plan) `61d7ddc` `8016d54` `203aca1` `38f0a82` `4659f76` `2bb76f0`
+- 6 bug：`08f7978`(plan) `510ce1b` `f7e26c3` `2ae224a` `36b0937` `b67e026` `9c51600`
+
+### 驗證狀況
+- pytest **190/190 全綠**（結構閘 +17、6 bug 修法 +約 15）
+- py_compile 全綠
+- ⚠️ 結構閘 + Bug1/2/3/6b 屬 prompt 行為改動，需 deploy + 燒 ~$0.6 重跑才驗得到
+
+### ⚠️ Deploy 驗收（用戶必執行）
+已 push → Render 自動部署。燒 ~$0.6 跑一鍵分析 + 出 PDF 對照：
+1. 結構閘：臻鼎/合晶/瑞軒（月K升）不再標派發；晶心科/創惟（真下跌）仍可標空
+2. Bug1/2：無 `<span` 殘字外洩、每股第四節「三宗師融合結論」完整
+3. Bug3/6b：K 表每列高≥低、型態欄=型態名、特徵欄=量能
+4. Bug4：撼訊/合晶/大聯大 short 股都有空停
+5. Bug5：日K 根數一致；Bug6a：多根型態顯示「三白兵（3根組合）」後綴
+
+### 回滾策略
+純加性 + prompt 改寫，無 DB/migration 改動。任一修法有問題 `git revert` 對應 commit。
+
+---
+
+## 過往進度（2026-05-20 — 投資建議書 15 Bug 全面修法）
 
 **所在週次：週7（UI 重整 + 設計層 bug 修復）**
 
-**狀態：HEAD = `cad66f3`（未 push → 本次收工一併 push）**
+**狀態：HEAD = `cad66f3`（已 push）**
 
 ### 本次 — 用戶 5/19 22:09 報表 PDF（22 頁、15 支股）審視找 15 Bug，全做
 
