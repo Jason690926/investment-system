@@ -94,6 +94,71 @@ def _consecutive_bear(bars: list) -> int:
     return cnt
 
 
+def _structure_flag(monthly_structure: str, price_vs_ma60: str,
+                    consecutive_bear: int) -> str:
+    """綜合三項 → 結構旗標。判定順序：已轉弱 > 未轉弱 > 轉折中。"""
+    if monthly_structure == '資料不足':
+        return '資料不足'
+    if (price_vs_ma60 == '在下' or monthly_structure == '跌'
+            or consecutive_bear >= 2):
+        return '結構已轉弱'
+    if (price_vs_ma60 == '在上' and monthly_structure in ('升', '橫')
+            and consecutive_bear <= 1):
+        return '結構未轉弱'
+    return '結構轉折中'
+
+
+def compute_monthly_structure(monthly_bars: list, weekly_bars: list,
+                              price, ma60) -> dict:
+    """從 12 月K + 26 週K + MA60 算出【月線結構客觀事實】。
+
+    spec: docs/superpowers/specs/2026-05-21-wyckoff-phase-gate-design.md
+    月K/週K 的最後一根視為進行中，結構一律用其前 3 根已收盤 bar。
+    """
+    result = {
+        'monthly_structure':       '資料不足',
+        'consecutive_bear_months': 0,
+        'drawdown_from_peak':      None,
+        'price_vs_ma60':           '未知',
+        'structure_flag':          '資料不足',
+        'weekly_momentum':         '資料不足',
+        'weekly_hold_support':     False,
+    }
+
+    # 月K：需 >= 4 根（3 已收盤 + 1 進行中）
+    if monthly_bars and len(monthly_bars) >= 4:
+        completed = monthly_bars[:-1]
+        result['monthly_structure']       = _hl_trend(completed[-3:])
+        result['consecutive_bear_months'] = _consecutive_bear(completed)
+        closes = [float(b['close']) for b in completed]
+        peak = max(closes) if closes else 0
+        if peak > 0 and price is not None:
+            result['drawdown_from_peak'] = round((peak - float(price)) / peak * 100, 1)
+
+    # 現價 vs 季線 MA60
+    if price is not None and ma60:
+        result['price_vs_ma60'] = '在上' if float(price) >= float(ma60) else '在下'
+
+    # 週K 動能（唯讀）
+    if weekly_bars and len(weekly_bars) >= 4:
+        wcompleted = weekly_bars[:-1]
+        w3 = wcompleted[-3:]
+        result['weekly_momentum'] = _hl_trend(w3)
+        wc = [float(b['close']) for b in w3]
+        if len(wc) == 3 and min(wc) > 0:
+            dispersion = (max(wc) - min(wc)) / (sum(wc) / 3)
+            result['weekly_hold_support'] = bool(
+                dispersion < 0.03 and wc[2] >= wc[1] and wc[2] >= wc[0]
+            )
+
+    result['structure_flag'] = _structure_flag(
+        result['monthly_structure'],
+        result['price_vs_ma60'],
+        result['consecutive_bear_months'],
+    )
+    return result
+
+
 def _normalize_symbol(symbol: str) -> str:
     """純數字代號自動補 .TW（台股）"""
     s = symbol.strip().upper()
