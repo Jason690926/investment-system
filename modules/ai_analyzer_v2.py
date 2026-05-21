@@ -63,61 +63,109 @@ def _dedup_bars_by_date(bars: list) -> list:
     return [bars[i] for i in sorted(seen_idx.values())]
 
 
-def _fmt_bars(bars: list, label: str, n: int, pattern_labels: dict = None) -> str:
+def _compute_bar_feats(bars: list) -> dict:
+    """每根 K 棒的【特徵】字串 {date: '放量·高位·跳空高開'}。
+    供 _fmt_bars 與 _render_ktables_html 共用，確保 K 表與 AI 文字一致。"""
     if not bars:
-        return f"【{label}】：資料不足"
-    # 防呆 dedup：避免下游 prompt 看到同日重複行（用戶 2026-05-19 報表 5 支股
-    # 日K 表出現「2026-05-19 同日列兩次」+「(補充)」「(最新)」標記）
-    bars = _dedup_bars_by_date(bars)
-    rows = bars[-n:]
-
-    # 20-bar baselines for 特徵 computation
+        return {}
     ref        = bars[-20:]
     vol_list   = [float(b.get('volume_zhang', 0) or 0) for b in ref]
     vol_avg    = sum(vol_list) / len(vol_list) if vol_list else 0
     range_high = max(float(b['high']) for b in ref) if ref else 0
     range_low  = min(float(b['low'])  for b in ref) if ref else 0
-
-    lines = []
-    for idx, b in enumerate(rows):
-        abs_idx = len(bars) - len(rows) + idx
-
-        # 量能
+    feats = {}
+    for i, b in enumerate(bars):
         vol = float(b.get('volume_zhang', 0) or 0)
         if vol_avg > 0:
             r = vol / vol_avg
             vol_feat = '放量' if r >= 1.5 else ('縮量' if r <= 0.7 else '均量')
         else:
             vol_feat = '均量'
-
-        # 位置（收盤在20根高低範圍中的相對位置）
         close = float(b['close'])
         if range_high > range_low:
             pos = (close - range_low) / (range_high - range_low)
-            pos_feat = ('極高位' if pos >= 0.85 else
-                        '高位'   if pos >= 0.65 else
-                        '中段'   if pos >= 0.35 else
-                        '低位'   if pos >= 0.15 else '極低位')
+            pos_feat = ('極高位' if pos >= 0.85 else '高位' if pos >= 0.65 else
+                        '中段' if pos >= 0.35 else '低位' if pos >= 0.15 else '極低位')
         else:
             pos_feat = '中段'
-
-        # 跳空（開盤 vs 前根收盤 ±1%）
         gap_feat = ''
-        if abs_idx > 0:
-            prev_close = float(bars[abs_idx - 1]['close'])
+        if i > 0:
+            prev_close = float(bars[i - 1]['close'])
             open_ = float(b['open'])
             if open_ > prev_close * 1.01:
                 gap_feat = '·跳空高開'
             elif open_ < prev_close * 0.99:
                 gap_feat = '·跳空低開'
+        feats[b['date']] = f"{vol_feat}·{pos_feat}{gap_feat}"
+    return feats
 
-        feat = f"【特徵={vol_feat}·{pos_feat}{gap_feat}】"
+
+def _fmt_bars(bars: list, label: str, n: int, pattern_labels: dict = None) -> str:
+    if not bars:
+        return f"【{label}】：資料不足"
+    # 防呆 dedup：避免下游 prompt 看到同日重複行（用戶 2026-05-19 報表 5 支股
+    # 日K 表出現「2026-05-19 同日列兩次」+「(補充)」「(最新)」標記）
+    bars = _dedup_bars_by_date(bars)
+    feats = _compute_bar_feats(bars)
+    rows = bars[-n:]
+    lines = []
+    for b in rows:
+        feat = f"【特徵={feats.get(b['date'], '')}】"
         line = (f"{b['date']}  O={b['open']} H={b['high']} L={b['low']} C={b['close']}  "
                 f"量={b['volume_zhang']}張  {feat}")
         if pattern_labels and b['date'] in pattern_labels:
             line += f"  ▶{pattern_labels[b['date']]}"
         lines.append(line)
     return f"【{label}（最近{len(rows)}根）】\n" + "\n".join(lines)
+
+
+def _render_ktables_html(enriched_data: dict) -> str:
+    """程式直接產生第二節 3 張 K 線表 HTML（修 Bug3/6b：不讓 AI 手抄數字）。"""
+    from modules.candlestick import label_bars
+    specs = [
+        ('月K', enriched_data.get('monthly_bars', []), 6, 'monthly'),
+        ('週K', enriched_data.get('weekly_bars',  []), 3, 'daily'),
+        ('日K', enriched_data.get('daily_bars',   []), 5, 'daily'),
+    ]
+    out = []
+    for label, bars, n, tf in specs:
+        bars = _dedup_bars_by_date(bars)
+        if not bars:
+            out.append(f'<p class="kbar-label">{label}：資料不足</p>')
+            continue
+        feats = _compute_bar_feats(bars)
+        labels = label_bars(bars, timeframe=tf)
+        rows = bars[-n:]
+        trs = []
+        for b in rows:
+            d = b['date']
+            trs.append(
+                f'<tr><td>{d}</td><td>{labels.get(d, "")}</td>'
+                f'<td>{b["open"]}</td><td>{b["high"]}</td>'
+                f'<td>{b["low"]}</td><td>{b["close"]}</td>'
+                f'<td>{b.get("volume_zhang", "")}</td>'
+                f'<td>{feats.get(d, "")}</td></tr>'
+            )
+        out.append(
+            f'<p class="kbar-label">{label}（最近{len(rows)}根）</p>'
+            f'<table class="kbar-table"><thead><tr>'
+            f'<th>日期</th><th>型態</th><th>開</th><th>高</th><th>低</th>'
+            f'<th>收</th><th>量(張)</th><th>特徵</th></tr></thead>'
+            f'<tbody>{"".join(trs)}</tbody></table>'
+        )
+    return '\n'.join(out)
+
+
+def _inject_ktables(html: str, enriched_data: dict) -> str:
+    """把 AI 輸出的 [[K_TABLES]] 佔位替換成程式產的 K 線表。
+    無佔位時 fallback：插在第二節標題後（再不行附在結尾）。"""
+    tables = _render_ktables_html(enriched_data)
+    if '[[K_TABLES]]' in html:
+        return html.replace('[[K_TABLES]]', tables)
+    m = re.search(r'(#{1,4}\s*二、[^\n]*\n|<h[1-4][^>]*>\s*二、.*?</h[1-4]>)', html)
+    if m:
+        return html[:m.end()] + '\n' + tables + '\n' + html[m.end():]
+    return html + '\n' + tables
 
 
 def _clean_html_output(raw: str) -> str:

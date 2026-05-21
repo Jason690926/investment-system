@@ -106,3 +106,57 @@ def test_clean_keeps_complete_tags():
     raw = '<p>正常</p><span class="key-point">結論</span>'
     out = _clean_html_output(raw)
     assert '<span class="key-point">結論</span>' in out
+
+
+# ---------- Bug 3+6b: 程式產 K 線表 ----------
+from modules.ai_analyzer_v2 import (
+    _compute_bar_feats, _render_ktables_html, _inject_ktables,
+)
+
+
+def _kbars(n, base_date='2026-03-01'):
+    from datetime import date, timedelta
+    d = date.fromisoformat(base_date)
+    out = []
+    for i in range(n):
+        out.append({'date': (d + timedelta(days=i)).isoformat(),
+                    'open': 100 + i, 'high': 105 + i, 'low': 95 + i,
+                    'close': 102 + i, 'volume_zhang': 1000 + i})
+    return out
+
+
+def test_compute_bar_feats_returns_per_date():
+    feats = _compute_bar_feats(_kbars(25))
+    assert len(feats) == 25
+    for v in feats.values():
+        assert any(k in v for k in ('放量', '縮量', '均量'))
+
+
+def test_render_ktables_has_three_tables_correct_order():
+    enriched = {'monthly_bars': _kbars(12), 'weekly_bars': _kbars(26),
+                'daily_bars': _kbars(60)}
+    html = _render_ktables_html(enriched)
+    assert html.count('<table') == 3
+    # 表頭欄序固定 開→高→低→收
+    assert '<th>開</th><th>高</th><th>低</th><th>收</th>' in html
+    # 每列 OHLC：高 >= 低（程式產表不可能錯位）
+    import re as _re
+    for o, h, l, c in _re.findall(
+            r'<td>[\d-]+</td><td>[^<]*</td><td>([\d.]+)</td><td>([\d.]+)</td>'
+            r'<td>([\d.]+)</td><td>([\d.]+)</td>', html):
+        assert float(h) >= float(l)
+
+
+def test_inject_ktables_replaces_placeholder():
+    enriched = {'monthly_bars': _kbars(12), 'weekly_bars': _kbars(26),
+                'daily_bars': _kbars(60)}
+    html = _inject_ktables('<p>前</p>[[K_TABLES]]<p>後</p>', enriched)
+    assert '[[K_TABLES]]' not in html
+    assert html.count('<table') == 3
+
+
+def test_inject_ktables_fallback_when_no_placeholder():
+    enriched = {'monthly_bars': _kbars(12), 'weekly_bars': _kbars(26),
+                'daily_bars': _kbars(60)}
+    html = _inject_ktables('### 二、本間宗久K線確認\n內文', enriched)
+    assert html.count('<table') == 3
