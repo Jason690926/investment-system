@@ -527,6 +527,26 @@ def _oversold_warning_block(daily_bars: list) -> str:
     )
 
 
+def _strong_breakout_state(enriched_data: dict, price_f) -> bool:
+    """優化2（spec 2026-05-22）：現價放量站上 swing range_high（前高）→ 強勢突破，
+    解鎖 long 操作框架的「追進」選項。
+    成立條件：現價 > range_high 且 今日量 ≥ 5日均量 × 1.5（=突破量門檻）。"""
+    if price_f is None:
+        return False
+    from modules.candlestick import calc_swing_levels
+    sl = calc_swing_levels(enriched_data.get('daily_bars', []), 'long', price_f)
+    if not sl or sl.get('range_high') is None:
+        return False
+    vt = enriched_data.get('volume_zhang')
+    v5 = enriched_data.get('volume_5d_avg_zhang')
+    try:
+        return (float(price_f) > float(sl['range_high'])
+                and vt is not None and v5 not in (None, '--', 0)
+                and float(vt) >= float(v5) * 1.5)
+    except (TypeError, ValueError):
+        return False
+
+
 def _structure_block(enriched_data: dict, price_f) -> str:
     """【月線結構客觀事實】prompt 區塊（結構閘）。
 
@@ -957,6 +977,16 @@ def analyze_market_only(
     _oversold_section = f"\n\n{_oversold_block}" if _oversold_block else ""
     _swing_block = _dual_swing_block(enriched_data, _price_f)
     _structure_block_text = _structure_block(enriched_data, _price_f)
+    # 優化2：強勢突破狀態（程式計算）→ 併入結構區塊，控 long 操作框架分支
+    _breakout_line = (
+        '【強勢突破狀態】成立（現價已放量站上前高）→ long 操作框架啟用「強勢追進」分支'
+        if _strong_breakout_state(enriched_data, _price_f)
+        else '【強勢突破狀態】未成立 → long 操作框架用標準「回測進場」分支'
+    )
+    _structure_block_text = (
+        f'{_structure_block_text}\n{_breakout_line}'
+        if _structure_block_text else _breakout_line
+    )
 
     try:
         _v5 = float(vol_5avg)
@@ -1101,10 +1131,17 @@ K棒型態含意速查（解讀參考，須結合特徵欄量能·位置）：
 
 ⚠️ 鐵律：long 用「進場/停損/目標」、short 用「空進/空停/空標」、neutral 用「翻多條件/翻空條件/區間」術語，禁混用或省略 bullet。
 
-【long 模板】（依【波段操作錨點】鎖定值）
+【long 模板】（依【波段操作錨點】鎖定值；依 dynamic_block【強勢突破狀態】二選一）
+▸ 若【強勢突破狀態】未成立 → 輸出標準回測進場版：
 <ul>
   <li>▶ 進場價：[entry_zone 區間] 元（觸發須量 ≥ 突破量門檻）</li>
   <li><span class="stop-loss">▶ 停損：[invalidation] 元 — 跌破即論點作廢</span></li>
+  <li>▶ 目標：<span class="target-price">[target] 元（P&F 等幅量度）</span></li>
+</ul>
+▸ 若【強勢突破狀態】成立 → 改輸出強勢追進版（追進與回測並陳）：
+<ul>
+  <li>▶ 強勢突破追蹤：現價已放量站上前高 [range_high] 元，可順勢追進；追進停損＝[range_high] 元（跌回前高即假突破）</li>
+  <li>▶ 回測進場（保守）：[entry_zone 區間] 元 — 不追高者待回測此區再進</li>
   <li>▶ 目標：<span class="target-price">[target] 元（P&F 等幅量度）</span></li>
 </ul>
 
