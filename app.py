@@ -144,9 +144,12 @@ def _render_one_block(s, a, q, idx, mode, personal_html=None):
   </div>"""
 
     # Pills 列（B 組 2026-05-20：DB schema 中性語意 + stop_loss 獨立欄）
-    # long  : 撐=support_price / 壓=resistance_price / 目標=target_price
+    # long  : 箱底=support_price / 箱頂=resistance_price / 目標=target_price
+    #         （2026-05-22 Bug B：long pill 顯示程式 swing 錨點，改標「箱底/箱頂」
+    #          與內文 AI 的「支撐/壓力」明確區隔，避免同字不同數誤導）
     # short : 空標=support_price（下方目標）/ 空進=resistance_price（回測壓力）/
     #         空停=stop_loss（前高之上失效，B1c）
+    # neutral: 撐/壓=AI 支撐壓力（anchor 為 None → fallback AI tag，值與內文一致故留原字）
     pills = []
     if a:
         from modules.ai_analyzer_v2 import phase_to_direction
@@ -167,10 +170,12 @@ def _render_one_block(s, a, q, idx, mode, personal_html=None):
         else:
             dir_badge = '多' if _dir == 'long' else '觀望'
             pills.append(f'<span class="pill pill-ink"><span class="lbl">方向 </span>{dir_badge}</span>')
+            # long 用程式錨點語意「箱底/箱頂」；neutral pill 為 AI 支撐壓力故留「撐/壓」
+            sup_lbl, res_lbl = ('箱底', '箱頂') if _dir == 'long' else ('撐', '壓')
             if a.support_price is not None:
-                pills.append(f'<span class="pill pill-support"><span class="lbl">撐 </span>{_format_price(a.support_price)}</span>')
+                pills.append(f'<span class="pill pill-support"><span class="lbl">{sup_lbl} </span>{_format_price(a.support_price)}</span>')
             if a.resistance_price is not None:
-                pills.append(f'<span class="pill pill-bull"><span class="lbl">壓 </span>{_format_price(a.resistance_price)}</span>')
+                pills.append(f'<span class="pill pill-bull"><span class="lbl">{res_lbl} </span>{_format_price(a.resistance_price)}</span>')
             if a.target_price is not None:
                 pills.append(f'<span class="pill pill-amber"><span class="lbl">目標 </span>{_format_price(a.target_price)}</span>')
             if a.wyckoff_phase:
@@ -691,9 +696,11 @@ def api_analyze_stock(stock_id):
         )
 
         # B 組 2026-05-20：DB 寫入 anchor 優先（程式鎖定），AI tag 當 fallback
+        # 2026-05-22 Bug B：目標 pill 與內文同標「目標」→ 必須同值，故直接採
+        # target_pnf（內文 P&F 來源），不再 fallback swing target_anchor（lookback 不同會差）
         _sup = result.get('support_anchor')    or result.get('support')
         _res = result.get('resistance_anchor') or result.get('resistance')
-        _tgt = result.get('target_anchor')     or result.get('target_pnf')
+        _tgt = result.get('target_pnf')
         _stp = result.get('stop_loss_anchor')
 
         if existing:

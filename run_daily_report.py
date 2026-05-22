@@ -120,9 +120,10 @@ def cache_market_analysis(db, symbol: str, name: str) -> bool:
     ).first()
 
     # B 組 2026-05-20：DB 寫入 anchor 優先（程式鎖定），AI tag 當 fallback
+    # 2026-05-22 Bug B：目標 pill 與內文同標「目標」→ 同值，直接採 target_pnf
     _sup = result.get('support_anchor')    or result.get('support')
     _res = result.get('resistance_anchor') or result.get('resistance')
-    _tgt = result.get('target_anchor')     or result.get('target_pnf')
+    _tgt = result.get('target_pnf')
     _stp = result.get('stop_loss_anchor')
 
     if existing:

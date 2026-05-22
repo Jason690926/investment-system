@@ -125,6 +125,8 @@ def test_render_block_watching_skips_data_row_includes_risk_pill():
 
 
 def test_render_block_pills_show_support_resistance_target_wyckoff():
+    # _make_analysis 預設 wyckoff_phase='Markup' → phase_to_direction=neutral，
+    # Bug B 2026-05-22：neutral pill 保留「撐/壓」（值即 AI 支撐壓力，與內文一致）
     html = _render_one_block(_make_stock(), _make_analysis(), _make_quote(), idx=1, mode='holding')
     assert '撐' in html and '1,050' in html
     assert '壓' in html and '1,120' in html
@@ -303,12 +305,13 @@ def test_short_stock_pill_price_order_correct():
     assert 空標_val < 空進_val, f'空標 {空標_val} 應 < 空進 {空進_val}（目標在最下方）'
 
 
-def test_long_stock_pill_unchanged_backward_compat():
-    """B 組向後相容：long 股 pill 仍顯示「撐/壓/目標」不受 stop_loss 影響。"""
+def test_long_stock_pill_uses_box_labels():
+    """Bug B 2026-05-22：long 股 pill 顯示「箱底/箱頂/目標」（程式 swing 錨點，
+    與內文 AI 支撐/壓力區隔），不受 stop_loss 影響。"""
     a = _make_analysis(wyckoff_phase='上漲')  # → long
     html = _render_one_block(_make_stock(), a, None, idx=1, mode='holding')
-    assert '撐 ' in html
-    assert '壓 ' in html
+    assert '箱底 ' in html
+    assert '箱頂 ' in html
     assert '目標 ' in html
     assert '空進' not in html
     assert '空停' not in html
