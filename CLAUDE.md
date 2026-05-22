@@ -6,7 +6,61 @@
 - **架構決策**：討論完方案後，先更新 `plan.md`，再開始寫程式
 - `plan.md` 只在需要查架構細節時才讀（節省 token）
 
-## 當前進度（2026-05-21 — 威科夫結構閘 + 報表 6 bug 修法）
+## 當前進度（2026-05-22 — 報表 cross-check：4 bug 修復 + 2 優化 spec）
+
+**所在週次：週8（AI 偏空校正 + 報表品質）**
+
+**狀態：HEAD = `052cf0d`（已 push origin/main）；本 commit 為 CLAUDE.md 快照更新**
+
+### 緣起
+用戶 5/22 dashboard K 線恢復後，提供 5/22 股價截圖 + 5/21 晚上報表 PDF（27頁15股）交叉核對。
+**結論：威科夫結構閘大成功** — 5/20 報表 15股判10空 → 5/21 報表 12 long / 3 neutral / 0 short，
+5/22 實際 14/15 上漲（6 檔漲停），偏空校正方向完全正確；唯一下跌的大聯大報表早警示「現價偏高、
+等回測」。同時揪出 4 個 bug + 3 項優化。
+
+### A. 已完成 4 bug（3 commits 已 push `4052618..dc4d434`）
+| Bug | 嚴重度 | 修法 | commit |
+|-----|--------|------|--------|
+| A 週/月K退化單日棒 + 日期位移 | 🔴 | `_chart_json_to_df` 剔除 Yahoo `1wk/1mo` spurious 即時棒（`ts==regularMarketTime`）+ `gmtoffset` 校正日期；進行中棒標「（進行中）」+ 第二節 prompt 鐵律 | `4052618` |
+| B pill 撐/壓 與內文支撐壓力撞名 | 🟡 | long pill 撐/壓→箱底/箱頂（程式 swing 錨點）；目標 pill 改用 `target_pnf` 與內文同源 | `e80799e` |
+| C 型態標籤日期 vs AI 文字不符 | 🟡 | 第二節 prompt 鐵律：多根組合型態以標注日期為準 | `dc4d434` |
+| D 距峰值回落數字打架 | 🟡 | `_structure_block` 鐵律：內文須引用程式注入值 | `dc4d434` |
+
+優化3（週/月K日期標籤位移）= Bug A2，已隨 A 修好。
+spec：`docs/superpowers/specs/2026-05-22-kbar-spurious-bar-fix-design.md`
+
+### 驗證狀況
+- pytest **201/201 全綠**（190 + 11 新 `tests/test_kbar_spurious.py`）、py_compile 全綠
+- Bug A 真資料驗證：6533 月K `1027張`(退化) → `15929張`(真聚合)、月K 日期校正 `2026-05-01`
+- ⚠️ 結構閘 `compute_monthly_structure` 的 `[:-1]` 在修 A 後自動對齊「排除進行中月」docstring
+  本意 → 結構旗標可能對少數股翻動（屬修正非退化），deploy 後須重驗
+- ⚠️ Bug C/D 屬 prompt 行為改動，需燒 ~$0.6 重跑才驗得到
+
+### B. 待辦 — 優化1/2（用戶拍板「走 spec」，spec 已寫，待 plan→實作）
+- **優化1 持倉部位建議**：`docs/superpowers/specs/2026-05-22-holding-position-advice-design.md`
+  — `analyze_market_only` 加 `holding_ctx` 參數，holding 時加「六、持倉部位建議」段（虧損 neutral
+  持股也給續抱/減碼價位），零額外 AI 呼叫
+- **優化2 強勢突破追蹤**：`docs/superpowers/specs/2026-05-22-strong-breakout-tracking-design.md`
+  — 程式算「強勢突破狀態」，long 操作框架加條件式「追進」bullet（並陳「回測進場」）
+- 下次：兩 spec → `plan.md §二十八` → TDD 實作 → 一次 deploy 重跑驗證（結構閘重驗 + C/D + 優化1/2 一併）
+
+### ⚠️ Deploy 驗收（用戶可執行）
+已 push → Render 自動部署。燒 ~$0.6 跑一鍵分析 + 出 PDF 驗：
+1. 結構閘旗標未退化（修 A 後視窗變動）
+2. 第二節 K 表：日K[-1] ≠ 週K[-1] ≠ 月K[-1]；月K 顯示完整月聚合量、日期為月份起始；
+   進行中週/月棒標「（進行中）」
+3. pill：long 股顯示「箱底/箱頂/目標」，目標 pill = 內文 P&F 同值
+4. Bug C：多根型態 AI 敘述日期不再與標籤打架；Bug D：內文回落%=程式注入值
+
+### Dashboard 迷你K（plan §二十七）
+用戶回報 5/22 dashboard K 線「又好了」→ 該快取漏洞暫無急迫性，仍列觀察。
+
+### 回滾策略
+4 bug 純資料層/前端/prompt 加性修改，無 DB/migration；任一有問題 `git revert` 對應 commit。
+
+---
+
+## 過往進度（2026-05-21 — 威科夫結構閘 + 報表 6 bug 修法）
 
 **所在週次：週8（AI 偏空校正 + 報表品質）**
 
