@@ -690,9 +690,12 @@ def api_analyze_stock(stock_id):
         if enriched is None:
             return jsonify({'error': f'無法取得 {stock.symbol} 市場資料'}), 503
 
+        # 優化1 2026-05-22：持股時報表加「六、持倉部位建議」（user-agnostic）
+        _is_holding = bool(stock.status == 'holding' and stock.trades)
+
         result = analyze_market_only(
             name=stock.name, symbol=stock.symbol,
-            enriched_data=enriched, news_list=[],
+            enriched_data=enriched, news_list=[], is_holding=_is_holding,
         )
 
         # B 組 2026-05-20：DB 寫入 anchor 優先（程式鎖定），AI tag 當 fallback

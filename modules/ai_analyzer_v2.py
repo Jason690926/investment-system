@@ -941,11 +941,16 @@ def analyze_market_only(
     symbol: str,
     enriched_data: dict,
     news_list: list = None,
+    is_holding: bool = False,
 ) -> dict:
     """
-    客觀市場分析，不含個人持倉資訊，結果跨用戶共用。
-    存入 StockAnalysis.html_content。
+    客觀市場分析，結果跨用戶共用，存入 StockAnalysis.html_content。
     回傳 dict 與 analyze_stock_three_masters 同格式。
+
+    is_holding（優化1 2026-05-22）：分析對象是否持有此股。True 時報表加
+    「六、持倉部位建議」段（續抱/減碼判斷 + 錨點觸發價 + 持倉停損）。
+    ⚠️ StockAnalysis 跨用戶共用 → 第六節為 user-agnostic 結構建議，
+    不含個人成本/損益數字（避免洩漏給其他看同股的用戶）。
     """
     from datetime import datetime, timezone, timedelta
     TW = timezone(timedelta(hours=8))
@@ -987,6 +992,13 @@ def analyze_market_only(
         f'{_structure_block_text}\n{_breakout_line}'
         if _structure_block_text else _breakout_line
     )
+    # 優化1：持股時注入提示 → 觸發 static_block「六、持倉部位建議」
+    # user-agnostic（不放個人成本/損益，因 StockAnalysis 跨用戶共用）
+    if is_holding:
+        _structure_block_text += (
+            '\n\n【持倉提示】本分析的讀者為「已持有此股」的投資人，'
+            '請務必輸出第六節「持倉部位建議」。'
+        )
 
     try:
         _v5 = float(vol_5avg)
@@ -1158,6 +1170,15 @@ K棒型態含意速查（解讀參考，須結合特徵欄量能·位置）：
   <li>▶ 翻空條件：跌破 [range_low] 元 + 量 ≥ 跌破量門檻</li>
   <li>▶ 區間：[range_low]~[range_high] 元（區間內不操作）</li>
 </ul>
+
+### 六、持倉部位建議（僅當 dynamic_block 出現【持倉提示】時輸出，否則整節跳過）
+分析對象為「已持有此股」的投資人 — 無論 DIRECTION 為 long/short/neutral，都須輸出 3 個 bullet：
+<ul>
+  <li>▶ 整體判斷：（只選一個）續抱 / 減碼 / 出場 / 觀望持有 — 結合結構與相位說明理由（≤40字）</li>
+  <li>▶ 部位處理觸發價：跌破 [失效/翻空價] 元減碼；站回/守穩 [續抱或反轉條件價] 元為續抱依據（價位引用上方錨點，禁另算）</li>
+  <li><span class="stop-loss">▶ 持倉停損：[失效價] 元 — 跌破請執行</span></li>
+</ul>
+⚠️ neutral 持股即使「五、操作框架」為「區間不操作」，第六節仍須給出具體續抱/減碼價位（持有人需要明確部位指引，不可只說不操作）。
 
 重要提醒：以上為模擬分析，不構成實際投資建議。"""
 

@@ -114,7 +114,11 @@ def cache_market_analysis(db, symbol: str, name: str) -> bool:
     daily_bars = enriched.get('daily_bars', [])
     _backfill_patterns(db, symbol, daily_bars, today)
 
-    result = analyze_market_only(name=name, symbol=symbol, enriched_data=enriched)
+    # 優化1：批次分析跨用戶共用 — 只要有任一用戶持有此股就加「六、持倉部位建議」
+    # （第六節為 user-agnostic 結構建議，不含個人成本/損益）
+    is_holding = db.query(Stock).filter_by(symbol=symbol, status='holding').count() > 0
+    result = analyze_market_only(name=name, symbol=symbol,
+                                 enriched_data=enriched, is_holding=is_holding)
     existing = db.query(StockAnalysis).filter_by(
         symbol=symbol, analysis_date=today, analysis_type='daily'
     ).first()
