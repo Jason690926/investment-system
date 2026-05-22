@@ -8,6 +8,7 @@ import os
 import re
 import time
 import anthropic
+from datetime import datetime
 from dotenv import load_dotenv
 from modules.candlestick import detect_from_bars, label_bars, calc_pnf_target
 from modules.data_enricher import compute_monthly_structure
@@ -119,16 +120,36 @@ def _fmt_bars(bars: list, label: str, n: int, pattern_labels: dict = None) -> st
     return f"【{label}（最近{len(rows)}根）】\n" + "\n".join(lines)
 
 
+def _last_bar_in_progress(bars: list, latest_daily_date: str, kind: str) -> bool:
+    """判斷 bars 最後一根（週K/月K）是否為尚未收完的「進行中」當期。
+    Bug A 防禦層：進行中棒量能未累計完整，須標示提醒 AI 勿與完整期間比放縮量。"""
+    if not bars or not latest_daily_date or not kind:
+        return False
+    bd = str(bars[-1].get('date', ''))
+    if kind == 'monthly':
+        return bd[:7] == latest_daily_date[:7]
+    if kind == 'weekly':
+        try:
+            d0 = datetime.strptime(bd, '%Y-%m-%d')
+            d1 = datetime.strptime(latest_daily_date, '%Y-%m-%d')
+            return 0 <= (d1 - d0).days <= 6
+        except Exception:
+            return False
+    return False
+
+
 def _render_ktables_html(enriched_data: dict) -> str:
     """程式直接產生第二節 3 張 K 線表 HTML（修 Bug3/6b：不讓 AI 手抄數字）。"""
     from modules.candlestick import label_bars
     specs = [
-        ('月K', enriched_data.get('monthly_bars', []), 6, 'monthly'),
-        ('週K', enriched_data.get('weekly_bars',  []), 3, 'daily'),
-        ('日K', enriched_data.get('daily_bars',   []), 5, 'daily'),
+        ('月K', enriched_data.get('monthly_bars', []), 6, 'monthly', 'monthly'),
+        ('週K', enriched_data.get('weekly_bars',  []), 3, 'daily',   'weekly'),
+        ('日K', enriched_data.get('daily_bars',   []), 5, 'daily',   None),
     ]
+    daily = enriched_data.get('daily_bars', []) or []
+    latest_daily_date = str(daily[-1]['date']) if daily else ''
     out = []
-    for label, bars, n, tf in specs:
+    for label, bars, n, tf, kind in specs:
         bars = _dedup_bars_by_date(bars)
         if not bars:
             out.append(f'<p class="kbar-label">{label}：資料不足</p>')
@@ -136,11 +157,13 @@ def _render_ktables_html(enriched_data: dict) -> str:
         feats = _compute_bar_feats(bars)
         labels = label_bars(bars, timeframe=tf)
         rows = bars[-n:]
+        in_prog = _last_bar_in_progress(bars, latest_daily_date, kind)
         trs = []
-        for b in rows:
+        for i, b in enumerate(rows):
             d = b['date']
+            date_cell = f'{d}（進行中）' if (in_prog and i == len(rows) - 1) else d
             trs.append(
-                f'<tr><td>{d}</td><td>{labels.get(d, "")}</td>'
+                f'<tr><td>{date_cell}</td><td>{labels.get(d, "")}</td>'
                 f'<td>{b["open"]}</td><td>{b["high"]}</td>'
                 f'<td>{b["low"]}</td><td>{b["close"]}</td>'
                 f'<td>{b.get("volume_zhang", "")}</td>'
@@ -731,6 +754,7 @@ DIRECTION: [long|short|neutral]
 ### 二、本間宗久K線確認
 ⚠️ K棒資料中 ▶型態名稱 為程式依數學公式精確計算，禁止更改或自行重新命名。請直接使用標注的型態並解讀其在當前趨勢下的含意。
 ⚠️ 禁止只憑單根紅/綠顏色判斷多空，必須結合【特徵=...】的量能·位置分析含意。
+⚠️ 日期標「（進行中）」的週K/月K 為尚未收完的當期，量能僅累計至今，禁與其他完整週/月直接比較放量/縮量。
 - 週K型態（最近3根）：引用 ▶標注 的型態名稱，結合【特徵=...】量能·位置解讀含意
 - 日K型態（最近5根）：引用 ▶標注 的型態名稱，結合【特徵=...】量能·位置解讀含意
 - K線序列：連續3-5根量能·位置的變化趨勢，說明多空動能是否增強或衰退
@@ -1041,6 +1065,7 @@ DIRECTION: [long|short|neutral]
 
 ### 二、本間宗久K線確認
 ⚠️ K 線表由系統自動產生，你只需在本節最前面輸出一行 `[[K_TABLES]]`，其後寫文字解讀（禁止自行畫表）。
+⚠️ 日期標「（進行中）」的週K/月K 為尚未收完的當期，量能僅累計至今，禁與其他完整週/月直接比較放量/縮量。
 K棒型態含意速查（解讀參考，須結合特徵欄量能·位置）：
 錘子（下影≥實體2倍/低位看漲·高位需謹慎）、吊人（錘子型/高位看跌）、射擊之星（上影≥實體2倍/高位看跌）、
 早晨之星（長黑+小K+長紅/底部反轉）、黃昏之星（長紅+小K+長黑/頂部反轉）、

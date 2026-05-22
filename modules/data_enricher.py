@@ -5,7 +5,7 @@ data_enricher.py
 """
 import requests
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 
 def _patch_missing_close(df):
@@ -14,6 +14,46 @@ def _patch_missing_close(df):
     mask = df['Close'].isna() & df['High'].notna() & df['Low'].notna()
     df.loc[mask, 'Close'] = (df.loc[mask, 'High'] + df.loc[mask, 'Low']) / 2
     return df.dropna(subset=['Close'])
+
+
+def _chart_json_to_df(d: dict, interval: str) -> pd.DataFrame:
+    """把 Yahoo v8 chart result dict 轉成 OHLCV DataFrame。
+
+    Bug A（spec 2026-05-22）兩項修正：
+      A1 — Yahoo 對 1wk/1mo 會在序列尾端多塞一根 spurious 即時棒
+            （timestamp == meta.regularMarketTime、值＝當日日K，非期間聚合），予以剔除。
+            1d 不受影響、Yahoo 未附時也不過砍。
+      A2 — 用 meta.gmtoffset 把 timestamp 校正為交易所當地日期，避免 UTC 伺服器
+            把週/月棒（期間起始 00:00）日期位移成前一日。
+    """
+    ts   = list(d['timestamp'])
+    q    = d['indicators']['quote'][0]
+    cols = {k: list(q[k]) for k in ('open', 'high', 'low', 'close', 'volume')}
+    meta = d.get('meta', {}) or {}
+
+    # ── A1：剔除 1wk/1mo 尾端 spurious 即時棒 ──
+    if interval in ('1wk', '1mo') and len(ts) >= 2:
+        rmt = meta.get('regularMarketTime')
+        if rmt is not None and ts[-1] == rmt:
+            ts = ts[:-1]
+            cols = {k: v[:-1] for k, v in cols.items()}
+
+    # ── A2：用 gmtoffset 校正成交易所當地日期 ──
+    gmtoffset = meta.get('gmtoffset', 0) or 0
+    idx = pd.to_datetime([
+        (datetime.fromtimestamp(t, tz=timezone.utc)
+         + timedelta(seconds=gmtoffset)).replace(tzinfo=None)
+        for t in ts
+    ])
+    df = pd.DataFrame({
+        'Open':   cols['open'],
+        'High':   cols['high'],
+        'Low':    cols['low'],
+        'Close':  cols['close'],
+        'Volume': cols['volume'],
+    }, index=idx)
+    df.index.name = 'Date'
+    return df
 
 
 def _yahoo_ohlcv(symbol: str, interval: str, range_: str) -> pd.DataFrame | None:
@@ -26,16 +66,7 @@ def _yahoo_ohlcv(symbol: str, interval: str, range_: str) -> pd.DataFrame | None
             timeout=15
         )
         d = r.json()['chart']['result'][0]
-        q = d['indicators']['quote'][0]
-        df = pd.DataFrame({
-            'Open':   q['open'],
-            'High':   q['high'],
-            'Low':    q['low'],
-            'Close':  q['close'],
-            'Volume': q['volume'],
-        }, index=pd.to_datetime([datetime.fromtimestamp(t) for t in d['timestamp']]))
-        df.index.name = 'Date'
-        return _patch_missing_close(df)
+        return _patch_missing_close(_chart_json_to_df(d, interval))
     except Exception as e:
         print(f"[data_enricher] 抓取失敗 {symbol} {interval}: {e}")
         return None
