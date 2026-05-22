@@ -10,7 +10,7 @@
 
 **所在週次：週8（AI 偏空校正 + 報表品質）**
 
-**狀態：HEAD = `052cf0d`（已 push origin/main）；本 commit 為 CLAUDE.md 快照更新**
+**狀態：HEAD = `665f691`（優化1）後接本 CLAUDE.md 快照 commit；全部已 push origin/main**
 
 ### 緣起
 用戶 5/22 dashboard K 線恢復後，提供 5/22 股價截圖 + 5/21 晚上報表 PDF（27頁15股）交叉核對。
@@ -36,27 +36,38 @@ spec：`docs/superpowers/specs/2026-05-22-kbar-spurious-bar-fix-design.md`
   本意 → 結構旗標可能對少數股翻動（屬修正非退化），deploy 後須重驗
 - ⚠️ Bug C/D 屬 prompt 行為改動，需燒 ~$0.6 重跑才驗得到
 
-### B. 待辦 — 優化1/2（用戶拍板「走 spec」，spec 已寫，待 plan→實作）
-- **優化1 持倉部位建議**：`docs/superpowers/specs/2026-05-22-holding-position-advice-design.md`
-  — `analyze_market_only` 加 `holding_ctx` 參數，holding 時加「六、持倉部位建議」段（虧損 neutral
-  持股也給續抱/減碼價位），零額外 AI 呼叫
-- **優化2 強勢突破追蹤**：`docs/superpowers/specs/2026-05-22-strong-breakout-tracking-design.md`
-  — 程式算「強勢突破狀態」，long 操作框架加條件式「追進」bullet（並陳「回測進場」）
-- 下次：兩 spec → `plan.md §二十八` → TDD 實作 → 一次 deploy 重跑驗證（結構閘重驗 + C/D + 優化1/2 一併）
+### B. 已完成 優化1/2（plan.md §二十八，commits `6ee6a68` `665f691`）
+| 優化 | 修法 | commit |
+|------|------|--------|
+| 優化2 強勢突破追蹤 | 純函式 `_strong_breakout_state`（現價>swing range_high 且量≥突破門檻）；long 操作框架條件分支：強勢突破成立→「追進」+「回測進場（保守）」並陳 | `6ee6a68` |
+| 優化1 持倉部位建議 | `analyze_market_only` 加 `is_holding` 旗標；持股時 static_block 輸出「六、持倉部位建議」（續抱/減碼判斷+錨點觸發價+持倉停損）；neutral 持股也給具體價位 | `665f691` |
 
-### ⚠️ Deploy 驗收（用戶可執行）
+spec：`docs/.../2026-05-22-holding-position-advice-design.md`（§七 記實作修正）、
+`...-strong-breakout-tracking-design.md`。plan：`docs/.../2026-05-22-holding-advice-breakout-tracking.md`。
+
+⚠️ **優化1 實作修正**：spec 原設計 `holding_ctx` 帶個人成本/損益注入 prompt，實作時發現
+`StockAnalysis` 跨用戶共用 → 會洩漏給其他看同股的用戶。已改 `is_holding` 純旗標，
+第六節為 user-agnostic 結構建議（不含個人損益數字）。
+
+### 驗證狀況（A+B 合計）
+- pytest **208/208 全綠**（190 + 11 kbar + 5 breakout + 2 holding）、py_compile 全綠
+- ⚠️ 結構閘 `compute_monthly_structure` 的 `[:-1]` 修 A 後自動對齊「排除進行中月」本意 → 結構旗標可能對少數股翻動（修正非退化）
+- ⚠️ C/D + 優化1/2 屬 prompt 行為改動，需燒 ~$0.6 重跑才驗得到
+
+### ⚠️ Deploy 驗收（用戶可執行，一次重跑驗全部）
 已 push → Render 自動部署。燒 ~$0.6 跑一鍵分析 + 出 PDF 驗：
 1. 結構閘旗標未退化（修 A 後視窗變動）
-2. 第二節 K 表：日K[-1] ≠ 週K[-1] ≠ 月K[-1]；月K 顯示完整月聚合量、日期為月份起始；
-   進行中週/月棒標「（進行中）」
+2. 第二節 K 表：日K[-1] ≠ 週K[-1] ≠ 月K[-1]；月K 完整月聚合量、日期為月份起始；進行中週/月棒標「（進行中）」
 3. pill：long 股顯示「箱底/箱頂/目標」，目標 pill = 內文 P&F 同值
 4. Bug C：多根型態 AI 敘述日期不再與標籤打架；Bug D：內文回落%=程式注入值
+5. 優化1：持股（晶心科/創惟）報表出現「六、持倉部位建議」3 bullet；neutral 持股也有續抱/減碼價位；觀察股無此節
+6. 優化2：強勢突破股 long 操作框架出現「強勢突破追蹤（追進）」+「回測進場（保守）」並陳
 
 ### Dashboard 迷你K（plan §二十七）
 用戶回報 5/22 dashboard K 線「又好了」→ 該快取漏洞暫無急迫性，仍列觀察。
 
 ### 回滾策略
-4 bug 純資料層/前端/prompt 加性修改，無 DB/migration；任一有問題 `git revert` 對應 commit。
+全部純資料層/前端/prompt 加性修改 + optional 參數，無 DB/migration；任一有問題 `git revert` 對應 commit。
 
 ---
 
