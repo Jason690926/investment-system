@@ -274,23 +274,45 @@ def phase_to_direction(phase) -> str:
     return 'neutral'
 
 
+def _quantize_price(x):
+    """C2 / Bug S2（2026-05-24）— 統一價格量化（對齊 TWSE tick）。
+
+    < 100 元 → 1dp（tick 0.1 元區間）
+    ≥ 100 元 → 0dp（tick 0.5/1 元區間）
+    None → None passthrough
+    """
+    if x is None:
+        return None
+    return round(float(x), 1) if x < 100 else round(float(x))
+
+
 def _dual_pnf(enriched_data: dict, price_f):
     """同時算多方（突破箱頂向上）與空方（跌破箱底向下）等幅量度目標。
     優先週K（lookback=12），無有效箱則退日K（lookback=20）。
-    回傳 (pnf_long, pnf_short, block_text)。"""
+    回傳 (pnf_long, pnf_short, block_text)。
+
+    C2 / Bug S2+S4（2026-05-24）：
+    - 量化（_quantize_price）後同步寫進 block，pill 與內文 source-of-truth 統一
+    - placeholder 注入「完整成品句」（含 P&F概念目標：...元（等幅量度）整句），
+      AI verbatim 引用即可，避免「[數值]元」格式指令導致 AI 巢狀代入 block label
+    """
     wk = enriched_data.get('weekly_bars', [])
     dk = enriched_data.get('daily_bars', [])
     pnf_long  = (calc_pnf_target(wk, lookback=12, current_price=price_f, direction='long')
                  or calc_pnf_target(dk, lookback=20, current_price=price_f, direction='long'))
     pnf_short = (calc_pnf_target(wk, lookback=12, current_price=price_f, direction='short')
                  or calc_pnf_target(dk, lookback=20, current_price=price_f, direction='short'))
-    long_str  = f'{pnf_long:.0f} 元（突破箱頂適用）'  if pnf_long  else '—（尚未接近突破點）'
-    short_str = f'{pnf_short:.0f} 元（跌破箱底適用）' if pnf_short else '—（尚未接近跌破點）'
+    pnf_long  = _quantize_price(pnf_long)
+    pnf_short = _quantize_price(pnf_short)
+    long_sentence  = (f'P&F概念目標：{pnf_long}元（等幅量度）'
+                      if pnf_long  is not None else 'P&F概念目標：—（尚未接近突破點）')
+    short_sentence = (f'P&F概念目標：{pnf_short}元（等幅量度）'
+                      if pnf_short is not None else 'P&F概念目標：—（尚未接近跌破點）')
     block = (
-        f"【P&F等幅量度目標·多方（程式計算，禁止更改）】{long_str}\n"
-        f"【P&F等幅量度目標·空方（程式計算，禁止更改）】{short_str}\n"
-        f"依你判定的 DIRECTION 引用對應目標：long→多方目標、short→空方目標、"
-        f"neutral→說明目前尚無明確方向目標。"
+        f"【P&F等幅量度·多方（程式計算成品句，verbatim 引用）】{long_sentence}\n"
+        f"【P&F等幅量度·空方（程式計算成品句，verbatim 引用）】{short_sentence}\n"
+        f"依你判定的 DIRECTION 取對應整句：long→多方句、short→空方句、"
+        f"neutral→「P&F概念目標：—（無方向，待結構確認）」。"
     )
     return pnf_long, pnf_short, block
 
@@ -792,7 +814,7 @@ DIRECTION: [long|short|neutral]
 - 本次方向：明確複述 DIRECTION（long 做多 / short 放空 / neutral 觀望）+ 依據
 - 三框架方向是否一致？有衝突時說明主從優先級與衝突程度
 
-⚠️ P&F概念目標已由程式以等幅量度法計算，依 DIRECTION 取股票資料區對應欄位（long→多方目標、short→空方目標、neutral→無方向目標），**禁止更改此數字**，格式：<span class="target-price">P&F概念目標：[數值]元（等幅量度）</span>"""
+⚠️ P&F概念目標已由程式產生完整成品句（dynamic_block【P&F等幅量度·多方/空方】），請依 DIRECTION 取對應整句**完整 verbatim 包入 <span class="target-price"></span>**（long→多方句、short→空方句、neutral→「P&F概念目標：—（無方向，待結構確認）」）；禁改寫、禁拆解、禁額外加「P&F概念目標：」前綴造成巢狀。"""
 
     dynamic_block = f"""## 股票資料
 
@@ -1135,7 +1157,7 @@ K棒型態含意速查（解讀參考，須結合特徵欄量能·位置）：
 - 本次方向：明確複述 DIRECTION（long 做多 / short 放空 / neutral 觀望）+ 一句依據
 - 三框架方向：一致順勢 / 分歧（分歧時說明主從優先與衝突程度）
 - 衝突點：[若有，說明哪兩個框架衝突及原因]
-- ⚠️ P&F概念目標已由程式以等幅量度法計算，依 DIRECTION 取股票資料區對應欄位（long→多方目標、short→空方目標、neutral→說明無方向目標），**禁止更改此數字**，格式：<span class="target-price">P&F概念目標：[數值]元（等幅量度）</span>
+- ⚠️ P&F概念目標已由程式產生完整成品句（dynamic_block【P&F等幅量度·多方/空方】），請依 DIRECTION 取對應整句**完整 verbatim 包入 <span class="target-price"></span>**（long→多方句、short→空方句、neutral→「P&F概念目標：—（無方向，待結構確認）」）；禁改寫、禁拆解、禁額外加「P&F概念目標：」前綴造成巢狀。
 <span class="key-point">融合核心結論（≤15字）</span>
 
 ### 五、操作框架（⚠️ 強制 schema，價位必須引用上方【波段操作錨點】鎖定值）
