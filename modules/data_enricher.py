@@ -56,6 +56,74 @@ def _chart_json_to_df(d: dict, interval: str) -> pd.DataFrame:
     return df
 
 
+def _synthesize_in_progress_bar(
+    daily_df: pd.DataFrame,
+    period_df: pd.DataFrame,
+    freq: str,  # 'W' 或 'M'
+    *,
+    today: pd.Timestamp | None = None,
+) -> pd.DataFrame:
+    """C1 / Bug S1+W1（2026-05-24）— 合成進行中週/月棒。
+
+    Yahoo 1wk/1mo 的「進行中」棒被 Bug A 剔除後（或從未提供），週/月末根 close
+    會 = 前一交易日日 close（少當日）。本函式用當日 daily K roll-up 合成「進行中」
+    週/月棒並覆寫/append 到 period_df 尾端。
+
+    Args:
+        daily_df:  日 K DataFrame（index=Date，含 Open/High/Low/Close/Volume）
+        period_df: 已抓到的週 K 或月 K DataFrame
+        freq:      'W'（週）或 'M'（月）
+        today:     基準日（測試覆寫用，預設 TW now）
+
+    Returns:
+        若當期內有 daily bars，回傳含合成棒的新 DataFrame；否則回傳 period_df 不變。
+
+    合成規則：
+        open   = 當期第一日 open
+        high   = max(highs)
+        low    = min(lows)
+        close  = 最新日 close
+        volume = sum(volumes)
+        Date   = 當期起始日（週=週一、月=該月 1 日）
+    """
+    if today is None:
+        today = pd.Timestamp.now(tz='Asia/Taipei').normalize().tz_localize(None)
+    else:
+        today = pd.Timestamp(today)
+
+    if freq == 'W':
+        period_start = today - pd.Timedelta(days=today.weekday())
+    elif freq == 'M':
+        period_start = today.replace(day=1)
+    else:
+        raise ValueError(f"freq 必須是 'W' 或 'M'，收到 {freq!r}")
+    period_start = period_start.normalize()
+
+    if daily_df is None or len(daily_df) == 0:
+        return period_df
+
+    in_period = daily_df[daily_df.index >= period_start]
+    if len(in_period) == 0:
+        return period_df
+
+    synth = {
+        'Open':   float(in_period['Open'].iloc[0]),
+        'High':   float(in_period['High'].max()),
+        'Low':    float(in_period['Low'].min()),
+        'Close':  float(in_period['Close'].iloc[-1]),
+        'Volume': float(in_period['Volume'].sum()),
+    }
+    synth_row = pd.DataFrame([synth], index=pd.DatetimeIndex([period_start], name='Date'))
+
+    if period_df is None or len(period_df) == 0:
+        return synth_row
+
+    if period_df.index[-1] == period_start:
+        out = period_df.iloc[:-1].copy()
+        return pd.concat([out, synth_row])
+    return pd.concat([period_df, synth_row])
+
+
 def _yahoo_ohlcv(symbol: str, interval: str, range_: str) -> pd.DataFrame | None:
     """從 Yahoo Finance v8 API 抓指定週期的 OHLCV"""
     try:
@@ -346,6 +414,12 @@ def get_full_stock_data(symbol: str) -> dict | None:
 
     if daily is None or len(daily) < 5:
         return None
+
+    # C1 / Bug S1+W1：用當日 daily K roll-up 合成進行中週/月棒（覆寫/append 到尾端）
+    if weekly is not None:
+        weekly = _synthesize_in_progress_bar(daily, weekly, 'W')
+    if monthly is not None:
+        monthly = _synthesize_in_progress_bar(daily, monthly, 'M')
 
     close = daily['Close']
     vol   = daily['Volume']
