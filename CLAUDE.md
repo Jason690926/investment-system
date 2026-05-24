@@ -6,7 +6,61 @@
 - **架構決策**：討論完方案後，先更新 `plan.md`，再開始寫程式
 - `plan.md` 只在需要查架構細節時才讀（節省 token）
 
-## 當前進度（2026-05-22 — 報表 cross-check：4 bug 修復 + 2 優化 spec）
+## 當前進度（2026-05-24 — 5/22 週報 cross-check：10 bug 修法 6 commit）
+
+**所在週次：週8（AI 偏空校正 + 報表品質）**
+
+**狀態：HEAD = `f7653c5`（C6）後接本 CLAUDE.md 快照 commit；本機綠尚未 push**
+
+### 緣起
+用戶提供 5/22 20:35（週五晚週末視窗）持股分析報告 PDF（27頁、14股 = 2 hold + 12 watch）完整核對。
+
+### A. 已完成 10 bug 修法（spec + plan + 6 TDD commits，pytest 208→239 全綠）
+
+| Bug | 嚴重度 | 修法 | commit |
+|-----|--------|------|--------|
+| **S1** 進行中週/月K close 滯後一天 | 🔴 | data_enricher 用當日 daily roll-up 合成進行中週/月棒（high=max, low=min, close=最新日 close, volume=sum），S1 修好 W1 也自動對齊 | `1518663` |
+| **W1** 大盤雙重收盤值 (42267 vs 41368) | 🔴 | 同 C1（weekly_bars[-1].close 自動 = price） | `1518663` |
+| **S2** 撼訊 pill 73.7 vs 內文 74 | 🟡 | _quantize_price (<100→1dp, ≥100→0dp) 統一寫進 block + result['target_pnf'] | `d65a813` |
+| **S4** P&F 重複/巢狀 (矽力/南亞科/華星光) | 🟡 | _dual_pnf placeholder 改注入完整成品句「P&F概念目標：73.7元（等幅量度）」AI verbatim 引用；prompt 鐵律改「禁加 P&F概念目標：前綴造成巢狀」 | `d65a813` |
+| **W2** 量能描述邏輯反 | 🟢 | analyze_weekly_taiwan_v2 從 weekly_bars 算 week_vol_zhang + 近 5 週均量，label 改「本週週量」/「近 5 週均量」 | `18a20fb` |
+| **W3** 收盤區間描述錯 | 🟢 | 加注入「近 3 週收盤區間」「近 3 週高低區間」+ 鐵律「不可混用」 | `18a20fb` |
+| **I2** INDUSTRY 句尾截斷 | 🟡 | get_industry_indicator_stocks max_tokens 800→1500 | `18a20fb` |
+| **S5** 結構已轉弱 + 再積累 UX 衝突 | 🟢 | gate_hint「結構已轉弱」加「相位限定派發/再派發/下跌/不明，禁標 積累/上漲/再積累」對稱規則 | `a02c563` |
+| **S3** 觀察股第六節洩漏 (12 檔 3 違規) | 🟡 | **雙層防護**：prompt 改「禁止輸出『六、』標題」+ 新 helper _strip_section_six post-process regex 砍 ### 六、至下一節/disclaimer/結尾 | `e0ab0a5` |
+| **I1** 週末 NEWS 缺失 | 🔴 | dashboard.js 週末分支加 /api/news/regenerate（與日報對稱）+ run_weekly_report 新 _resolve_industry_news：RSS 空降級 DB 近 7 天 DailyMarketSummary fallback + note 標明來源 | `f7653c5` |
+
+spec：`docs/superpowers/specs/2026-05-24-weekly-report-bugs-design.md`
+plan：`docs/superpowers/plans/2026-05-24-weekly-report-bugs.md` + plan.md §二十九
+
+### 驗證狀況
+- pytest **239/239 全綠**（原 208 + 31 新：S1+W1 7 + S2+S4 8 + W2+W3+I2 4 + S5 2 + S3 5 + I1 5）
+- py_compile（data_enricher / ai_analyzer_v2 / run_weekly_report）+ `node -c dashboard.js` 全綠
+- C1（資料層）影響面最大但純加性 + 邊界 case 涵蓋完整
+- C2-C5 純 prompt 改寫 / 加性 helper，無 DB migration
+- C6 跨檔（dashboard.js + run_weekly_report.py + ai_analyzer_v2.py）
+
+### ⚠️ Deploy 驗收（用戶可執行，一次重跑驗全部）
+已 push → Render auto-deploy。燒 ~$0.6 跑一鍵分析 + 出 PDF 驗：
+1. **S1+W1**：每股進行中週/月 close = 當日日 close（晶心科週/月 close 240，非 230）；大盤週報「本週收盤」與週 OHLC 一致
+2. **W2+W3**：大盤週報量能 label「本週週量」非「本週末量」；出現「近 3 週收盤區間 / 近 3 週高低區間」分明
+3. **I2**：INDUSTRY 區無句尾截斷
+4. **S2+S4**：撼訊 pill 與內文 P&F 同源；矽力/南亞科/華星光 P&F 段無重複/巢狀
+5. **S3**：觀察股全部零洩漏第六節（12 檔），若 AI 違規 server log 出現「[_strip_section_six] AI 違規輸出第六節...」warning
+6. **S5**：撼訊結構旗標「結構已轉弱」時 phase 不會標「再積累」（應改標 派發/不明）
+7. **I1**：INDUSTRY 區出現真實新聞或 fallback 標示「（新聞來源：YYYY-MM-DD DB 快取）」，無「本次無新聞資料」全推斷分支
+
+### 沿用未驗（持續，待用戶 deploy 後實機）
+- 5/22 §二十八 4 bug + 優化 1/2 仍待驗（CLAUDE.md 上次快照清單）
+- Dashboard 迷你 K 線快取漏洞（§二十七，5/22 用戶「又好了」，暫不修）
+- Bug D 大盤對比 TWII rate limit（`memory/bug-d-twii-rs-rate-limit.md`）
+
+### 回滾策略
+6 commits 純加性 + prompt 改寫，無 DB/migration；任一有問題 `git revert` 對應 commit。C1 對全 14 檔報表所有 K 表影響最大，若新合成棒導致 yfinance 數值不對 → 先 revert C1，下游修法仍生效。
+
+---
+
+## 過往進度（2026-05-22 — 報表 cross-check：4 bug 修復 + 2 優化 spec）
 
 **所在週次：週8（AI 偏空校正 + 報表品質）**
 
