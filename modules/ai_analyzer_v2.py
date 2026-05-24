@@ -1647,7 +1647,7 @@ def get_industry_indicator_stocks(news: list, global_summary: str) -> str:
 - 禁止在開頭加 # / ## / ### markdown 標題
 - 只輸出實際內容區塊（<div>、<p>、<ul>、<strong>、<span class="..."> 等）"""
 
-    return _clean_html_output(_generate(prompt, max_tokens=800))
+    return _clean_html_output(_generate(prompt, max_tokens=1500))
 
 
 # ── 週報：台股（簡化版）─────────────────────────────────────
@@ -1655,19 +1655,44 @@ def get_industry_indicator_stocks(news: list, global_summary: str) -> str:
 def analyze_weekly_taiwan_v2(twii_enriched: dict, global_weekly_summary: str, week_range: str) -> str:
     """
     週報版台股分析：走勢回顧 + K線量能 + 全球情勢影響 + 下週技術面展望
+
+    C3 / Bug W2+W3（2026-05-24）：
+    - 量能 label 改用「本週週量 = weekly_bars[-1].volume」+「近 5 週均量」（修前用日量/日均誤標）
+    - 加注入「近 3 週收盤區間」「近 3 週高低區間」雙欄分明（修前 AI 自由命名）
     """
     price = twii_enriched.get('price', '--')
     ma5   = twii_enriched.get('ma5',  '--')
     ma20  = twii_enriched.get('ma20', '--')
     ma60  = twii_enriched.get('ma60', '--')
     macd  = twii_enriched.get('macd') or {}
-    vol   = twii_enriched.get('volume_zhang', '--')
-    vol5  = twii_enriched.get('volume_5d_avg_zhang', '--')
 
-    _weekly_labels  = label_bars(twii_enriched.get('weekly_bars', []))
-    _monthly_labels = label_bars(twii_enriched.get('monthly_bars', []), timeframe='monthly')
-    weekly_text  = _fmt_bars(twii_enriched.get('weekly_bars',  []), "加權指數週K",  8, _weekly_labels)
-    monthly_text = _fmt_bars(twii_enriched.get('monthly_bars', []), "加權指數月K",  4, _monthly_labels)
+    weekly_bars  = twii_enriched.get('weekly_bars', []) or []
+    monthly_bars = twii_enriched.get('monthly_bars', []) or []
+
+    # C3 / W2：週級量能（取代日量/日均誤標）
+    week_vol_zhang = weekly_bars[-1].get('volume_zhang') if weekly_bars else None
+    if len(weekly_bars) >= 1:
+        last5 = weekly_bars[-5:]
+        vols = [b.get('volume_zhang') for b in last5 if b.get('volume_zhang') is not None]
+        week_5_avg_zhang = round(sum(vols) / len(vols), 1) if vols else None
+    else:
+        week_5_avg_zhang = None
+
+    # C3 / W3：收盤區間 / 高低區間（近 3 週）— 兩欄分明
+    last3 = weekly_bars[-3:] if len(weekly_bars) >= 1 else []
+    if last3:
+        closes = [b['close'] for b in last3]
+        highs  = [b['high']  for b in last3]
+        lows   = [b['low']   for b in last3]
+        wk_close_range = f"{min(closes)}~{max(closes)}"
+        wk_hl_range    = f"{min(lows)}~{max(highs)}"
+    else:
+        wk_close_range = wk_hl_range = '--'
+
+    _weekly_labels  = label_bars(weekly_bars)
+    _monthly_labels = label_bars(monthly_bars, timeframe='monthly')
+    weekly_text  = _fmt_bars(weekly_bars,  "加權指數週K",  8, _weekly_labels)
+    monthly_text = _fmt_bars(monthly_bars, "加權指數月K",  4, _monthly_labels)
 
     prompt = f"""你是台股週報技術分析師。分析週期：{week_range}
 
@@ -1675,7 +1700,9 @@ def analyze_weekly_taiwan_v2(twii_enriched: dict, global_weekly_summary: str, we
 本週收盤：{price} 點
 均線：MA5={ma5} | MA20={ma20} | MA60={ma60}
 MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={macd.get('histogram','--')}
-本週末量：{vol} 張 ｜ 5日均量 {vol5} 張
+本週週量：{week_vol_zhang} 張 ｜ 近 5 週均量：{week_5_avg_zhang} 張
+近 3 週收盤區間：{wk_close_range} 點
+近 3 週高低區間：{wk_hl_range} 點
 
 {weekly_text}
 
@@ -1691,7 +1718,8 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
 
 ### 二、週K型態與量能
 - 本週K棒型態 + 前2根週K的組合意涵
-- 本週量能 vs 5日均量：放量/縮量，代表市場意志
+- 本週週量（{week_vol_zhang} 張）vs 近 5 週均量（{week_5_avg_zhang} 張）：放量/縮量，代表市場意志
+- 收盤區間（{wk_close_range}）與高低區間（{wk_hl_range}）為「不同概念」— 引用須使用上方程式注入 label，禁混為一談
 - <span class="support-level">關鍵支撐：XX 點</span>
 - <span class="resistance-level">關鍵壓力：XX 點</span>
 
