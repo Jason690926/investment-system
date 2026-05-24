@@ -311,8 +311,13 @@ async function analyzeAll() {
   // 週末視窗：先射出週報背景產生，與個股並行
   // 非週末：背景並行重生 NEWS（plan §22 F-2/F-3）— 確保報表 NEWS = 一鍵
   // 分析當下前 12h 新聞，補回 14:30 cron 停用後沒有自動刷新 NEWS 的斷層
+  // C6 / Bug I1（2026-05-24）：週末視窗也觸發 NEWS regen（與日報路徑對稱），
+  // 補回週末路徑沒有 NEWS 刷新導致 INDUSTRY 全推斷的斷層。
   let newsPromise = null;
   if (isWeeklyWindow()) {
+    newsPromise = api('/api/news/regenerate', { method: 'POST' })
+      .then(() => toast('財經新聞已更新（近 12 小時）'))
+      .catch(() => toast('財經新聞更新失敗，週報將降級用 DB 快取', 'error'));
     try {
       await api('/api/weekly-report/generate', { method: 'POST' });
       toast('週末視窗：週報背景產生中（約 1-2 分鐘）');

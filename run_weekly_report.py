@@ -18,12 +18,42 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from modules.database import SessionLocal, init_db
-from modules.models import User, WeeklyReport
+from modules.models import User, WeeklyReport, DailyMarketSummary
 from modules.data_enricher import get_full_stock_data
 from modules.data_fetcher import get_global_markets, get_commodities, get_tw_news_rss
 from modules.ai_analyzer_v2 import analyze_weekly_taiwan_v2, get_industry_indicator_stocks
 
 TW = timezone(timedelta(hours=8))
+
+
+def _resolve_industry_news(rss_news: list, db, *, today: date | None = None) -> tuple[list, str | None]:
+    """C6 / Bug I1（2026-05-24）— RSS 抓空時降級到 DB 最近 NEWS 來源。
+
+    Args:
+        rss_news: get_tw_news_rss() 結果
+        db: SQLAlchemy session
+        today: 基準日（測試覆寫，預設今日）
+
+    Returns:
+        (news_list, fallback_note)
+        - RSS 有 → (rss_news, None)
+        - RSS 空 + DB 近 7 天有 DailyMarketSummary → ([], note 標明來源)
+        - RSS 空 + DB 也無 → ([], note 標明 RSS+DB 皆無)
+    """
+    if rss_news:
+        return rss_news, None
+    if today is None:
+        today = date.today()
+    cutoff = today - timedelta(days=7)
+    latest = (db.query(DailyMarketSummary)
+                .filter(DailyMarketSummary.summary_date >= cutoff)
+                .order_by(DailyMarketSummary.summary_date.desc())
+                .first())
+    if latest:
+        note = f'（新聞來源：{latest.summary_date.isoformat()} DB 快取，無 RSS 即時資料）'
+        return [], note
+    note = '（RSS 與 DB 快取皆無近期新聞，本次依全球市場背景推斷）'
+    return [], note
 
 
 def build_global_summary(global_markets: dict, commodities: dict) -> str:
@@ -103,10 +133,14 @@ def main():
         commodities = get_commodities()
         global_summary = build_global_summary(global_markets, commodities)
 
-        # 3. 財經新聞
+        # 3. 財經新聞（C6 / Bug I1：RSS 空時降級 DB fallback）
         print("[weekly] 抓取台股財經新聞（RSS）...")
-        news = get_tw_news_rss(n=15)
-        print(f"[weekly] 取得 {len(news)} 則新聞")
+        rss_news = get_tw_news_rss(n=15)
+        news, news_fallback_note = _resolve_industry_news(rss_news, db)
+        if news_fallback_note:
+            print(f"[weekly] ⚠ {news_fallback_note}")
+        else:
+            print(f"[weekly] 取得 {len(news)} 則 RSS 新聞")
 
         # 4. AI 分析
         print("[weekly] AI 大盤週報分析...")
@@ -114,7 +148,8 @@ def main():
         time.sleep(3)
 
         print("[weekly] AI 產業指標股分析...")
-        html_industry = get_industry_indicator_stocks(news, global_summary)
+        html_industry = get_industry_indicator_stocks(news, global_summary,
+                                                      news_fallback_note=news_fallback_note)
 
         # 5. 存 DB
         db.add(WeeklyReport(

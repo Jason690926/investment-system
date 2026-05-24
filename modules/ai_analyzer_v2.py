@@ -1639,17 +1639,27 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
 
 # ── 產業指標股（從新聞擷取）─────────────────────────────────
 
-def get_industry_indicator_stocks(news: list, global_summary: str) -> str:
+def get_industry_indicator_stocks(news: list, global_summary: str,
+                                   news_fallback_note: str | None = None) -> str:
     """
     分析財經新聞中被正面提及的產業，
     列出各產業的指標性股票（3-5支），不做 AI 分析推薦。
+
+    C6 / Bug I1（2026-05-24）：news_fallback_note 用於告知 AI 資料來源狀況：
+    - None：RSS 正常拿到 news（一般路徑）
+    - 字串：例「（新聞來源：2026-05-22 DB 快取，無 RSS 即時資料）」，
+      AI 須在報表開頭引用此 note 標明來源，並就 DB 快取/全球背景做有限度推斷
     """
     news_text = '\n'.join([f"- {n['title']}" for n in news[:15]]) or '無新聞資料'
+    fallback_block = (
+        f"\n\n⚠️ 資料來源告知（須在報表開頭引用此整句）：{news_fallback_note}\n"
+        if news_fallback_note else ''
+    )
 
     prompt = f"""你是台股產業分析師。請根據以下財經新聞，找出被正面提及的產業，並列出各產業的指標性股票。
 
 【財經新聞標題】
-{news_text}
+{news_text}{fallback_block}
 
 【全球市場背景】
 {global_summary[:400]}
