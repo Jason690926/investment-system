@@ -80,14 +80,14 @@ some content.
 ### 六、持倉部位建議
 （本次 dynamic_block 未出現【持倉提示】，本節跳過）
 
-end of report.'''
+重要提醒：以上為模擬分析，不構成實際投資建議。'''
 
     out = _strip_section_six(html, is_holding=False)
     assert 'dynamic_block' not in out
     assert '【持倉提示】' not in out
     assert '本節跳過' not in out
     assert '### 五、操作框架' in out
-    assert 'end of report' in out
+    assert '重要提醒：以上為模擬分析' in out  # disclaimer 保留
 
 
 # ============================================================

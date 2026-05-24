@@ -274,6 +274,33 @@ def phase_to_direction(phase) -> str:
     return 'neutral'
 
 
+def _strip_section_six(html: str, is_holding: bool) -> str:
+    """C5 / Bug S3（2026-05-24）— 觀察股第六節 post-process safety net。
+
+    純 prompt gate 對「觀察股不輸出第六節」遵守率不到 75%（5/22 報表 12 檔有 3 檔違規），
+    後端強制 regex 砍除作為兜底。
+
+    Args:
+        html: AI 輸出 HTML
+        is_holding: 是否持股。True → 原樣回傳；False → 砍 `### 六、` 後整段直到下一節或結尾
+
+    Returns:
+        post-processed html。砍除時 log 一行 warning（AI 違規）。
+    """
+    if is_holding:
+        return html
+    import re
+    # 邊界：下一節（七/八/九/十）/ 報表 disclaimer 標記 / 字串結尾
+    pattern = re.compile(
+        r'#{1,4}\s*六、.*?(?=#{1,4}\s*[七八九十]、|重要提醒|⚠️\s*以上為|⚠️\s*重要提醒|$)',
+        re.DOTALL,
+    )
+    new_html, n = pattern.subn('', html)
+    if n > 0:
+        print(f"[_strip_section_six] AI 違規輸出第六節（觀察股），已 post-process 砍除 {n} 段")
+    return new_html
+
+
 def _quantize_price(x):
     """C2 / Bug S2（2026-05-24）— 統一價格量化（對齊 TWSE tick）。
 
@@ -1194,8 +1221,9 @@ K棒型態含意速查（解讀參考，須結合特徵欄量能·位置）：
   <li>▶ 區間：[range_low]~[range_high] 元（區間內不操作）</li>
 </ul>
 
-### 六、持倉部位建議（僅當 dynamic_block 出現【持倉提示】時輸出，否則整節跳過）
-分析對象為「已持有此股」的投資人 — 無論 DIRECTION 為 long/short/neutral，都須輸出 3 個 bullet：
+### 六、持倉部位建議
+⚠️ 鐵律：dynamic_block **無**【持倉提示】時，**禁止輸出『六、』標題與其後任何內容**（包括「跳過」說明、空白標題、提示文字皆禁），第五節結束後直接接「重要提醒」結尾。違者後端會強制砍除。
+⚠️ dynamic_block **有**【持倉提示】時才輸出本節，分析對象為「已持有此股」的投資人 — 無論 DIRECTION 為 long/short/neutral，都須輸出 3 個 bullet：
 <ul>
   <li>▶ 整體判斷：（只選一個）續抱 / 減碼 / 出場 / 觀望持有 — 結合結構與相位說明理由（≤40字）</li>
   <li>▶ 部位處理觸發價：跌破 [失效/翻空價] 元減碼；站回/守穩 [續抱或反轉條件價] 元為續抱依據（價位引用上方錨點，禁另算）</li>
@@ -1243,8 +1271,11 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
         max_tokens=3000,
     )
 
+    # C5 / S3：觀察股第六節雙層防護 — post-process 砍 AI 違規輸出
+    _html = _inject_ktables(_clean_html_output(raw), enriched_data)
+    _html = _strip_section_six(_html, is_holding)
     result = {
-        'html':              _inject_ktables(_clean_html_output(raw), enriched_data),
+        'html':              _html,
         'risk_pct':          50,
         'support':           None,
         'resistance':        None,
