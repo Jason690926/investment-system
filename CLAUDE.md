@@ -10,7 +10,7 @@
 
 **所在週次：週8（AI 偏空校正 + 報表品質）**
 
-**狀態：HEAD = `f7653c5`（C6）後接本 CLAUDE.md 快照 commit；本機綠尚未 push**
+**狀態：HEAD = `83e3e99`（本快照 commit）；14 commits 已 push origin/main (`517d0e4..83e3e99`)，Render auto-deploy 觸發中**
 
 ### 緣起
 用戶提供 5/22 20:35（週五晚週末視窗）持股分析報告 PDF（27頁、14股 = 2 hold + 12 watch）完整核對。
