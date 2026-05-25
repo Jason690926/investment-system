@@ -6,7 +6,64 @@
 - **架構決策**：討論完方案後，先更新 `plan.md`，再開始寫程式
 - `plan.md` 只在需要查架構細節時才讀（節省 token）
 
-## 當前進度（2026-05-25 — 報表「建議動作」明確化：pill + 第五節結構化 6 commit）
+## 當前進度（2026-05-25 — §三十 + §三十一 已 deploy 驗收完成 ✅）
+
+**所在週次：週8（AI 偏空校正 + 報表品質）**
+
+**狀態：HEAD = `d8bf2a2`；§三十 5 commit + §三十一 6 commit 全部已 push origin/main + Render deploy + Supabase migration 完成 + 實機驗收通過**
+
+### 驗收依據
+用戶 5/25 20:37 重跑 14 支分析（migration 已先跑 `ALTER TABLE stock_analyses ADD COLUMN IF NOT EXISTS action_pill VARCHAR(32)` via Supabase SQL Editor）。PDF + dashboard 截圖 cross-check 確認修法生效。
+
+### ✅ 驗收結果（PDF 5/25 20:37 + dashboard）
+
+| 股票 | 5/22 原判斷 | 5/25 實際 | 5/25 報表方向 / pill | 驗收項目 |
+|------|------------|-----------|---------------------|---------|
+| **東捷 8064** | **short 派發** 空停 143.5 | 漲停 +9.81% 高 145.5 穿停損 | **多 / 上漲 / 🟢 追進 💪** | §三十 Bug A 結構閘漏洞（強勢上漲否決分支） |
+| **矽力 6415** | long「不宜追進」（量未到）| 漲停 +9.96% 618 | **多 / 上漲 / 🟢 追進 💪** | §三十 Bug B-B（條件 B 突破後續強勢）|
+| **瑞軒 2489** | long「不宜追進」（量未到）| 一字漲停 +9.92% 56.5 | **多 / 上漲 / 🟢 追進 💪** | §三十 Bug B-C（條件 C 一字漲停封死）|
+| **合晶 6182** | 強勢突破成立（條件 A）| 漲停 +9.87% | 強勢突破不退化 | §三十 條件 A 量價齊揚仍維持 |
+| **晶心科 6533**（HOLD）| 觀望持有 | +1.88% | **🟢 續抱** | §三十一 HOLD 決定樹 |
+| **大聯大 3702**（WATCH）| 等回測 | +4.66% | **🟡 等突破** | §三十一 WATCH long 過 entry_zone 但未強勢突破 |
+
+dashboard 4 chip 並排正常顯示：**方向 → 威科夫 → 風險 → 建議**（用戶 strong refresh 後確認）
+
+### ✅ 第五節「操作框架」程式渲染生效（C2）
+
+PDF 第五節改為結構化區塊：
+```
+五、操作框架
+─── 建議動作：🟢 續抱  進場區：224.50 ~ 242.25 元（觸發須量 ≥ 1,529 張）
+   停損：224.50 元 — 跌破即論點作廢  目標：266.00 元 ───
+```
+不再是 AI 自由發揮的「▸【強勢突破狀態】未成立 → 標準回測進場版」長文字。
+
+### Deploy 過程中踩到的坑（紀錄供後續經驗）
+1. **Migration 必須先跑**：第一次重 deploy 後直接按 PDF 出現 500（`UndefinedColumn: action_pill` SQLAlchemy ProgrammingError f405）— 因為 SQLAlchemy model 已含 action_pill 但 DB 沒，所有 SELECT 都失敗。
+2. **Render Free 沒 Shell**：用戶 Free 方案無法用 Render shell 跑 migration，改用 **Supabase Web SQL Editor** 直接 `ALTER TABLE ... ADD COLUMN IF NOT EXISTS ...`。
+3. **解決路徑**：之後若有 DB schema 變動，建議用 Supabase SQL Editor 為主路徑（Render Free user 通用）。
+
+### 沿用未驗 / 持續觀察
+- §二十九 10 bug 修法（5/24 push 17 commit `517d0e4..83e3e99`）在此次重跑也一併驗（沒退化）
+- §二十八 4 bug + 優化 1/2 仍未獨立驗（但都隨此次 deploy 上線）
+- Dashboard 迷你 K 線快取漏洞（§二十七，5/22 用戶「又好了」，暫不修）
+- Bug D 大盤對比 TWII rate limit（`memory/bug-d-twii-rs-rate-limit.md`）
+
+### 已知小瑕疵（不阻塞，未修）
+- 第五節結構化區塊的 `\n` 分行在 markdown→HTML 渲染後可能擠成一行（PDF 抽文字看到，視覺待 PDF 列印實際確認）— 若視覺不夠分明，下次優化 _render_operation_framework 改用 `<br>` 或 `<ul><li>`。
+
+### 回滾策略
+§三十 5 commit + §三十一 6 commit 全部純加性：
+- 結構閘 / 強勢突破純函式修法 → 邏輯增強，不破壞既有判斷
+- _decide_action / _render_operation_framework 純函式 + 整合層雙層防護
+- DB action_pill 欄位允許 NULL，向後相容
+- UI 新增 chip，原 chip 不動
+
+任一有問題 `git revert <commit>` 獨立回滾。
+
+---
+
+## 過往進度（2026-05-25 — 報表「建議動作」明確化：pill + 第五節結構化 6 commit）
 
 **所在週次：週8（AI 偏空校正 + 報表品質）**
 
