@@ -104,6 +104,16 @@ function phaseDirection(phase) {
   return { t: '觀望', c: 'wyckoff-neutral' };
 }
 
+// plan §三十一：建議動作 pill 依 emoji 開頭判 color class
+function actionClass(pill) {
+  if (!pill) return 'action-neutral';
+  if (pill.startsWith('🟢')) return 'action-bull';
+  if (pill.startsWith('🟡')) return 'action-amber';
+  if (pill.startsWith('🟠')) return 'action-warn';
+  if (pill.startsWith('🔴')) return 'action-bear';
+  return 'action-neutral';
+}
+
 function buildCard(s) {
   const riskPct    = s.risk_pct  ?? null;
   const wyckoff    = s.wyckoff_phase ?? '';
@@ -111,7 +121,7 @@ function buildCard(s) {
   const badgeText  = s.status === 'holding' ? '已持有' : '觀察中';
   const isAnalyzed = riskPct != null;
 
-  // Status row: 方向標籤 + wyckoff badge + risk inline chip（並排）
+  // Status row: 方向標籤 + wyckoff badge + risk inline chip + 建議動作 pill（並排）
   const _dir = wyckoff ? phaseDirection(wyckoff) : null;
   const dirChip = _dir
     ? `<span class="wyckoff-badge ${_dir.c}" title="結構方向">${_dir.t}</span>`
@@ -122,8 +132,13 @@ function buildCard(s) {
   const riskChip = riskPct != null
     ? `<span class="risk-inline ${riskClass(riskPct)}">RISK ${riskPct}%</span>`
     : (wyckoff ? '' : '<span class="risk-inline-empty">尚未分析</span>');
-  const statusRowHtml = (dirChip || wyckoffChip || riskChip)
-    ? `<div class="card-status-row">${dirChip}${wyckoffChip}${riskChip}</div>`
+  // plan §三十一：建議動作 pill（emoji 開頭判 color class）
+  const actionPill = s.action_pill || '';
+  const actionChip = actionPill
+    ? `<span class="action-pill ${actionClass(actionPill)}" title="建議動作">${actionPill}</span>`
+    : '';
+  const statusRowHtml = (dirChip || wyckoffChip || riskChip || actionChip)
+    ? `<div class="card-status-row">${dirChip}${wyckoffChip}${riskChip}${actionChip}</div>`
     : '';
 
   // Meta row：holding 顯示張數+成本；watching 顯示「觀察中」
