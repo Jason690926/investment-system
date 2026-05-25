@@ -29,8 +29,9 @@ def test_breakout_true_when_above_range_high_and_volume():
 
 
 def test_breakout_false_when_volume_insufficient():
-    # 量 1200 < 1000×1.5=1500
-    assert _strong_breakout_state(_ed(_swingy_daily(), vt=1200, v5=1000), price_f=999) is False
+    # 量 1200 < 1000×1.5=1500；price_f=32 剛過 range_high=31 但 < 31×1.05=32.55，
+    # 避免觸發新增的條件 B（plan §三十 Bug B）
+    assert _strong_breakout_state(_ed(_swingy_daily(), vt=1200, v5=1000), price_f=32) is False
 
 
 def test_breakout_false_when_price_below_range_high():
@@ -39,7 +40,8 @@ def test_breakout_false_when_price_below_range_high():
 
 def test_breakout_false_on_bad_input():
     assert _strong_breakout_state({'daily_bars': []}, price_f=None) is False
-    assert _strong_breakout_state(_ed(_swingy_daily(), vt=2000, v5='--'), price_f=999) is False
+    # price_f=32 同上避免觸發條件 B
+    assert _strong_breakout_state(_ed(_swingy_daily(), vt=2000, v5='--'), price_f=32) is False
 
 
 def test_long_template_has_breakout_branch():
@@ -47,3 +49,92 @@ def test_long_template_has_breakout_branch():
     src = inspect.getsource(analyze_market_only)
     assert '強勢突破追蹤' in src
     assert '回測進場（保守）' in src
+
+
+# ---------- 3 條件擇一（2026-05-25, plan §三十 Bug B）----------
+def _peak_at_20_daily(closes_35_to_39):
+    """構造 40 根含明確局部峰在 idx 20（high=31, close=30）的 daily bars。
+    呼叫端指定 closes[35:40] 的尾段 5 根 close 即可。
+    open=close-0.5, high=close+1, low=close-1, volume_zhang=1000（除非自定）。
+    """
+    closes = (list(range(10, 31)) +              # idx 0-20: 升到 30
+              [28, 25, 22, 20, 18, 20, 22] +      # idx 21-27: 跌再升
+              [25, 28, 32, 36, 40, 44, 48])       # idx 28-34: 續升
+    closes = closes + list(closes_35_to_39)       # idx 35-39: 自訂尾段
+    assert len(closes) == 40
+    return [{'date': f'2026-04-{(i % 28) + 1:02d}',
+             'open': c - 0.5, 'high': c + 1, 'low': c - 1,
+             'close': float(c), 'volume_zhang': 1000} for i, c in enumerate(closes)]
+
+
+def test_breakout_true_via_condition_b_continuous_high_close():
+    """條件 B：突破 range_high × 1.05 且 近 5 日 close 都 > range_high → True。
+    range_high=31，尾段 close=49,50,51,52,53 都 > 31，漲幅僅 1.92% 不觸發 C。"""
+    daily = _peak_at_20_daily([49, 50, 51, 52, 53])
+    ed = {'daily_bars': daily, 'volume_zhang': 500, 'volume_5d_avg_zhang': 1000}
+    # A: 500 < 1000×1.5=1500 不過；C: 漲幅 1.92% 不過 → 只靠 B 過
+    assert _strong_breakout_state(ed, price_f=53) is True
+
+
+def test_breakout_false_when_recent_close_dips_below_range_high():
+    """條件 B 失效：近 5 日有任一 close ≤ range_high → 不成立。"""
+    daily = _peak_at_20_daily([30, 50, 51, 52, 53])  # idx 35 close=30 ≤ range_high=31
+    ed = {'daily_bars': daily, 'volume_zhang': 500, 'volume_5d_avg_zhang': 1000}
+    # A 量不過、B 第 1 根 close=30 不站高、C 漲幅 1.92% 不過 → False
+    assert _strong_breakout_state(ed, price_f=53) is False
+
+
+def test_breakout_true_via_condition_c_one_word_limit_up():
+    """條件 C：一字漲停型（漲幅 ≥ 9% 且 close = high）→ True。
+    瑞軒 5/22 case：昨日 close=52，今日一字漲停 57.15（+9.9%）。
+    並把 idx 35 設成 30 讓 B 不過，isolate 出 C 單獨觸發。"""
+    daily = _peak_at_20_daily([30, 50, 51, 52, 53])  # 先佔位
+    # 改最後一根為一字漲停（昨日 52、今日 57.15）
+    daily[-1] = {
+        'date': '2026-04-28',
+        'open': 57.15, 'high': 57.15, 'low': 57.15, 'close': 57.15,
+        'volume_zhang': 500,
+    }
+    # 昨日 close 必須是 52 才能讓漲幅算出 +9.9%
+    daily[-2]['close'] = 52.0
+    ed = {'daily_bars': daily, 'volume_zhang': 500, 'volume_5d_avg_zhang': 1000}
+    # A: 量不過、B: idx 35 close=30 ≤ 31 不過、C: 漲幅 9.9% + close=high → 過
+    assert _strong_breakout_state(ed, price_f=57.15) is True
+
+
+def test_breakout_false_when_limit_up_but_below_range_high():
+    """漲停但價未過 range_high → 不誤判反彈。"""
+    # 構造高峰 ~70 接著跌到低位、最後一根一字漲停但仍 < range_high
+    closes = ([50, 55, 60, 65, 70, 68, 65, 62, 58, 55,        # idx 0-9: 升到 70
+               50, 45, 40, 35, 30, 25, 20, 16, 13, 10,         # idx 10-19: 跌到 10
+               9, 8, 7, 6, 5, 6, 7, 8, 9, 10,                   # idx 20-29: 谷底震盪
+               9, 8, 7, 6, 5, 6, 7, 8, 9])                       # idx 30-38
+    closes.append(closes[-1] * 1.099)                            # idx 39: 漲停（9.9%）
+    daily = [{'date': f'2026-04-{(i % 28) + 1:02d}',
+              'open': c - 0.5, 'high': c + 1, 'low': c - 1,
+              'close': float(c), 'volume_zhang': 1000} for i, c in enumerate(closes)]
+    # 最後一根改為一字漲停
+    last_close = closes[-1]
+    daily[-1] = {
+        'date': '2026-05-01',
+        'open': last_close, 'high': last_close, 'low': last_close,
+        'close': last_close, 'volume_zhang': 500,
+    }
+    ed = {'daily_bars': daily, 'volume_zhang': 500, 'volume_5d_avg_zhang': 1000}
+    # range_high ≈ 71（idx 4 峰），price=9.89 << 71 → 全條件不過
+    assert _strong_breakout_state(ed, price_f=last_close) is False
+
+
+def test_breakout_false_when_close_not_at_high():
+    """漲幅夠但 close < high × 0.99（有顯著上影）→ 條件 C 不成立。
+    並確保 B 條件也不過（idx 35 close=30 ≤ range_high）。"""
+    daily = _peak_at_20_daily([30, 50, 51, 52, 53])
+    daily[-2]['close'] = 52.0
+    daily[-1] = {
+        'date': '2026-04-28',
+        'open': 53, 'high': 66, 'low': 53, 'close': 57.15,   # 漲幅 9.9% 但 close/high=0.866
+        'volume_zhang': 500,
+    }
+    ed = {'daily_bars': daily, 'volume_zhang': 500, 'volume_5d_avg_zhang': 1000}
+    # A 量不過、B idx 35 close=30 不過、C close/high=0.866 < 0.99 不過 → False
+    assert _strong_breakout_state(ed, price_f=57.15) is False
