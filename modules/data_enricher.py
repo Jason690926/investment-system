@@ -202,15 +202,25 @@ def _consecutive_bear(bars: list) -> int:
 
 
 def _structure_flag(monthly_structure: str, price_vs_ma60: str,
-                    consecutive_bear: int) -> str:
-    """綜合三項 → 結構旗標。判定順序：已轉弱 > 未轉弱 > 轉折中。"""
+                    consecutive_bear: int,
+                    close_strict_up_3: bool = False,
+                    bull_count_6: int = 0) -> str:
+    """綜合 → 結構旗標。判定順序：已轉弱 > 未轉弱（含強勢上漲否決）> 轉折中。
+
+    強勢上漲否決（2026-05-25, plan §三十 Bug A）：即使 _hl_trend 因 lows 不
+    嚴格升回「轉折」，只要 close 嚴格上揚或近 6 月陽月數 ≥ 4，仍視為結構
+    未轉弱（涵蓋東捷型強勢起漲、中間有 1 月修正陰的案例）。
+    """
     if monthly_structure == '資料不足':
         return '資料不足'
     if (price_vs_ma60 == '在下' or monthly_structure == '跌'
             or consecutive_bear >= 2):
         return '結構已轉弱'
-    if (price_vs_ma60 == '在上' and monthly_structure in ('升', '橫')
-            and consecutive_bear <= 1):
+    if price_vs_ma60 == '在上' and consecutive_bear <= 1 and (
+        monthly_structure in ('升', '橫')
+        or close_strict_up_3
+        or bull_count_6 >= 4
+    ):
         return '結構未轉弱'
     return '結構轉折中'
 
@@ -230,6 +240,9 @@ def compute_monthly_structure(monthly_bars: list, weekly_bars: list,
         'structure_flag':          '資料不足',
         'weekly_momentum':         '資料不足',
         'weekly_hold_support':     False,
+        # 強勢上漲否決指標（2026-05-25, plan §三十 Bug A）
+        'monthly_close_strict_up_3': False,
+        'monthly_bull_count_6':      0,
     }
 
     # 月K：需 >= 4 根（3 已收盤 + 1 進行中）
@@ -241,6 +254,13 @@ def compute_monthly_structure(monthly_bars: list, weekly_bars: list,
         peak = max(closes) if closes else 0
         if peak > 0 and price is not None:
             result['drawdown_from_peak'] = round((peak - float(price)) / peak * 100, 1)
+        # 強勢上漲否決指標
+        if len(completed) >= 3:
+            c3 = closes[-3:]
+            result['monthly_close_strict_up_3'] = (c3[0] < c3[1] < c3[2])
+        result['monthly_bull_count_6'] = sum(
+            1 for b in completed[-6:] if float(b['close']) > float(b['open'])
+        )
 
     # 現價 vs 季線 MA60
     if price is not None and ma60:
@@ -262,6 +282,8 @@ def compute_monthly_structure(monthly_bars: list, weekly_bars: list,
         result['monthly_structure'],
         result['price_vs_ma60'],
         result['consecutive_bear_months'],
+        close_strict_up_3=result['monthly_close_strict_up_3'],
+        bull_count_6=result['monthly_bull_count_6'],
     )
     return result
 
