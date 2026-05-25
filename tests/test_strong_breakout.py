@@ -45,8 +45,10 @@ def test_breakout_false_on_bad_input():
 
 
 def test_long_template_has_breakout_branch():
-    """static_block long 模板須含「強勢突破追蹤」與「回測進場（保守）」兩分支。"""
-    src = inspect.getsource(analyze_market_only)
+    """強勢突破追蹤分支：plan §三十一 後改由 _render_operation_framework 渲染。
+    確認該函式 source 含「強勢突破追蹤」「回測進場（保守）」兩個字串。"""
+    from modules.ai_analyzer_v2 import _render_operation_framework
+    src = inspect.getsource(_render_operation_framework)
     assert '強勢突破追蹤' in src
     assert '回測進場（保守）' in src
 
