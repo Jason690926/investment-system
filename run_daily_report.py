@@ -138,6 +138,7 @@ def cache_market_analysis(db, symbol: str, name: str) -> bool:
         existing.target_price     = Decimal(str(_tgt)) if _tgt else None
         existing.stop_loss        = Decimal(str(_stp)) if _stp else None
         existing.wyckoff_phase    = result['wyckoff_phase']
+        existing.action_pill      = result.get('action_pill')  # plan §三十一
         existing.generated_at     = datetime.utcnow()
     else:
         db.add(StockAnalysis(
@@ -149,6 +150,7 @@ def cache_market_analysis(db, symbol: str, name: str) -> bool:
             target_price=Decimal(str(_tgt)) if _tgt else None,
             stop_loss=Decimal(str(_stp)) if _stp else None,
             wyckoff_phase=result['wyckoff_phase'],
+            action_pill=result.get('action_pill'),  # plan §三十一
         ))
     db.commit()
 

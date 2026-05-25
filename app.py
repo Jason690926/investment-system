@@ -183,6 +183,18 @@ def _render_one_block(s, a, q, idx, mode, personal_html=None):
     # 觀察版把風險合進 pills
     if mode == 'watching' and a and a.risk_pct is not None:
         pills.append(f'<span class="pill pill-amber-outline"><span class="lbl">風險 </span>{a.risk_pct}%</span>')
+    # plan §三十一：建議動作 pill（emoji 開頭判 PDF pill 配色）
+    action_pill = getattr(a, 'action_pill', None) if a else None
+    if action_pill:
+        if action_pill.startswith('🟢'):
+            _pcls = 'pill-bull'      # 進取（追進/加碼/續抱）→ 紅（台股漲色）
+        elif action_pill.startswith('🟡') or action_pill.startswith('🟠'):
+            _pcls = 'pill-amber'     # 等待/警戒
+        elif action_pill.startswith('🔴'):
+            _pcls = 'pill-support'   # 退出/論點作廢 → 綠（台股跌色）
+        else:
+            _pcls = 'pill-amber-outline'  # 觀望 → 中性 outline
+        pills.append(f'<span class="pill {_pcls}"><span class="lbl">建議 </span>{action_pill}</span>')
     pills_html = f'<div class="pills">{"".join(pills)}</div>' if pills else ''
 
     # 分析內容：markdown→HTML 後再剝 inline style
@@ -714,6 +726,7 @@ def api_analyze_stock(stock_id):
             existing.target_price     = Decimal(str(_tgt)) if _tgt else None
             existing.stop_loss        = Decimal(str(_stp)) if _stp else None
             existing.wyckoff_phase    = result['wyckoff_phase']
+            existing.action_pill      = result.get('action_pill')  # plan §三十一
             existing.generated_at     = _dt.datetime.utcnow()
         else:
             db.add(StockAnalysis(
@@ -724,6 +737,7 @@ def api_analyze_stock(stock_id):
                 target_price=Decimal(str(_tgt)) if _tgt else None,
                 stop_loss=Decimal(str(_stp)) if _stp else None,
                 wyckoff_phase=result['wyckoff_phase'],
+                action_pill=result.get('action_pill'),  # plan §三十一
             ))
         db.commit()
 

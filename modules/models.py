@@ -124,6 +124,7 @@ class StockAnalysis(Base):
     resistance_price= Column(Numeric(10, 2))
     target_price    = Column(Numeric(10, 2))  # P&F 概念目標價
     stop_loss       = Column(Numeric(10, 2))  # short 失效停損價（B1c，2026-05-20）
+    action_pill     = Column(String(32))      # 建議動作 pill（plan §三十一，2026-05-25）
     generated_at    = Column(DateTime, default=datetime.utcnow)
 
     __table_args__ = (

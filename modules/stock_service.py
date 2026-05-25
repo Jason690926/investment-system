@@ -55,6 +55,7 @@ def get_user_stocks(db: Session, user_id: int) -> list:
         if analysis:
             item['risk_pct']      = analysis.risk_pct
             item['wyckoff_phase'] = analysis.wyckoff_phase
+            item['action_pill']   = analysis.action_pill  # plan §三十一
         if s.status == 'holding' and s.trades:
             total = s.total_zhang
             item['total_zhang'] = float(total)
