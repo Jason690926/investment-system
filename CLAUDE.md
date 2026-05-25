@@ -6,7 +6,58 @@
 - **架構決策**：討論完方案後，先更新 `plan.md`，再開始寫程式
 - `plan.md` 只在需要查架構細節時才讀（節省 token）
 
-## 當前進度（2026-05-24 — 5/22 週報 cross-check：10 bug 修法 6 commit）
+## 當前進度（2026-05-25 — 5/22 報表 vs 5/25 收盤 cross-check：結構閘漏洞 + 強勢突破門檻 5 commit）
+
+**所在週次：週8（AI 偏空校正 + 報表品質）**
+
+**狀態：HEAD = `48b9d2f`；5 commits 已 push origin/main (`be1c6c9..48b9d2f`)，Render auto-deploy 觸發中**
+
+### 緣起
+用戶提供 5/22 20:35 持股分析報告 PDF（14 股）+ 5/25 週一收盤截圖。14 支 12 漲 2 跌（南亞科 -4.67% / 撼訊 -1.85%）、**4 支漲停（合晶 +9.87% / 東捷 +9.81% / 瑞軒 +9.92% / 矽力 +9.96%）**。Cross-check 抓出 2 個結構性問題（§二十九 10 bug 沿用未驗，故先濾掉同類議題）。
+
+### A. 已完成 2 bug 修法（spec + plan + 5 commit，pytest 239→249 全綠）
+
+| Bug | 嚴重度 | 修法 | commit |
+|-----|--------|------|--------|
+| **A 結構閘「結構轉折中」漏洞** | 🔴 | 東捷 8064 強勢上漲剛確立（4 月放量大陽 +64%）卻被誤判 short 派發、5/25 漲停 +9.81% 穿空停 143.5。根因：`_structure_flag` 三層 fall-through 未涵蓋強勢上漲。修法：`compute_monthly_structure` 加 `monthly_close_strict_up_3` + `monthly_bull_count_6` 兩欄位；`_structure_flag` 加 default 參數，「結構未轉弱」條件擴充為原 (升/橫+在上+連續陰≤1) **或** 強勢上漲否決 (在上+連續陰≤1+(close 嚴格上揚 ≥3 根 或 近 6 月陽月數 ≥4)) | `00c25db` |
+| **B 強勢突破門檻被自己拉高的均量打死** | 🟡 | 5/25 漲停 4 支只有合晶被認定強勢突破，矽力/瑞軒突破前高卻被打回「不宜追進」。根因：`volume_5d_avg_zhang` 含今日 → 前一根爆量拉高均值 → 越強勢越易在第 2 根失格（瑞軒 5/21 96K → 5/22 門檻 74.4K → 量 29K 不足）。修法：`_strong_breakout_state` 改 3 條件擇一即可：A 原量價齊揚 / B 突破後續強勢（>range_high×1.05 且 近 5 日 close 都站高，涵蓋矽力）/ C 一字漲停型（漲幅≥9% 且 close=high，涵蓋瑞軒 5/22 一字漲停封死） | `7e9aa7b` |
+
+spec：`docs/superpowers/specs/2026-05-25-structure-flag-and-breakout-fix-design.md`
+plan：`docs/superpowers/plans/2026-05-25-structure-flag-and-breakout-fix.md` + plan.md §三十
+
+### 驗證狀況
+- pytest **249/249 全綠**（239 原 + 10 新：Bug A 5 + Bug B 5）
+- py_compile（data_enricher + ai_analyzer_v2）全綠
+- 兩個函式都是純函式 + 新增邏輯分支（不刪原條件），向後相容
+- D1 / D2 各自純加性 + optional 參數，可獨立 `git revert`
+
+### ⚠️ Deploy 驗收（用戶可執行，~$0.6 重跑驗全部）
+已 push → Render auto-deploy。燒 ~$0.6 跑一鍵分析 + 出 PDF 驗：
+1. **Bug A**：東捷 8064 結構旗標 = 「結構未轉弱」（close 嚴格上揚 48.85→63.30→104.0），方向應改 long 而非 short
+2. **Bug B-B**：矽力 6415 = 「強勢突破成立」（562 > 456×1.05=478.8 且 5/18~5/22 5 日 close 都 > 456）
+3. **Bug B-C**：瑞軒 2489 = 「強勢突破成立」（51.4 > 48.85，漲幅 9.83%，close=high=51.4 一字漲停封死）
+4. **回歸不退化**：合晶 6182 仍維持「強勢突破成立」（量價齊揚 A 條件）
+5. **其他 10 支 long 股無誤判**（旗標與方向不變）
+
+### ⏭ 待做（§三十一，§三十驗收後再進）
+報表「建議動作」明確化（A+B+C 三項已對齊決定樹）：
+- A 頂部加「建議動作 pill」：追進/等回測/等突破/續抱/減碼/出場 等動作字
+- B 強勢突破狀態 emoji 💪 合進 A（不獨立 pill）
+- C 第五節「操作框架」改程式渲染（C2，類 K 表 `[[OPERATION_FRAMEWORK]]` placeholder 注入）
+- 預估 ~6 commit、改動 ~3 倍於 §三十（涉及 prompt + templates + CSS）
+
+### 沿用未驗（持續）
+- §二十九 10 bug 修法（5/24 push 過 17 commit `517d0e4..83e3e99`）+ §三十 5 commit 一併在這次 deploy 驗
+- 5/22 §二十八 4 bug + 優化 1/2 仍待驗
+- Dashboard 迷你 K 線快取漏洞（§二十七，5/22 用戶「又好了」，暫不修）
+- Bug D 大盤對比 TWII rate limit（`memory/bug-d-twii-rs-rate-limit.md`）
+
+### 回滾策略
+5 commit 純加性 + optional 參數，無 DB/migration；D1（結構閘）與 D2（強勢突破）各自獨立 `git revert`。若部分股因「結構轉折中」改判「結構未轉弱」造成 prompt 行為變動 → 先 revert D1，D2 仍生效。
+
+---
+
+## 過往進度（2026-05-24 — 5/22 週報 cross-check：10 bug 修法 6 commit）
 
 **所在週次：週8（AI 偏空校正 + 報表品質）**
 
