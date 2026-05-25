@@ -621,6 +621,185 @@ def _strong_breakout_state(enriched_data: dict, price_f) -> bool:
         return False
 
 
+def _decide_action(status: str, direction: str, structure_flag: str,
+                   swing_levels: dict | None, breakout: bool,
+                   price,
+                   cost_stop_loss=None) -> str:
+    """建議動作決定樹（2026-05-25, plan §三十一）。
+
+    根據 5 個輸入決定建議動作 pill 字串：
+    - status: 'hold' / 'watch'
+    - direction: 'long' / 'short' / 'neutral'
+    - structure_flag: '結構未轉弱' / '結構轉折中' / '結構已轉弱' / '資料不足'
+    - swing_levels: calc_swing_levels 回傳 dict（含 range_high/range_low/entry_zone/invalidation）
+    - breakout: _strong_breakout_state 結果
+    - price: 現價
+    - cost_stop_loss: HOLD 個人成本停損（可選，優先於 swing invalidation）
+
+    回傳 pill 字串格式：'<emoji> <動作字> [💪]'，例如 '🟢 追進 💪' / '🟡 等回測'。
+    """
+    if not direction or price is None:
+        return '⚪ 觀望'
+    try:
+        price_f = float(price)
+    except (TypeError, ValueError):
+        return '⚪ 觀望'
+
+    sl = swing_levels or {}
+    range_high = sl.get('range_high')
+    entry_zone = sl.get('entry_zone')
+    invalidation = sl.get('invalidation')
+
+    # ---------- HOLD ----------
+    if status == 'hold':
+        stop = cost_stop_loss if cost_stop_loss is not None else invalidation
+        if stop is not None:
+            try:
+                if price_f < float(stop):
+                    return '🔴 出場'
+            except (TypeError, ValueError):
+                pass
+        if structure_flag == '結構已轉弱':
+            return '🟠 減碼'
+        if breakout:
+            return '🟢 加碼 💪'
+        if entry_zone:
+            try:
+                zlo, zhi = float(entry_zone[0]), float(entry_zone[1])
+                if zlo <= price_f <= zhi:
+                    return '🟢 加碼'
+                if structure_flag == '結構轉折中':
+                    mid = (zlo + zhi) / 2
+                    if price_f < mid:
+                        return '🟡 觀望持有'
+            except (TypeError, ValueError, IndexError):
+                pass
+        return '🟢 續抱'
+
+    # ---------- WATCH ----------
+    if status == 'watch':
+        if direction == 'long':
+            if structure_flag == '結構已轉弱':
+                return '🔴 不宜進'
+            if breakout:
+                return '🟢 追進 💪'
+            if range_high is not None:
+                try:
+                    if price_f > float(range_high):
+                        return '🟡 等突破'
+                except (TypeError, ValueError):
+                    pass
+            if entry_zone:
+                try:
+                    zlo, zhi = float(entry_zone[0]), float(entry_zone[1])
+                    if zlo <= price_f <= zhi:
+                        return '🟢 進場區可佈'
+                    if price_f > zhi:
+                        return '🟡 等回測'
+                except (TypeError, ValueError, IndexError):
+                    pass
+            return '⚪ 觀望'
+
+        if direction == 'short':
+            if structure_flag == '結構未轉弱':
+                return '⚪ 觀望（不宜空）'
+            if invalidation is not None:
+                try:
+                    if price_f > float(invalidation):
+                        return '🔴 論點作廢'
+                except (TypeError, ValueError):
+                    pass
+            if entry_zone:
+                try:
+                    zlo, zhi = float(entry_zone[0]), float(entry_zone[1])
+                    if zlo <= price_f <= zhi:
+                        return '🔴 分批佈空'
+                    if price_f < zlo:
+                        return '🟡 等反彈佈空'
+                except (TypeError, ValueError, IndexError):
+                    pass
+            return '⚪ 觀望'
+
+        # WATCH neutral
+        return '⚪ 觀望'
+
+    return '⚪ 觀望'
+
+
+def _render_operation_framework(action_pill: str, direction: str,
+                                 swing_levels: dict | None, breakout: bool,
+                                 vol_threshold_zhang=None) -> str:
+    """第五節「操作框架」結構化渲染（2026-05-25, plan §三十一）。
+
+    回傳 markdown / plain-text 段落（呼叫端注入 [[OPERATION_FRAMEWORK]] placeholder）。
+    與 _decide_action 同源，確保 pill 與內文 100% 一致。
+    """
+    sl = swing_levels or {}
+    rh = sl.get('range_high')
+    ez = sl.get('entry_zone')
+    tg = sl.get('target')
+    inv = sl.get('invalidation')
+
+    def _fmt(v):
+        if v is None:
+            return '—'
+        try:
+            return f"{float(v):.2f}"
+        except (TypeError, ValueError):
+            return '—'
+
+    def _fmt_zone(z):
+        if not z:
+            return '—'
+        try:
+            return f"{float(z[0]):.2f} ~ {float(z[1]):.2f}"
+        except (TypeError, ValueError, IndexError):
+            return '—'
+
+    if direction == 'long':
+        if breakout:
+            return (
+                "五、操作框架\n"
+                "─────────────────────\n"
+                f"建議動作：{action_pill}\n"
+                f"強勢突破追蹤：現價 > 前高 {_fmt(rh)} 元、量達門檻 → 可順勢追進\n"
+                f"  追進停損：{_fmt(rh)} 元（跌回前高即假突破）\n"
+                f"回測進場（保守）：{_fmt_zone(ez)} 元\n"
+                f"停損：{_fmt(inv)} 元 — 跌破即論點作廢\n"
+                f"目標：{_fmt(tg)} 元\n"
+                "─────────────────────"
+            )
+        vol_str = (f"（觸發須量 ≥ {int(vol_threshold_zhang):,} 張）"
+                   if vol_threshold_zhang else "")
+        return (
+            "─────────────────────\n"
+            f"建議動作：{action_pill}\n"
+            f"進場區：{_fmt_zone(ez)} 元{vol_str}\n"
+            f"停損：{_fmt(inv)} 元 — 跌破即論點作廢\n"
+            f"目標：{_fmt(tg)} 元\n"
+            "─────────────────────"
+        )
+
+    if direction == 'short':
+        return (
+            "─────────────────────\n"
+            f"建議動作：{action_pill}\n"
+            f"空進：{_fmt_zone(ez)} 元（回測壓力佈空）\n"
+            f"空停：{_fmt(inv)} 元 — 站回突破即論點作廢\n"
+            f"空標：{_fmt(tg)} 元（P&F 下行目標）\n"
+            "─────────────────────"
+        )
+
+    # neutral
+    return (
+        "五、操作框架\n"
+        "─────────────────────\n"
+        f"建議動作：{action_pill}\n"
+        "（neutral 觀望中，無進場 / 出場觸發價）\n"
+        "─────────────────────"
+    )
+
+
 def _structure_block(enriched_data: dict, price_f) -> str:
     """【月線結構客觀事實】prompt 區塊（結構閘）。
 
@@ -743,25 +922,10 @@ def analyze_stock_three_masters(
         or '暫無相關新聞'
     )
 
-    # 持倉狀態對應的建議區塊
-    if status == 'holding':
-        action_section = f"""### 五、波段操作框架（2週-1個月+，依 DIRECTION）
-⚠️ 所有價位必須引用上方【波段操作錨點】鎖定值，禁止自行估算或改數字。
-- 波段論點：一句話說明本波段做多/做空/觀望的核心理由（≤30字）
-- long：續抱/加碼/減碼擇一；short：減碼/出場/反手放空擇一（依方向）
-- <span class="stop-loss">▶ 失效/停損價：[錨點 invalidation] 元 — 跌破(long)/站回(short)即論點作廢，執行不猶豫</span>
-- ▶ 加碼觸發：突破[錨點 add_trigger](long) / 跌破[錨點 add_trigger](short) 且量 > {_vol_breakout} 張（程式計算，禁止更改）
-- ▶ 波段目標：[錨點 target] 元（等幅量度，可能為 — 表示尚無）
-- neutral：明講無波段方向，[range_low]~[range_high] 區間內不操作，僅標突破/跌破轉向條件"""
-    else:
-        action_section = f"""### 五、波段操作框架（2週-1個月+，依 DIRECTION）
-⚠️ 所有價位必須引用上方【波段操作錨點】鎖定值，禁止自行估算或改數字。
-- 波段論點：一句話說明本波段做多/做空/觀望的核心理由（≤30字）
-- ▶ 進場區：[錨點 entry_zone] 元；觸發須量 > {_vol_breakout} 張（程式計算，禁止更改）
-- <span class="stop-loss">▶ 失效/停損價：[錨點 invalidation] 元 — 跌破(long)/站回(short)即論點作廢</span>
-- ▶ 加碼觸發：[錨點 add_trigger] 元　▶ 波段目標：[錨點 target] 元
-- long/short：說明目前是否到進場區及理由（波段角度，非當日）
-- neutral：明講無波段方向，[range_low]~[range_high] 區間內不操作，僅標突破[range_high]+量轉多 / 跌破[range_low]+量轉空"""
+    # 第五節「波段操作框架」改程式渲染（plan §三十一）→ AI 輸出 placeholder，post-process 替換
+    action_section = """### 五、波段操作框架（2週-1個月+）
+[[OPERATION_FRAMEWORK]]
+⚠️ 此節由程式直接生成結構化區塊（含建議動作 / 進場區 / 停損 / 目標 / 強勢突破追蹤），請在此處逐字輸出 `[[OPERATION_FRAMEWORK]]` 作為佔位符，禁止自行撰寫此節內容。"""
 
     static_block = f"""你是融合三大宗師智慧的台股分析師。分析日期：{today}
 
@@ -945,6 +1109,51 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
 
     # B 組 2026-05-20：依方向注入 swing anchor（覆寫 DB 寫入語意，AI tag 當 fallback）
     result.update(_resolve_swing_anchors(enriched_data, _price_f, result['direction']))
+
+    # plan §三十一：建議動作 pill + 第五節結構化（程式同源渲染，覆寫 placeholder）
+    try:
+        from modules.candlestick import calc_swing_levels as _csl
+        from modules.data_enricher import compute_monthly_structure as _cms_fn
+        _ms = _cms_fn(
+            enriched_data.get('monthly_bars', []),
+            enriched_data.get('weekly_bars', []),
+            _price_f,
+            enriched_data.get('ma60'),
+        )
+        _sl = _csl(enriched_data.get('daily_bars', []), result['direction'], _price_f)
+        _breakout = _strong_breakout_state(enriched_data, _price_f)
+        _action = _decide_action(
+            status=('hold' if status == 'holding' else 'watch'),
+            direction=result['direction'],
+            structure_flag=_ms.get('structure_flag', '資料不足'),
+            swing_levels=_sl,
+            breakout=_breakout,
+            price=_price_f,
+            cost_stop_loss=None,
+        )
+        _vol_thr = None
+        try:
+            _v5 = enriched_data.get('volume_5d_avg_zhang')
+            if _v5 not in (None, '--', 0):
+                _vol_thr = int(float(_v5) * 1.5)
+        except (TypeError, ValueError):
+            pass
+        _op = _render_operation_framework(
+            action_pill=_action,
+            direction=result['direction'],
+            swing_levels=_sl,
+            breakout=_breakout,
+            vol_threshold_zhang=_vol_thr,
+        )
+        result['action_pill'] = _action
+        _html = result.get('html', '') or ''
+        if '[[OPERATION_FRAMEWORK]]' in _html:
+            result['html'] = _html.replace('[[OPERATION_FRAMEWORK]]', _op)
+        else:
+            # 雙層防護：AI 沒輸出 placeholder → append 程式區塊到 html 結尾
+            result['html'] = _html + '\n\n' + _op
+    except Exception as e:
+        print(f"[ai_analyzer_v2] §三十一 action_pill/framework post-process 失敗: {e}")
 
     return result
 
@@ -1213,38 +1422,9 @@ K棒型態含意速查（解讀參考，須結合特徵欄量能·位置）：
 - ⚠️ P&F概念目標已由程式產生完整成品句（dynamic_block【P&F等幅量度·多方/空方】），請依 DIRECTION 取對應整句**完整 verbatim 包入 <span class="target-price"></span>**（long→多方句、short→空方句、neutral→「P&F概念目標：—（無方向，待結構確認）」）；禁改寫、禁拆解、禁額外加「P&F概念目標：」前綴造成巢狀。
 <span class="key-point">融合核心結論（≤15字）</span>
 
-### 五、操作框架（⚠️ 強制 schema，價位必須引用上方【波段操作錨點】鎖定值）
-依 DIRECTION 必須輸出 3 個結構化 bullet（long/short/neutral 三組擇一輸出）：
-
-⚠️ 鐵律：long 用「進場/停損/目標」、short 用「空進/空停/空標」、neutral 用「翻多條件/翻空條件/區間」術語，禁混用或省略 bullet。
-
-【long 模板】（依【波段操作錨點】鎖定值；依 dynamic_block【強勢突破狀態】二選一）
-▸ 若【強勢突破狀態】未成立 → 輸出標準回測進場版：
-<ul>
-  <li>▶ 進場價：[entry_zone 區間] 元（觸發須量 ≥ 突破量門檻）</li>
-  <li><span class="stop-loss">▶ 停損：[invalidation] 元 — 跌破即論點作廢</span></li>
-  <li>▶ 目標：<span class="target-price">[target] 元（P&F 等幅量度）</span></li>
-</ul>
-▸ 若【強勢突破狀態】成立 → 改輸出強勢追進版（追進與回測並陳）：
-<ul>
-  <li>▶ 強勢突破追蹤：現價已放量站上前高 [range_high] 元，可順勢追進；追進停損＝[range_high] 元（跌回前高即假突破）</li>
-  <li>▶ 回測進場（保守）：[entry_zone 區間] 元 — 不追高者待回測此區再進</li>
-  <li>▶ 目標：<span class="target-price">[target] 元（P&F 等幅量度）</span></li>
-</ul>
-
-【short 模板】（依【波段操作錨點】鎖定值）
-<ul>
-  <li>▶ 空進：[range_high 附近] 元（回測壓力，量 ≥ 跌破量門檻 = 賣壓確認）</li>
-  <li><span class="stop-loss">▶ 空停：[range_high × 1.03 ≈ 前高之上] 元 — 站回即論點作廢</span></li>
-  <li>▶ 空標：<span class="target-price">[target] 元（P&F 等幅量度下行）</span></li>
-</ul>
-
-【neutral 模板】
-<ul>
-  <li>▶ 翻多條件：突破 [range_high] 元 + 量 ≥ 突破量門檻</li>
-  <li>▶ 翻空條件：跌破 [range_low] 元 + 量 ≥ 跌破量門檻</li>
-  <li>▶ 區間：[range_low]~[range_high] 元（區間內不操作）</li>
-</ul>
+### 五、操作框架
+[[OPERATION_FRAMEWORK]]
+⚠️ 此節由程式直接生成結構化區塊（含建議動作 / 進場區 / 停損 / 目標 / 強勢突破追蹤 / 空方框架），請在此處逐字輸出 `[[OPERATION_FRAMEWORK]]` 作為佔位符，禁止自行撰寫此節內容。
 
 ### 六、持倉部位建議
 ⚠️ 鐵律：dynamic_block **無**【持倉提示】時，**禁止輸出『六、』標題與其後任何內容**（包括「跳過」說明、空白標題、提示文字皆禁），第五節結束後直接接「重要提醒」結尾。違者後端會強制砍除。
@@ -1330,6 +1510,50 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
 
     # B 組 2026-05-20：依方向注入 swing anchor（覆寫 DB 寫入語意，AI tag 當 fallback）
     result.update(_resolve_swing_anchors(enriched_data, _price_f, result['direction']))
+
+    # plan §三十一：建議動作 pill + 第五節結構化（程式同源渲染，覆寫 placeholder）
+    try:
+        from modules.candlestick import calc_swing_levels as _csl
+        from modules.data_enricher import compute_monthly_structure as _cms_fn
+        _ms = _cms_fn(
+            enriched_data.get('monthly_bars', []),
+            enriched_data.get('weekly_bars', []),
+            _price_f,
+            enriched_data.get('ma60'),
+        )
+        _sl = _csl(enriched_data.get('daily_bars', []), result['direction'], _price_f)
+        _breakout = _strong_breakout_state(enriched_data, _price_f)
+        _action = _decide_action(
+            status=('hold' if is_holding else 'watch'),
+            direction=result['direction'],
+            structure_flag=_ms.get('structure_flag', '資料不足'),
+            swing_levels=_sl,
+            breakout=_breakout,
+            price=_price_f,
+            cost_stop_loss=None,
+        )
+        _vol_thr = None
+        try:
+            _v5 = enriched_data.get('volume_5d_avg_zhang')
+            if _v5 not in (None, '--', 0):
+                _vol_thr = int(float(_v5) * 1.5)
+        except (TypeError, ValueError):
+            pass
+        _op = _render_operation_framework(
+            action_pill=_action,
+            direction=result['direction'],
+            swing_levels=_sl,
+            breakout=_breakout,
+            vol_threshold_zhang=_vol_thr,
+        )
+        result['action_pill'] = _action
+        _html2 = result.get('html', '') or ''
+        if '[[OPERATION_FRAMEWORK]]' in _html2:
+            result['html'] = _html2.replace('[[OPERATION_FRAMEWORK]]', _op)
+        else:
+            result['html'] = _html2 + '\n\n' + _op
+    except Exception as e:
+        print(f"[ai_analyzer_v2] §三十一 action_pill/framework post-process 失敗: {e}")
 
     return result
 
