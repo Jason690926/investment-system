@@ -577,22 +577,47 @@ def _oversold_warning_block(daily_bars: list) -> str:
 
 
 def _strong_breakout_state(enriched_data: dict, price_f) -> bool:
-    """優化2（spec 2026-05-22）：現價放量站上 swing range_high（前高）→ 強勢突破，
-    解鎖 long 操作框架的「追進」選項。
-    成立條件：現價 > range_high 且 今日量 ≥ 5日均量 × 1.5（=突破量門檻）。"""
+    """三條件擇一即視為強勢突破（2026-05-25, plan §三十 Bug B；原 spec 2026-05-22）：
+
+    A. 量價齊揚（原條件）：現價 > range_high 且 今日量 ≥ 5日均×1.5
+    B. 突破後續強勢：現價 > range_high × 1.05 且 近 5 日收盤都 > range_high
+    C. 一字漲停型：現價 > range_high 且 今日漲幅 ≥ 9% 且 close ≥ high × 0.99
+    """
     if price_f is None:
         return False
     from modules.candlestick import calc_swing_levels
     sl = calc_swing_levels(enriched_data.get('daily_bars', []), 'long', price_f)
     if not sl or sl.get('range_high') is None:
         return False
-    vt = enriched_data.get('volume_zhang')
-    v5 = enriched_data.get('volume_5d_avg_zhang')
     try:
-        return (float(price_f) > float(sl['range_high'])
-                and vt is not None and v5 not in (None, '--', 0)
-                and float(vt) >= float(v5) * 1.5)
-    except (TypeError, ValueError):
+        range_high = float(sl['range_high'])
+        price = float(price_f)
+        daily_bars = enriched_data.get('daily_bars', [])
+
+        # A. 量價齊揚
+        vt = enriched_data.get('volume_zhang')
+        v5 = enriched_data.get('volume_5d_avg_zhang')
+        if (price > range_high and vt is not None and v5 not in (None, '--', 0)
+                and float(vt) >= float(v5) * 1.5):
+            return True
+
+        # B. 突破後續強勢（近 5 日 close 都站高 + 突破≥5%）
+        if price > range_high * 1.05 and len(daily_bars) >= 5:
+            recent_5_closes = [float(b['close']) for b in daily_bars[-5:]]
+            if all(c > range_high for c in recent_5_closes):
+                return True
+
+        # C. 一字漲停型（漲幅≥9% + close 接近 high）
+        if price > range_high and len(daily_bars) >= 2:
+            today_close = float(daily_bars[-1]['close'])
+            today_high = float(daily_bars[-1]['high'])
+            yest_close = float(daily_bars[-2]['close'])
+            if (yest_close > 0
+                    and (today_close - yest_close) / yest_close >= 0.09
+                    and today_close >= today_high * 0.99):
+                return True
+        return False
+    except (TypeError, ValueError, KeyError, ZeroDivisionError):
         return False
 
 
