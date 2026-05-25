@@ -6,7 +6,79 @@
 - **架構決策**：討論完方案後，先更新 `plan.md`，再開始寫程式
 - `plan.md` 只在需要查架構細節時才讀（節省 token）
 
-## 當前進度（2026-05-25 — 5/22 報表 vs 5/25 收盤 cross-check：結構閘漏洞 + 強勢突破門檻 5 commit）
+## 當前進度（2026-05-25 — 報表「建議動作」明確化：pill + 第五節結構化 6 commit）
+
+**所在週次：週8（AI 偏空校正 + 報表品質）**
+
+**狀態：HEAD = `6e4b31f`；6 commits 已 push origin/main (`23198fd..6e4b31f`)，Render auto-deploy 觸發中**
+
+### 緣起
+§三十 修法完成後用戶指出「報表的建議字（動作）夠用比較明確方式標記出來嗎？」目前散落在第五節長段落、第六節（HOLD only）裡，沒有單一字眼可瞄一眼。決議 A+B+C 一起做。
+
+### A. 修法總覽（6 commit，TDD 流程，pytest 249→269 全綠）
+
+| Commit | 內容 | 檔案 |
+|--------|------|------|
+| `23198fd` test(action) | _decide_action 14 TDD 決定樹（WATCH long 5 + WATCH short 3 + HOLD 4 + 邊界 2）| tests/test_decide_action.py |
+| `e22f079` test(framework) | _render_operation_framework 6 TDD + test_strong_breakout 修正 | tests/test_operation_framework.py + test_strong_breakout.py |
+| `584270c` feat(action+framework) | **核心**：_decide_action + _render_operation_framework 純函式 + analyze_market_only / three_masters 整合 [[OPERATION_FRAMEWORK]] placeholder + post-process（雙層防護）| modules/ai_analyzer_v2.py |
+| `b19b3a8` feat(db) | StockAnalysis 加 action_pill String(32) + migration（IF NOT EXISTS）+ app.py/run_daily_report.py 寫入端 + stock_service.py 讀取端 + app.py PDF pill | modules/models.py + migrate_add_action_pill.py + app.py + run_daily_report.py + modules/stock_service.py |
+| `079fa91` feat(ui) | dashboard.js buildCard 加 actionChip（方向→威科夫→風險→建議 4 chip 並排）+ actionClass helper + app.css 5 色 .action-pill 樣式 | static/js/dashboard.js + static/css/app.css |
+| `6e4b31f` docs | plan.md §三十一 + spec + impl plan | plan.md + docs/superpowers/{specs,plans}/ |
+
+### B. 建議動作 pill 字典（12 種 + 邊界）
+
+| 情境 | pill 字 |
+|------|---------|
+| WATCH long: 結構已轉弱 | 🔴 不宜進 |
+| WATCH long: 強勢突破成立 | 🟢 追進 💪 |
+| WATCH long: 過 range_high 但量未到 | 🟡 等突破 |
+| WATCH long: 在 entry_zone 內 | 🟢 進場區可佈 |
+| WATCH long: 在 entry_zone 上方 | 🟡 等回測 |
+| WATCH short: 結構未轉弱 | ⚪ 觀望（不宜空）|
+| WATCH short: 過空停 | 🔴 論點作廢 |
+| WATCH short: 在空進區 | 🔴 分批佈空 |
+| WATCH short: 空進區下方 | 🟡 等反彈佈空 |
+| HOLD: 跌破成本停損 | 🔴 出場 |
+| HOLD: 結構已轉弱 | 🟠 減碼 |
+| HOLD: 強勢突破成立 | 🟢 加碼 💪 |
+| HOLD: 一般多頭持倉 | 🟢 續抱 |
+
+### 驗證狀況
+- pytest **269/269 全綠**（249 原 + 14 decide_action + 6 framework；含 1 test 修正避免假退化）
+- py_compile（ai_analyzer_v2 / models / stock_service / app.py / run_daily_report / migrate）+ `node -c dashboard.js` 全綠
+- 純函式設計 → testable，整合層有雙層防護（placeholder 不存在時 append fallback）
+- 純加性：新 DB 欄位 IF NOT EXISTS，向後相容；既有報表生成流程不退化
+
+### ⚠️ Deploy 驗收（需手動跑 migration + ~$0.6 重跑報表）
+1. **Render shell 跑 migration**：`python migrate_add_action_pill.py`
+2. **Dashboard 燒 ~$0.6 一鍵分析**，對照 5/25 收盤：
+   - 14 支股每張卡片 status row 出現 4 chip（方向/威科夫/風險/建議）
+   - 漲停 4 支：合晶 / 瑞軒 / 矽力 pill = `🟢 追進 💪`、東捷（修 §三十 後）方向應改 long
+   - 南亞科 pill = `🟡 等回測`（現價遠超 entry_zone 上緣）
+   - 撼訊 pill = `🟢 進場區可佈`（在 entry_zone 內）
+   - 第五節格式統一結構化（不再各股長度/欄位差異）
+   - PDF 列印 pill 與 dashboard 一致
+
+### 沿用未驗（持續）
+- §三十 5 commit（5/25 push）也在這次 deploy 一併驗
+- §二十九 10 bug + §二十八 4 bug + 優化 1/2 仍待 deploy 驗
+- Dashboard 迷你 K 線快取漏洞（§二十七，暫不修）
+- Bug D 大盤對比 TWII rate limit
+
+### 回滾策略
+6 commit 純加性：
+- test commit 純加 test file
+- feat(action+framework) 新函式 + 整合，雙層防護
+- feat(db) IF NOT EXISTS 安全，欄位允許 NULL
+- feat(ui) 新增 chip，原 chip 不動
+- docs 純加文件
+
+任一有問題 `git revert <commit>` 獨立回滾。最危險的是 `584270c`（prompt 行為改變），revert 會讓第五節回 AI 寫長文字，但 dashboard pill 仍會運作（讀 DB NULL 不顯示）。
+
+---
+
+## 過往進度（2026-05-25 — 5/22 報表 vs 5/25 收盤 cross-check：結構閘漏洞 + 強勢突破門檻 5 commit）
 
 **所在週次：週8（AI 偏空校正 + 報表品質）**
 
