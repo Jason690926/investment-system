@@ -1454,3 +1454,107 @@ plan：`docs/superpowers/plans/2026-05-24-weekly-report-bugs.md`
 
 spec：`docs/superpowers/specs/2026-05-25-structure-flag-and-breakout-fix-design.md`
 plan：`docs/superpowers/plans/2026-05-25-structure-flag-and-breakout-fix.md`
+
+---
+
+## 三十一、報表「建議動作」明確化：pill + 第五節結構化（2026-05-25）
+
+§三十 cross-check 過程中，用戶指出「報表的建議字（動作）夠用比較明確方式標記出來嗎？」— 目前散落在第五節長段落、第六節（HOLD only）裡，沒有單一字眼可瞄一眼。決議 A+B+C 一起做。
+
+### 問題陳述
+
+當前報表上「建議性質的字」分散在 3 個層級：
+1. **頂部 Pill**（已視覺化）：方向 / 威科夫 / 風險 — 是「看法」/「階段」/「衝突量化」，**不是動作**
+2. **第五節「操作框架」**（純 AI 寫長文字）：「進場價 X~Y」「停損」「目標」「不宜追進」「等回測」「強勢突破追蹤」等
+3. **第六節「持倉部位建議」**（只 HOLD 股）：「整體判斷：續抱 / 觀望持有 / 減碼 / 出場」
+
+問題：對 WATCH 股，動作建議藏在第五節長文字裡，用戶要往下讀完才知道「該等回測 vs 該追進」；對 HOLD 股則要讀到第六節；對「強勢突破成立」狀態完全沒視覺化（只在第五節文字裡）。
+
+### 修法總覽（A+B+C 整合）
+
+#### A. 頂部加「建議動作」pill
+
+新 pill 字典（決定樹已對齊 2026-05-25）：
+
+| status | 條件 | pill 字 |
+|--------|------|---------|
+| **WATCH long** | 結構閘 = 結構已轉弱 | 🔴 不宜進 |
+|  | `_strong_breakout_state` = True | 🟢 追進 💪 |
+|  | 現價 > range_high 但未強勢突破（量未到）| 🟡 等突破 |
+|  | 現價 在 entry_zone 內 | 🟢 進場區可佈 |
+|  | 現價 > entry_zone 上緣（mid 以上）| 🟡 等回測 |
+|  | 其他 / neutral | ⚪ 觀望 |
+| **WATCH short** | 結構閘 = 結構未轉弱 | ⚪ 觀望（不宜空）|
+|  | 現價 > 空停 | 🔴 論點作廢 |
+|  | 現價在空進區內 | 🔴 分批佈空 |
+|  | 現價 < 空進區下緣 | 🟡 等反彈佈空 |
+| **HOLD** | 現價 < 持倉停損 | 🔴 出場 |
+|  | 結構閘 = 結構已轉弱 | 🟠 減碼 |
+|  | `_strong_breakout_state` = True | 🟢 加碼 💪 |
+|  | 現價在 entry_zone 內 + 量增 | 🟢 加碼 |
+|  | 結構閘 = 結構轉折中 + 現價 < entry_zone 中點 | 🟡 觀望持有 |
+|  | 一般多頭持倉 | 🟢 續抱 |
+
+#### B. 強勢突破標記 💪 emoji 合進 A pill
+
+不另開獨立 pill（避免三個 pill 並排太雜）。當 `_strong_breakout_state=True` 時，A pill 旁邊加 💪 emoji：
+- `🟢 追進 💪`（WATCH long）
+- `🟢 加碼 💪`（HOLD）
+
+#### C. 第五節「操作框架」改程式渲染（C2，類 K 表注入）
+
+prompt 用 `[[OPERATION_FRAMEWORK]]` placeholder，程式 post-process 替換為結構化區塊：
+
+```
+五、操作框架
+─────────────────────
+建議動作：🟡 等回測 進場
+進場區：214.50 ~ 283.75 元（觸發須量 ≥ 157,892 張）
+停損：214.50 元 — 跌破即論點作廢
+目標：—（待突破 353 元有效突破後重算）
+─────────────────────
+```
+
+強勢突破成立版（多一段「追進」並陳）：
+```
+建議動作：🟢 追進 💪
+強勢突破追蹤：現價 69.9 > 前高 59.30 元、量達門檻 → 可順勢追進
+  追進停損：59.30 元（跌回前高即假突破）
+回測進場（保守）：52.10 ~ 55.70 元
+停損：52.10 元 — 跌破即論點作廢
+目標：— 元
+```
+
+short 版 / neutral 版各自獨立模板（spec 詳述）。
+
+### 修法總覽（多 commit，TDD 流程）
+
+| Commit | Bug | 檔案 | 修法核心 |
+|--------|-----|------|---------|
+| E1 | A | `modules/ai_analyzer_v2.py` + `tests/test_decide_action.py` | 新增 `_decide_action(status, direction, structure_flag, swing_levels, breakout, price, ...)` 純函式 + ~12 TDD case 覆蓋 WATCH long/short + HOLD 完整決定樹 |
+| E2 | C | `modules/ai_analyzer_v2.py` + `tests/test_operation_framework.py` | 新增 `_render_operation_framework(action, direction, swing_levels, breakout, vol_threshold, ...)` 純函式 + ~6 TDD case 涵蓋 long/long強勢/short/neutral 4 種模板 |
+| E3 | A+C 整合 | `modules/ai_analyzer_v2.py` | analyze_market_only / analyze_stock_three_masters / generate_personal_recommendation prompt 加 `[[OPERATION_FRAMEWORK]]` placeholder；分析完成後 post-process：呼叫 `_decide_action` 得 pill、呼叫 `_render_operation_framework` 替換 placeholder、寫入 result dict + StockAnalysis DB |
+| E4 | A DB | `modules/models.py` + `migrate_add_action_pill.py` | StockAnalysis 加 `action_pill = Column(String(32))` + migration 腳本（ALTER TABLE IF NOT EXISTS） |
+| E5 | A UI | `static/js/dashboard.js` `buildCard()` + `templates/print_report.html` + `static/css/app.css` | dashboard `card-status-row` 加 actionChip（dirChip → wyckoffChip → riskChip → actionChip 順序）；PDF `stock-block-header` 加 action pill；CSS 樣式（綠/黃/紅/灰/橘 5 色 + 💪 emoji 標記 class）|
+
+### 設計決策
+
+1. **B 不獨立 pill**：三個（方向 / 威科夫 / 風險）已是視覺極限，再加兩個太雜。emoji 💪 合進 A 是視覺平衡的折衷。
+2. **C2 程式渲染（非 C1 AI key-value）**：§二十九 S3 證明純 prompt 約束會洩漏 25%（觀察股第六節 12 檔有 3 違規）。第五節改程式生產相同等級的格式穩定性。
+3. **action_pill 存 DB 而非每次重算**：dashboard 顯示 14+ 卡片時若每張都即時跑 `_strong_breakout_state` 需要 daily_bars 60 根 + swing_levels 計算，效能差。存字串 1 次寫多次讀。
+4. **A pill 在 status row 第 4 位**（最後）：左→右順序為 方向 → 威科夫 → 風險 → 建議動作，視覺由「看法」漸進到「動作」，符合閱讀直覺。
+
+### 驗收（需 deploy + 重跑 ~$0.6）
+
+- pytest 全綠（預計 249 + 約 18 新 → 267+）
+- migration `migrate_add_action_pill.py` 跑過 + DB 欄位存在
+- 重跑 5/22 報表 + 對照 5/25 收盤實機驗：
+  1. 14 支股每張卡片頂部出現 action pill（4 chip 並排）
+  2. 漲停 4 支：合晶/瑞軒/矽力 pill = 🟢 追進 💪、東捷（修 §三十 後）pill = 🟢 追進 💪 或 進場區可佈
+  3. 南亞科 pill = 🟡 等回測（5/22 現價 310.5 遠超進場區）
+  4. 撼訊 pill = 🟢 進場區可佈（現價在 entry_zone 內）
+  5. 第五節格式統一結構化（不再每股長度/欄位差異）
+  6. PDF 列印 pill 與 dashboard 一致
+
+spec：`docs/superpowers/specs/2026-05-25-action-pill-and-framework-design.md`
+plan：`docs/superpowers/plans/2026-05-25-action-pill-and-framework.md`
