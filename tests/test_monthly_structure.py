@@ -173,3 +173,78 @@ def test_structure_block_not_weak_contains_ban():
 def test_structure_block_empty_when_insufficient():
     enriched = {'monthly_bars': [], 'weekly_bars': [], 'ma60': None}
     assert _structure_block(enriched, 100) == ''
+
+
+# ---------- 強勢上漲否決（2026-05-25, plan §三十 Bug A）----------
+def test_structure_flag_close_strict_up_overrides_inflection():
+    """東捷型：_hl_trend 因 lows 不嚴格升回「轉折」，但 close 嚴格上揚 → 結構未轉弱。"""
+    # 2~4 月 close: 48.85 → 63.30 → 104.0 嚴格升
+    # 2~4 月 lows: 44.80 → 43.30 → 63.80 不嚴格升（3 月低於 2 月）→ _hl_trend 回「轉折」
+    completed = _mbars([
+        (43.25, 48.35, 40.55, 47.30),  # 12 月 陽
+        (47.50, 60.90, 45.85, 53.30),  # 1 月 陽
+        (52.30, 57.50, 44.80, 48.85),  # 2 月 陰
+        (47.10, 77.60, 43.30, 63.30),  # 3 月 陽
+        (67.20, 104.0, 63.80, 104.0),  # 4 月 陽
+    ])
+    inprogress = [_bar(114.0, 143.5, 103.5, 120.5, date='2026-05-01')]
+    r = compute_monthly_structure(completed + inprogress, [], price=132.5, ma60=58)
+    assert r['monthly_structure'] == '轉折'
+    assert r['monthly_close_strict_up_3'] is True
+    assert r['structure_flag'] == '結構未轉弱'
+
+
+def test_structure_flag_bull_count_6_overrides_inflection():
+    """近 6 月陽月數 ≥ 4 強勢上漲：_hl_trend 回「轉折」但近期陽月多 → 結構未轉弱。"""
+    completed = _mbars([
+        (10, 12, 8, 11),    # 陽
+        (11, 13, 9, 12),    # 陽
+        (12, 14, 10, 13),   # 陽
+        (13, 14, 11, 12),   # 陰 — 讓 close 不嚴格上揚
+        (12, 16, 6, 15),    # 陽 — lows 6<11 不嚴格升 → _hl_trend 回「轉折」
+    ])
+    inprogress = [_bar(15, 17, 14, 16, date='2026-06-01')]
+    r = compute_monthly_structure(completed + inprogress, [], price=16, ma60=10)
+    assert r['monthly_structure'] == '轉折'
+    assert r['monthly_close_strict_up_3'] is False
+    assert r['monthly_bull_count_6'] >= 4
+    assert r['structure_flag'] == '結構未轉弱'
+
+
+def test_structure_flag_below_ma60_not_overridden_by_strong_up():
+    """價在 MA60 之下：強勢上漲否決不可逆轉（仍判結構已轉弱）。"""
+    completed = _mbars([
+        (10, 12, 8, 11),   # 陽
+        (11, 14, 10, 13),  # 陽
+        (13, 16, 11, 15),  # 陽 — close 嚴格上揚
+    ])
+    inprogress = [_bar(15, 17, 14, 16, date='2026-05-01')]
+    # 價 16 < ma60 20 → 在下，必須仍是已轉弱
+    r = compute_monthly_structure(completed + inprogress, [], price=16, ma60=20)
+    assert r['price_vs_ma60'] == '在下'
+    assert r['monthly_close_strict_up_3'] is True
+    assert r['structure_flag'] == '結構已轉弱'
+
+
+def test_compute_monthly_structure_close_strict_up_3_field():
+    """compute_monthly_structure 回 dict 含 monthly_close_strict_up_3 欄位。"""
+    completed = _mbars([
+        (10, 12, 8, 11),
+        (11, 14, 10, 13),
+        (13, 16, 11, 15),
+    ])
+    inprogress = [_bar(15, 17, 14, 16, date='2026-05-01')]
+    r = compute_monthly_structure(completed + inprogress, [], price=16, ma60=10)
+    assert r['monthly_close_strict_up_3'] is True
+
+
+def test_compute_monthly_structure_bull_count_6_field():
+    """compute_monthly_structure 回 dict 含 monthly_bull_count_6 欄位。"""
+    completed = _mbars([
+        (10, 12, 8, 11),   # 陽
+        (11, 14, 10, 13),  # 陽
+        (13, 14, 12, 12),  # 陰（close=open=12 不算陽）
+    ])
+    inprogress = [_bar(12, 15, 11, 14, date='2026-05-01')]
+    r = compute_monthly_structure(completed + inprogress, [], price=14, ma60=10)
+    assert r['monthly_bull_count_6'] == 2  # 只 2 陽月（不含進行中）
