@@ -635,6 +635,25 @@ def _strong_breakout_state(enriched_data: dict, price_f) -> bool:
         return False
 
 
+def _apply_structure_safety_net(structure_flag: str, direction: str) -> str:
+    """F8 §三十二 Bug-3：結構閘安全網（純函式 testable）。
+
+    AI 違反 prompt 鐵律時的最後防線：結構閘已判定「結構已轉弱」
+    （程式層硬事實），AI 卻仍標 DIRECTION=long → 強制覆寫為 neutral，
+    避免下游 pill / 第五節 / target_pnf 出現多頭錨點與 pill 矛盾。
+
+    撼訊 5/25 報表案例：pill = 🔴 不宜進（結構已轉弱反推）；AI 內文
+    「方向一致順勢做多 / 再積累 / 進場區內」明顯違反 gate_hint。
+
+    輸入：structure_flag（'結構已轉弱' / '結構轉折中' / '結構未轉弱' / '資料不足'）、
+          direction（'long' / 'short' / 'neutral'）
+    回傳：safe direction（與輸入相同或被覆寫為 'neutral'）
+    """
+    if structure_flag == '結構已轉弱' and direction == 'long':
+        return 'neutral'
+    return direction
+
+
 def _breakout_overrides(swing_levels: dict, daily_bars: list,
                          price) -> dict:
     """強勢突破成立時覆寫 entry_zone 與 target（plan §三十二, spec 2026-05-26）。
@@ -879,7 +898,17 @@ def _structure_block(enriched_data: dict, price_f) -> str:
         '結構未轉弱': '→ 禁止標派發/再派發/下跌，相位只能在 積累/上漲/再積累/不明',
         '結構轉折中': '→ 可標派發，但須在分析附具體量價證據',
         # C4 / S5（2026-05-24）：對稱規則 — 已轉弱禁標多方，避免「結構已轉弱 + 再積累」UX 矛盾
-        '結構已轉弱': '→ 相位限定 派發/再派發/下跌/不明，禁標 積累/上漲/再積累（仍須量價證據佐證空方）',
+        # Bug-3 §三十二（2026-05-26）：F8 強硬鐵律 + post-process 強制覆寫，
+        # 撼訊 5/25 報表違規（pill 🔴 不宜進 / AI 內文「方向一致順勢做多 / 再積累」）
+        '結構已轉弱': (
+            '→ ⚠️ **三重禁令**：'
+            '(1) WYCKOFF_PHASE 限定 派發/再派發/下跌/不明，禁標 積累/上漲/再積累；'
+            '(2) **DIRECTION 禁標 long**，須為 short 或 neutral；'
+            '(3) 三宗師融合結論禁出現「方向一致」「順勢做多」「進場區內」'
+            '「再積累」「主升段」等多頭字眼，須改用「波段結構偏空，'
+            '短線等反彈失敗訊號」「等回測壓力 X 元確認」這類空方/觀望語言。'
+            '違反此鐵律 → 程式 post-process 會強制覆寫 DIRECTION=neutral 並 log warning。'
+        ),
     }.get(flag, '')
     dd = ms['drawdown_from_peak']
     dd_txt = f'{dd:+.1f}%' if dd is not None else '—'
@@ -1180,6 +1209,14 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
             _price_f,
             enriched_data.get('ma60'),
         )
+        # F8 §三十二 Bug-3：結構閘安全網 — AI 違反 prompt 仍標 long 時強制覆寫
+        _safe_dir = _apply_structure_safety_net(
+            _ms.get('structure_flag', ''), result.get('direction', '')
+        )
+        if _safe_dir != result.get('direction'):
+            print(f"[ai_analyzer_v2] Bug-3 safety net: {symbol} 結構已轉弱 "
+                  f"但 AI 標 long → 強制覆寫 direction={_safe_dir}")
+            result['direction'] = _safe_dir
         _sl = _csl(enriched_data.get('daily_bars', []), result['direction'], _price_f)
         _breakout = _strong_breakout_state(enriched_data, _price_f)
         # F2 §三十二：強勢突破成立 → 覆寫 entry_zone（retest）與 target
@@ -1590,6 +1627,14 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
             _price_f,
             enriched_data.get('ma60'),
         )
+        # F8 §三十二 Bug-3：結構閘安全網 — AI 違反 prompt 仍標 long 時強制覆寫
+        _safe_dir = _apply_structure_safety_net(
+            _ms.get('structure_flag', ''), result.get('direction', '')
+        )
+        if _safe_dir != result.get('direction'):
+            print(f"[ai_analyzer_v2] Bug-3 safety net: {symbol} 結構已轉弱 "
+                  f"但 AI 標 long → 強制覆寫 direction={_safe_dir}")
+            result['direction'] = _safe_dir
         _sl = _csl(enriched_data.get('daily_bars', []), result['direction'], _price_f)
         _breakout = _strong_breakout_state(enriched_data, _price_f)
         # F2 §三十二：強勢突破成立 → 覆寫 entry_zone（retest）與 target

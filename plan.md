@@ -1586,7 +1586,7 @@ plan：`docs/superpowers/plans/2026-05-25-action-pill-and-framework.md`
 
 #### 次要 bug（紀錄不修，留下次或不修）
 
-- **Bug-3 撼訊 6150 pill 矛盾**：pill 🔴 不宜進（程式判結構已轉弱），AI 內文卻寫「方向一致順勢做多」「現價在進場區內」「威科夫(再積累)」— AI 沒遵守程式注入的 structure_flag。需 prompt 鐵律補強，下次處理。
+- **Bug-3 撼訊 6150 pill 矛盾** → **本次一併修**（見 F8）：pill 🔴 不宜進（程式判結構已轉弱），AI 內文卻寫「方向一致順勢做多」「現價在進場區內」「威科夫(再積累)」— AI 沒遵守程式注入的 structure_flag。雙層修法：(1) gate_hint 強化「三重禁令」（禁多方相位 + 禁 DIRECTION=long + 禁多頭字眼）；(2) post-process 安全網（結構已轉弱+AI 標 long → 強制覆寫 neutral）。
 - **Bug-4 瑞軒 -8.50% 翻車** → **本次一併修**（見 F6）：`_strong_breakout_state` 條件 C「一字漲停封死」雖滿足形式，但實質過熱。加附加條件「近 3 日 ≥2 根漲停」區分結構性連續漲停（合晶 5/22~5/26 連 3+ 根 ✓）vs 單根衝動（瑞軒 5/22 首次 ✗）。條件 A/B 仍能涵蓋真強勢，不需新增 ⚠️ pill 變體。
 - **Bug-5 技嘉 short 但月線 5 連陽** → **本次一併修**（見 F7）：§三十 Bug A 看的是 completed = `monthly_bars[:-1]`（排除進行中月），漏掉進行中月強漲案例。加 `monthly_inprogress_strong_up`（進行中月漲幅 ≥7% + 在 MA60 之上）作為強勢上漲否決的 OR 分支。
 - **Bug-6 「等突破」vs「等回測」命名混淆** → **本次一併修**（見下方 F4）：`_decide_action` line 726「price > range_high → 🟡 等突破」字面誤導（已突破還等什麼），改為「🟡 突破未驗」（已突破，等量能驗證）。
@@ -1602,6 +1602,7 @@ plan：`docs/superpowers/plans/2026-05-25-action-pill-and-framework.md`
 | F5 | Opt-1 | `modules/ai_analyzer_v2.py` + `tests/test_operation_framework.py` | `_render_operation_framework` 每行包 `<div class="op-row">` 取代 `\n`（mistune→HTML 後吃掉換行造成擠成一行 bug，CLAUDE.md §三十一「已知小瑕疵」）；順手移除冗餘「五、操作框架」前綴（AI prompt 已輸出節標題，避免重複）；HTML escape `>`/`&` 字元 |
 | F6 | Bug-4 | `modules/ai_analyzer_v2.py` + `tests/test_strong_breakout.py` | `_strong_breakout_state` 條件 C 加附加條件「近 3 日 ≥2 根漲停（含今日）」避免單根衝動誤判（瑞軒 5/22 首次一字漲停 → 5/26 -8.5% 翻車）。結構性連續漲停（合晶 5/22~5/26 連 3+ 根）仍觸發；單根漲停降為「🟡 突破未驗」或其他依 entry_zone 判 |
 | F7 | Bug-5 | `modules/data_enricher.py` + `tests/test_monthly_structure.py` | `compute_monthly_structure` 加 `monthly_inprogress_strong_up` 欄位（進行中月漲幅 ≥7% 且在 MA60 之上）；`_structure_flag` 強勢上漲否決條件加 OR 分支。覆蓋技嘉型 V 反轉（5 月進行中 278→336.5 +21% 但 completed 月線 close 不嚴格上揚 + bull_count<4 → 原本 fall-through 到「結構轉折中」允許 AI 標 short） |
+| F8 | Bug-3 | `modules/ai_analyzer_v2.py` + `tests/test_structure_safety_net.py` + `tests/test_structure_gate_short.py` | 雙層修法：(1) `_structure_block` gate_hint「結構已轉弱」強化為「三重禁令」— 禁標 WYCKOFF_PHASE 多方相位 + 禁標 DIRECTION=long + 禁多頭字眼清單（「方向一致」「順勢做多」「進場區內」「再積累」「主升段」）；(2) 新增純函式 `_apply_structure_safety_net(structure_flag, direction)`，post-process 階段（兩處）若 AI 仍標 long → 強制覆寫 neutral 並 log warning。撼訊 5/25 報表案例（pill 🔴 / AI 內文方向一致順勢做多）|
 
 ### 設計決策
 

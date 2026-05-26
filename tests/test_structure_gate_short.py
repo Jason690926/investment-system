@@ -40,6 +40,7 @@ def _patch_ms(monkeypatch, flag):
 
 # ============================================================
 # C4-T1：結構已轉弱 → 禁標多方相位（新增鐵律）
+# F8 §三十二 Bug-3：加 DIRECTION 鐵律 + 多頭字眼禁令
 # ============================================================
 def test_structure_weakened_blocks_long_phases(monkeypatch):
     _patch_ms(monkeypatch, '結構已轉弱')
@@ -47,7 +48,12 @@ def test_structure_weakened_blocks_long_phases(monkeypatch):
 
     assert '結構已轉弱' in out
     assert '禁標 積累/上漲/再積累' in out, '結構已轉弱須禁標多方相位（與未轉弱規則對稱）'
-    assert '相位限定 派發/再派發/下跌/不明' in out
+    # F8 §三十二 Bug-3：撼訊 5/25 報表案例（pill 🔴 / AI 文「方向一致順勢做多」）
+    assert '派發/再派發/下跌/不明' in out, '結構已轉弱須限定 WYCKOFF_PHASE 為空方/不明'
+    assert 'DIRECTION 禁標 long' in out, 'F8 Bug-3 安全網 prompt 鐵律：禁標 DIRECTION=long'
+    assert '方向一致' in out and '順勢做多' in out, \
+        'F8 Bug-3：須列出禁多頭字眼清單避免 AI 違規'
+    assert 'post-process' in out, 'F8 Bug-3：須告知違反鐵律會被 post-process 覆寫'
 
 
 # ============================================================
