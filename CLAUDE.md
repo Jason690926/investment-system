@@ -6,16 +6,16 @@
 - **架構決策**：討論完方案後，先更新 `plan.md`，再開始寫程式
 - `plan.md` 只在需要查架構細節時才讀（節省 token）
 
-## 當前進度（2026-05-26 — 5/25 報表 vs 5/26 收盤 cross-check：3 P0/P1 bug + 2 優化 7 commit）
+## 當前進度（2026-05-26 — 5/25 報表 vs 5/26 收盤 cross-check：6 bug + 1 優化 8 commit）
 
 **所在週次：週8（AI 偏空校正 + 報表品質）**
 
-**狀態：HEAD = `c8861c5`；7 commits 已 push origin/main (`5c2e0c5..c8861c5`)，Render auto-deploy 觸發中。pytest 284/284 全綠（269 原 + 15 新）**
+**狀態：HEAD = `b531711`；8 commits 已 push origin/main (`5c2e0c5..b531711`)，Render auto-deploy 觸發中。pytest 291/291 全綠（269 原 + 22 新）**
 
 ### 緣起
-用戶提供 5/25 20:37 持股分析報告 PDF（14 股）+ 5/26 收盤截圖（瑞軒 -8.50% / 合晶仍漲停 +9.90% / 矽力 +1.94% / 東捷 +2.41%）cross-check。發現 5 檔強勢突破股共病 2 個 P0 bug + 3 個次要 bug + 1 個 UX 優化。
+用戶提供 5/25 20:37 持股分析報告 PDF（14 股）+ 5/26 收盤截圖（瑞軒 -8.50% / 合晶仍漲停 +9.90% / 矽力 +1.94% / 東捷 +2.41%）cross-check。發現 5 檔強勢突破股共病 2 個 P0 bug + 4 個次要 bug + 1 個 UX 優化。
 
-### A. 修法總覽（7 commits，TDD 流程）
+### A. 修法總覽（8 commits，TDD 流程）
 
 | Commit | 類型 | Bug/Opt | 修法 |
 |--------|------|---------|------|
@@ -26,6 +26,7 @@
 | `53f339a` | fix | Opt-1 | `_render_operation_framework` 每行包 `<div class="op-row">` 取代 `\n`（mistune→HTML 後吃掉換行 bug）+ 移除冗餘「五、操作框架」前綴 + HTML escape |
 | `887e7cc` | fix | Bug-4 | `_strong_breakout_state` 條件 C 加附加條件「近 3 日 ≥2 根漲停（含今日）」避免單根衝動誤判（瑞軒 5/22 首次一字漲停 → 5/26 -8.5% 翻車）|
 | `c8861c5` | fix | Bug-5 | `compute_monthly_structure` 加 `monthly_inprogress_strong_up` 欄位（進行中月漲幅 ≥7% 且在 MA60 之上）；`_structure_flag` 強勢上漲否決加 OR 分支 — 修技嘉 5 月 V 反轉 +21% 但被排除而誤判 short |
+| `b531711` | fix | Bug-3 | 雙層修法：(1) `_structure_block` gate_hint「結構已轉弱」強化「三重禁令」— 禁多方相位 + 禁 DIRECTION=long + 禁多頭字眼（「方向一致」「順勢做多」「進場區內」「再積累」「主升段」）；(2) 新增純函式 `_apply_structure_safety_net(structure_flag, direction)` post-process 安全網：結構已轉弱+AI 標 long → 強制覆寫 neutral + log warning |
 
 ### B. 主要 P0 修法詳述
 
@@ -47,7 +48,7 @@
 | 微星 | 120.28 ~ 124.00 | 163.00 |
 
 ### 驗證狀況
-- pytest **284/284 全綠**（269 + 8 F1 + 1 F4 + 3 F5 + 1 F6 + 3 F7 - 1 改名）
+- pytest **291/291 全綠**（269 + 8 F1 + 1 F4 + 3 F5 + 1 F6 + 3 F7 + 7 F8 - 1 改名）
 - py_compile（ai_analyzer_v2 / data_enricher）+ syntax 全綠
 - 純加性 + helper / OR 分支 / 字串改名，無 DB migration
 
@@ -59,19 +60,20 @@
 3. **Bug-5**：技嘉結構旗標 = 「結構未轉弱」（5 月進行中 +21% 觸發 inprogress_strong_up），AI 禁標派發，方向應改 long 或 neutral
 4. **Bug-6**：大聯大 pill = 「🟡 突破未驗」（取代「🟡 等突破」）
 5. **Opt-1**：PDF 第五節操作框架每行清楚換行（不再擠成一行），無「五、操作框架」重複標題
+6. **Bug-3**：撼訊 6150 報表方向應為 `neutral`（或 short）非 `long`；pill 與內文一致；Render log 若 AI 仍違規可看到 `[ai_analyzer_v2] Bug-3 safety net: 6150 結構已轉弱 但 AI 標 long → 強制覆寫 direction=neutral` warning
 
 ### 沿用未驗（持續觀察）
 - §三十 + §三十一 + §二十九 沿用，本次未退化
-- §三十二 次要 bug **未修**：
-  - **Bug-3 撼訊 6150 pill 矛盾**（pill 🔴 不宜進 / AI 內文「順勢做多」）— AI 沒遵守程式 structure_flag 注入；需 prompt 鐵律補強，下次處理
+- §三十二 次要項目 **未修**：
   - **Opt-2/3 dashboard UX**（mini-card「尚未分析」顯示上次 pill + 錨點 strip）— 屬新功能，獨立 spec 下次處理
 - Dashboard 迷你 K 線快取漏洞（§二十七，暫不修）
 - Bug D 大盤對比 TWII rate limit（memory/bug-d-twii-rs-rate-limit.md）
 
 ### 回滾策略
-7 commit 純加性 + 純函式 helper + OR 分支擴充，無 DB migration、無既有函式簽名改動。任一有問題 `git revert <commit>` 獨立回滾。
+8 commit 純加性 + 純函式 helper + OR 分支擴充，無 DB migration、無既有函式簽名改動。任一有問題 `git revert <commit>` 獨立回滾。
 - F2 (`c897919`) 影響面最大但有「helper 回 `{}` 退讓 → 沿用 calc_swing_levels 原值」雙層防護
 - F7 (`c8861c5`) 改 `_structure_flag` 簽名（加 optional 參數），但 default 為 False 向後相容
+- F8 (`b531711`) prompt 改動可能引發 AI 行為波動，但 post-process 安全網保底（即使 AI 違反鐵律仍強制覆寫 neutral）
 
 ---
 
