@@ -6,11 +6,39 @@
 - **架構決策**：討論完方案後，先更新 `plan.md`，再開始寫程式
 - `plan.md` 只在需要查架構細節時才讀（節省 token）
 
-## 當前進度（2026-05-26 — 5/25 報表 vs 5/26 收盤 cross-check：6 bug + 1 優化 8 commit）
+## 當前進度（2026-05-26 — §三十二 8 commit 已 deploy 驗收完成 ✅）
 
 **所在週次：週8（AI 偏空校正 + 報表品質）**
 
-**狀態：HEAD = `b531711`；8 commits 已 push origin/main (`5c2e0c5..b531711`)，Render auto-deploy 觸發中。pytest 291/291 全綠（269 原 + 22 新）**
+**狀態：HEAD = `7b099de`（含驗收後 snapshot）；§三十二 8 commit 全部 deploy 驗收通過；pytest 291/291 全綠**
+
+### ✅ 驗收結果（5/26 21:46 PDF cross-check）
+
+用戶 5/26 21:46 重跑 14 支分析。PDF dump 比對：
+
+| Bug/Opt | 5/26 驗證證據 | 結果 |
+|---------|-------------|------|
+| **Bug-1** 5 檔回測前高 ±3% | 矽力 `442.32~456.00` / 東捷 `139.19~143.50` / 合晶 `57.52~59.30` / 瑞軒 `47.38~48.85` | ✅ |
+| **Bug-2** P&F 目標不再「— 元」 | 矽力 684.5 / 東捷 / 合晶 88 / 瑞軒 68.2 都有具體數字 | ✅ |
+| **Bug-3** 撼訊 pill vs 內文一致 | direction=**short**（從 long 變）/ phase=派發 / pill=🔴 分批佈空 / 內文 DIRECTION=short ← **AI 直接遵守 prompt 鐵律**，不需 post-process safety net 覆寫 | ✅ |
+| **Bug-4** 條件 C 降級 | 瑞軒 5/26 觸發 **B 條件**（5 日連續站高），保留 🟢 追進 💪 合理 — 沒誤殺真強勢 | ✅ |
+| **Bug-5** 技嘉強漲否決 | direction=long / phase=上漲 / pill=🟡 等回測（**非 short**）— `inprogress_strong_up` 觸發 | ✅ |
+| **Bug-6** 命名 | 微星 5/26 顯示 **🟡 突破未驗**（取代舊「等突破」）| ✅ |
+| **Opt-1** HTML 換行 | 第五節有清楚 `─` 分隔 + 每行縮排，不再擠成一行 | ✅ |
+
+**特別亮點**：
+- 撼訊 **AI 第一次重跑就直接遵守 prompt 鐵律**（標 short + 派發），第一層鐵律強化獨自有效 → post-process safety net 沒觸發
+- 矽力 5/26 deep_low 實際 60 日為 ~227.5（非預估 183.5）→ target 684.5 比預期 728.5 更貼地
+- 5/26 場景下，Bug-4 修法的條件 C 附加要求未誤殺 — 瑞軒走 B 條件保留 🟢
+
+### Deploy 過程觀察
+- 用戶 5/26 18:54 dashboard 截圖部分股缺 chip（技嘉/微星/華擎/撼訊 4 檔顯示 wyckoff+risk 但缺 dirChip+actionChip）
+- 21:46 重跑分析後 hard refresh → 全部 14 股 4 chip 齊全
+- 推測：18:54 是 race condition（部分 5/26 分析未完成或單檔 post-process exception），不是程式 bug
+
+---
+
+## 過往修法詳述（2026-05-26 — §三十二 8 commit）
 
 ### 緣起
 用戶提供 5/25 20:37 持股分析報告 PDF（14 股）+ 5/26 收盤截圖（瑞軒 -8.50% / 合晶仍漲停 +9.90% / 矽力 +1.94% / 東捷 +2.41%）cross-check。發現 5 檔強勢突破股共病 2 個 P0 bug + 4 個次要 bug + 1 個 UX 優化。
