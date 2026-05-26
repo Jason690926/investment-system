@@ -1558,3 +1558,75 @@ short 版 / neutral 版各自獨立模板（spec 詳述）。
 
 spec：`docs/superpowers/specs/2026-05-25-action-pill-and-framework-design.md`
 plan：`docs/superpowers/plans/2026-05-25-action-pill-and-framework.md`
+
+---
+
+## 三十二、5/26 cross-check：強勢突破 retest 區異常 + P&F 目標缺失（2026-05-26）
+
+用戶提供 5/25 20:37 持股分析報告 PDF（14 股）+ 5/26 收盤截圖（瑞軒 -8.50% / 合晶仍漲停 +9.90% / 矽力 +1.94% / 東捷 +2.41%），cross-check 找到 5 檔強勢突破股共同的兩個 bug，加 4 個次要 bug（紀錄不修）。
+
+### Bug 清單
+
+#### P0
+- **Bug-1 強勢突破股「回測進場（保守）」顯示舊箱型區間** — 5 檔受害（東捷 / 矽力 / 合晶 / 瑞軒 / 微星）。家人讀者「等回測 75 才進」→ 東捷已起飛到 145.5（+94%）→ 完全錯過機會。
+
+  | 股 | 現價 | 追進停損 | 回測進場 | 距現價 |
+  |----|------|---------|---------|--------|
+  | 東捷 8064 | 145.5 | 143.5 | **75.00 ~ 109.25** | -25%~-48% |
+  | 矽力 6415 | 618 | 456 | **391.00 ~ 423.50** | -32%~-37% |
+  | 合晶 6182 | 76.8 | 59.3 | **52.10 ~ 55.70** | -27%~-32% |
+  | 瑞軒 2489 | 56.5 | 48.85 | **37.50 ~ 43.17** | -23%~-34% |
+  | 微星 2377 | 127 | 124 | **94.50 ~ 109.25** | -14%~-25% |
+
+  根因：`calc_swing_levels` 取 60 日窗口「最近局部峰」（`peaks[-1][1]`），用 `_find_local_peaks(min_gap=3)` 需左右各 3 根確認 → 強勢突破中新峰尚未成形 → `entry_zone = (swing_low, mid)` 仍是更早箱型範圍。
+
+- **Bug-2 強勢突破股「目標：— 元」缺失** — 同 5 檔。`calc_pnf_target` Filter A `current_price < base_high × 0.85` → 強勢突破中現價遠超 base_high → 候選箱被全濾掉 → None。
+
+  設計矛盾：強勢突破成立 = 等幅量度條件最齊備的場景（已有確認的 box），這時 target 反而 None。
+
+#### 次要 bug（紀錄不修，留下次或不修）
+
+- **Bug-3 撼訊 6150 pill 矛盾**：pill 🔴 不宜進（程式判結構已轉弱），AI 內文卻寫「方向一致順勢做多」「現價在進場區內」「威科夫(再積累)」— AI 沒遵守程式注入的 structure_flag。需 prompt 鐵律補強，下次處理。
+- **Bug-4 瑞軒 -8.50% 翻車**：`_strong_breakout_state` 條件 C「一字漲停封死」雖滿足形式，但實質過熱。本次修 Bug-1+2 已透過「target cap = price×2.0」+「retest = range_high ±3%」緩解（5/26 -8.5% 跌到 51.7 仍在追進停損 48.85 上方）。條件 C 是否該加 caveat（🟢 追進 ⚠️）下次評估。
+- **Bug-5 技嘉 short 但月線 5 連陽**：§三十 Bug A 邊界遺漏。`monthly_close_strict_up_3` 因 3 月陰打斷不觸發；`monthly_bull_count_6` 達 4 但與前者是 OR 仍不觸發 → 需 audit `compute_monthly_structure` 條件邏輯。下次處理。
+- **Bug-6 「等突破」vs「等回測」命名混淆**：`_decide_action` line 689「price > range_high → 🟡 等突破」字面誤導（已突破還等什麼）。下次優化字典命名。
+
+### 修法總覽（本次只修 P0，1 commit 區段，TDD 流程）
+
+| Commit | Bug | 檔案 | 修法核心 |
+|--------|-----|------|---------|
+| F1 | 1+2 test | `tests/test_breakout_overrides.py` | 新增 ≥8 case TDD：happy path（5 檔真實值）+ cap 觸發 + 退讓邊界（None / 空 bars / deep_low≥rh） |
+| F2 | 1+2 impl | `modules/ai_analyzer_v2.py` | 新增純函式 `_breakout_overrides(swing_levels, daily_bars, price)`；`analyze_stock_three_masters` / `analyze_market_only` 算完 `_breakout` 後若 True 則覆寫 `_swing_long['entry_zone']` 與 `['target']`，同步 `result['target_pnf']` |
+| F3 | docs | `plan.md` + `docs/superpowers/{specs,plans}` | spec + impl plan + plan.md §三十二 |
+
+### 設計決策
+
+1. **retest zone 採單邊向下 3%**（`(rh*0.97, rh)`），不採對稱 ±3%：價格已在 range_high 上方，上限若 > rh 沒意義。依據：Darvas Box / 威科夫 SOT — 突破後前壓力反轉為支撐。
+2. **target base_low 用「過去 60 日絕對最低」**：代表「整波起漲點」，避免最近 swing_low 已被穿過後等幅量度目標小於現價。
+3. **target cap = price × 2.0**：防 base 太低算出離譜目標（如矽力若 base 用 12 月低 191.5 會算出 1044 → 顯然超出實務）。
+4. **新 helper 而非改 `calc_swing_levels`**：既有函式對「箱型整理 → 等回測」場景設計仍正確，「強勢突破中」是另一個場景需要不同錨點邏輯。新加 helper 不影響既有測試與非突破場景。
+5. **不改 `_render_operation_framework`**：覆寫 swing_levels dict 後既有渲染邏輯自動拿新值 → 整潔。
+6. **dashboard target pill 自動同步**：因 `result['target_pnf']` 跟著被覆寫，零前端改動。
+
+### 驗收（需 deploy + 重跑 ~$0.6）
+
+- pytest 全綠（預計 269 + 8 新 → 277+）
+- 5 檔強勢突破股 deploy 後預期：
+
+  | 股 | retest zone | target |
+  |----|------------|--------|
+  | 東捷 | 139.20 ~ 143.50 | 243.75 |
+  | 矽力 | 442.32 ~ 456.00 | 728.50 |
+  | 合晶 | 57.52 ~ 59.30 | 90.35 |
+  | 瑞軒 | 47.38 ~ 48.85 | 67.70 |
+  | 微星 | 120.28 ~ 124.00 | 163.00 |
+
+- 非強勢突破股（晶心科 / 創惟 / 華星光 / 南亞科 / 撼訊 / 技嘉 / 華擎 / 大聯大 / 瑞耘）零變動
+
+### 回滾
+
+純加性 helper + 單一覆寫點，無 DB migration、無既有函式簽名改動。問題 `git revert` 即可。
+最壞情況：helper 有 bug → 回 `{}` 退讓 → 沿用原 calc_swing_levels 值（= bug 修法前狀態），不會 crash。
+
+spec：`docs/superpowers/specs/2026-05-26-strong-breakout-retest-and-target-design.md`
+plan：`docs/superpowers/plans/2026-05-26-strong-breakout-retest-and-target.md`
