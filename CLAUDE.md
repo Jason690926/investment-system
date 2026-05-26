@@ -64,8 +64,6 @@
 
 ### 沿用未驗（持續觀察）
 - §三十 + §三十一 + §二十九 沿用，本次未退化
-- §三十二 次要項目 **未修**：
-  - **Opt-2/3 dashboard UX**（mini-card「尚未分析」顯示上次 pill + 錨點 strip）— 屬新功能，獨立 spec 下次處理
 - Dashboard 迷你 K 線快取漏洞（§二十七，暫不修）
 - Bug D 大盤對比 TWII rate limit（memory/bug-d-twii-rs-rate-limit.md）
 
@@ -74,6 +72,48 @@
 - F2 (`c897919`) 影響面最大但有「helper 回 `{}` 退讓 → 沿用 calc_swing_levels 原值」雙層防護
 - F7 (`c8861c5`) 改 `_structure_flag` 簽名（加 optional 參數），但 default 為 False 向後相容
 - F8 (`b531711`) prompt 改動可能引發 AI 行為波動，但 post-process 安全網保底（即使 AI 違反鐵律仍強制覆寫 neutral）
+
+---
+
+## 🚧 下次開工接手點：Opt-2/3 dashboard UX（brainstorming 已 propose design，待用戶定案）
+
+**狀態**：brainstorming 進行中，設計方案已 propose 但**尚未寫 spec**。下次「繼續 investment-system 工作」→ 直接從這節接著討論定案 → 寫 spec → 進 impl plan。
+
+### 需求
+- **Opt-2**：mini-card「尚未分析」狀態（5/26 開盤後 14:30 後新交易日）顯示上次分析 pill chip，避免家人讀者失去前一日決策
+- **Opt-3**：mini-card 加錨點 strip（進場區 / 停損 / 目標 一行），不用點進報表就能掃過關鍵價位
+
+### 已決設計（用戶選擇 / 我建議）
+| 設計問題 | 選擇 | 理由 |
+|----------|------|------|
+| 顯示時機 | **B 都顯示**（已分析+尚未分析 UI 結構一致） | 家人讀者一眼掃過所有持股錨點 |
+| 資料來源 | **C+ 改 `stock_service.get_user_stocks()` 加 fallback** | 零新 API、單一資料路徑、StockAnalysis schema 已含所有欄位 |
+| 舊資料視覺 | **A 4 chip 淺灰 60% + 「上次 MM-DD」tag** | 視覺清楚分辨今日 vs 上次 |
+| 失效策略 | **14 天 lookback** + 錨點 strip 永遠顯示 | 涵蓋週末/假日，避免極舊資料誤導 |
+
+### 設計提案重點（已對用戶 propose，等定案）
+**後端**（`stock_service.get_user_stocks`）：
+- 既有「analysis_date == analysis_day_tw」查詢保留
+- 新加 fallback：未找到今日的 symbol → 取近 14 天最近一筆 `StockAnalysis`
+- item dict 新增欄位：`is_today_analysis`（bool）、`last_analysis_date`、`support`、`resistance`、`target_pnf`、`stop_loss`
+
+**前端**（`dashboard.js buildCard`）：
+- `s.is_today_analysis === false` 加 CSS class `card-stale-data`（opacity 60%）
+- 4 chip + 「上次 5/25」tag chip
+- 加錨點 strip `<div class="card-anchor-strip">進 X-Y | 停 Z | 標 W</div>`
+
+**CSS**（`app.css`）：3 個新 class（`.card-stale-data` / `.last-analysis-tag` / `.card-anchor-strip`）
+
+### 範圍邊界
+- 4 檔修改：`stock_service.py` / `dashboard.js` / `app.css` / 1-2 test
+- 零 DB migration / 零新 API / 零新 prompt
+- 純加性（既有「已分析」卡片不變，只在無今日資料時 fallback；錨點 strip 是新增 UI 元素）
+
+### 下次接手步驟
+1. 用戶確認設計方案（已 propose 在 `[main 6037071]` 對話中）
+2. 寫 spec → `docs/superpowers/specs/2026-05-26-dashboard-stale-anchor-design.md`
+3. plan.md §三十三 + impl plan
+4. TDD 流程：test → backend → frontend → CSS → 整合驗收
 
 ---
 
