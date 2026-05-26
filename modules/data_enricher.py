@@ -204,12 +204,16 @@ def _consecutive_bear(bars: list) -> int:
 def _structure_flag(monthly_structure: str, price_vs_ma60: str,
                     consecutive_bear: int,
                     close_strict_up_3: bool = False,
-                    bull_count_6: int = 0) -> str:
+                    bull_count_6: int = 0,
+                    inprogress_strong_up: bool = False) -> str:
     """綜合 → 結構旗標。判定順序：已轉弱 > 未轉弱（含強勢上漲否決）> 轉折中。
 
     強勢上漲否決（2026-05-25, plan §三十 Bug A）：即使 _hl_trend 因 lows 不
     嚴格升回「轉折」，只要 close 嚴格上揚或近 6 月陽月數 ≥ 4，仍視為結構
     未轉弱（涵蓋東捷型強勢起漲、中間有 1 月修正陰的案例）。
+
+    F7 §三十二 Bug-5：加 inprogress_strong_up 旗標 — 進行中月漲幅 ≥ 7%
+    且在 MA60 之上，也算強勢上漲否決（技嘉 5 月 +21% V 型反轉 case）。
     """
     if monthly_structure == '資料不足':
         return '資料不足'
@@ -220,6 +224,7 @@ def _structure_flag(monthly_structure: str, price_vs_ma60: str,
         monthly_structure in ('升', '橫')
         or close_strict_up_3
         or bull_count_6 >= 4
+        or inprogress_strong_up
     ):
         return '結構未轉弱'
     return '結構轉折中'
@@ -243,6 +248,8 @@ def compute_monthly_structure(monthly_bars: list, weekly_bars: list,
         # 強勢上漲否決指標（2026-05-25, plan §三十 Bug A）
         'monthly_close_strict_up_3': False,
         'monthly_bull_count_6':      0,
+        # F7 §三十二 Bug-5：進行中月強漲否決
+        'monthly_inprogress_strong_up': False,
     }
 
     # 月K：需 >= 4 根（3 已收盤 + 1 進行中）
@@ -266,6 +273,20 @@ def compute_monthly_structure(monthly_bars: list, weekly_bars: list,
     if price is not None and ma60:
         result['price_vs_ma60'] = '在上' if float(price) >= float(ma60) else '在下'
 
+    # F7 §三十二 Bug-5：進行中月強漲否決（漲幅 ≥7% + 在 MA60 之上）
+    if (monthly_bars and len(monthly_bars) >= 1
+            and price is not None
+            and result['price_vs_ma60'] == '在上'):
+        try:
+            inprog = monthly_bars[-1]
+            inprog_open = float(inprog['open'])
+            if inprog_open > 0:
+                change_pct = (float(price) - inprog_open) / inprog_open
+                if change_pct >= 0.07:
+                    result['monthly_inprogress_strong_up'] = True
+        except (KeyError, TypeError, ValueError):
+            pass
+
     # 週K 動能（唯讀）
     if weekly_bars and len(weekly_bars) >= 4:
         wcompleted = weekly_bars[:-1]
@@ -284,6 +305,7 @@ def compute_monthly_structure(monthly_bars: list, weekly_bars: list,
         result['consecutive_bear_months'],
         close_strict_up_3=result['monthly_close_strict_up_3'],
         bull_count_6=result['monthly_bull_count_6'],
+        inprogress_strong_up=result['monthly_inprogress_strong_up'],
     )
     return result
 

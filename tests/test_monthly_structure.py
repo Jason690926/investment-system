@@ -248,3 +248,55 @@ def test_compute_monthly_structure_bull_count_6_field():
     inprogress = [_bar(12, 15, 11, 14, date='2026-05-01')]
     r = compute_monthly_structure(completed + inprogress, [], price=14, ma60=10)
     assert r['monthly_bull_count_6'] == 2  # 只 2 陽月（不含進行中）
+
+
+# ---------- F7 §三十二 Bug-5：進行中月強漲否決 ----------
+def test_structure_flag_inprogress_strong_up_overrides_inflection():
+    """技嘉型：completed 月線陰陽混合（close 不嚴格上揚 + bull_count_6<4），
+    但進行中月強漲 +21% 且在 MA60 之上 → 結構未轉弱。"""
+    # 12 月陽 / 1 月陰 / 2 月陽 / 3 月陰 / 4 月陽
+    completed = _mbars([
+        (243.5, 250.5, 232.0, 249.5),  # 12 月陽
+        (249.0, 259.0, 231.0, 233.0),  # 1 月陰
+        (229.0, 239.5, 219.0, 239.5),  # 2 月陽
+        (234.5, 251.0, 206.5, 222.5),  # 3 月陰
+        (230.0, 292.0, 222.0, 273.0),  # 4 月陽
+    ])
+    # 進行中 5 月：open=278, current price=336.5 → 漲幅 +21%
+    inprogress = [_bar(278.0, 351.0, 270.5, 336.5, date='2026-05-01')]
+    r = compute_monthly_structure(completed + inprogress, [], price=336.5, ma60=245)
+    assert r['monthly_close_strict_up_3'] is False  # 2/3/4: 239.5,222.5,273 不嚴格升
+    assert r['monthly_bull_count_6'] < 4   # 3 個陽月 < 4
+    assert r['monthly_inprogress_strong_up'] is True
+    assert r['price_vs_ma60'] == '在上'
+    assert r['structure_flag'] == '結構未轉弱'
+
+
+def test_structure_flag_inprogress_mild_change_no_strong_up():
+    """進行中月漲幅 < 7% → inprogress_strong_up=False。"""
+    completed = _mbars([
+        (243.5, 250.5, 232.0, 249.5),
+        (249.0, 259.0, 231.0, 233.0),
+        (229.0, 239.5, 219.0, 239.5),
+        (234.5, 251.0, 206.5, 222.5),
+        (230.0, 292.0, 222.0, 273.0),
+    ])
+    # 進行中月漲幅 +5%（< 7%）
+    inprogress = [_bar(278.0, 295.0, 270.5, 292.0, date='2026-05-01')]
+    r = compute_monthly_structure(completed + inprogress, [], price=292.0, ma60=245)
+    assert r['monthly_inprogress_strong_up'] is False
+
+
+def test_structure_flag_inprogress_strong_up_below_ma60_not_overridden():
+    """進行中月強漲但價在 MA60 之下 → 不觸發否決（避免跌深反彈誤判）。"""
+    completed = _mbars([
+        (10, 12, 8, 9),   # 陰
+        (9, 14, 8, 13),   # 陽
+        (13, 16, 11, 15), # 陽
+    ])
+    # 進行中月漲 +30% 但價 16 < ma60 25 → 在下
+    inprogress = [_bar(12.3, 17, 11, 16, date='2026-05-01')]
+    r = compute_monthly_structure(completed + inprogress, [], price=16, ma60=25)
+    assert r['price_vs_ma60'] == '在下'
+    assert r['monthly_inprogress_strong_up'] is False  # 在下→不觸發
+    assert r['structure_flag'] == '結構已轉弱'
