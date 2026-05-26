@@ -1599,6 +1599,7 @@ plan：`docs/superpowers/plans/2026-05-25-action-pill-and-framework.md`
 | F2 | 1+2 impl | `modules/ai_analyzer_v2.py` | 新增純函式 `_breakout_overrides(swing_levels, daily_bars, price)`；`analyze_stock_three_masters` / `analyze_market_only` 算完 `_breakout` 後若 True 則覆寫 `_swing_long['entry_zone']` 與 `['target']`，同步 `result['target_pnf']` |
 | F3 | docs | `plan.md` + `docs/superpowers/{specs,plans}` | spec + impl plan + plan.md §三十二 |
 | F4 | 6 命名 | `modules/ai_analyzer_v2.py` + `tests/test_decide_action.py` | `_decide_action` 「🟡 等突破」→「🟡 突破未驗」（已突破等量能驗證），對應 test 字串同步 |
+| F5 | Opt-1 | `modules/ai_analyzer_v2.py` + `tests/test_operation_framework.py` | `_render_operation_framework` 每行包 `<div class="op-row">` 取代 `\n`（mistune→HTML 後吃掉換行造成擠成一行 bug，CLAUDE.md §三十一「已知小瑕疵」）；順手移除冗餘「五、操作框架」前綴（AI prompt 已輸出節標題，避免重複）；HTML escape `>`/`&` 字元 |
 
 ### 設計決策
 

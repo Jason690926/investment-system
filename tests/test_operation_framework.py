@@ -108,3 +108,41 @@ def test_render_long_entry_zone_missing_displays_dash():
         breakout=False,
     )
     assert '進場區：—' in block
+
+
+# ---------- Opt-1 (plan §三十二)：HTML 結構 + 移除冗餘標題 ----------
+def test_render_uses_op_row_div_for_html_linebreak():
+    """每行包 <div class="op-row"> 確保 HTML 渲染時自動換行（取代原 \\n）。"""
+    block = _render_operation_framework(
+        action_pill='🟡 等回測', direction='long',
+        swing_levels=_sl_long(), breakout=False, vol_threshold_zhang=1000,
+    )
+    assert '<div class="op-row">' in block
+    assert '<div class="op-divider">' in block
+    # 多 row 確認（建議動作 / 進場區 / 停損 / 目標 至少 4 個）
+    assert block.count('<div class="op-row">') >= 4
+
+
+def test_render_no_redundant_section_title():
+    """移除冗餘「五、操作框架」前綴（AI prompt 已輸出節標題）。"""
+    # long breakout
+    block_long_br = _render_operation_framework(
+        action_pill='🟢 追進 💪', direction='long',
+        swing_levels=_sl_long(), breakout=True,
+    )
+    # neutral
+    block_neu = _render_operation_framework(
+        action_pill='⚪ 觀望', direction='neutral',
+        swing_levels=None, breakout=False,
+    )
+    assert '五、操作框架' not in block_long_br
+    assert '五、操作框架' not in block_neu
+
+
+def test_render_short_html_encodes_ampersand():
+    """short 版「P&F」應 HTML escape 為「P&amp;F」（HTML 渲染環境安全）。"""
+    block = _render_operation_framework(
+        action_pill='🔴 分批佈空', direction='short',
+        swing_levels=_sl_short(), breakout=False,
+    )
+    assert '&amp;F' in block or 'P&amp;F' in block

@@ -768,8 +768,13 @@ def _render_operation_framework(action_pill: str, direction: str,
                                  vol_threshold_zhang=None) -> str:
     """第五節「操作框架」結構化渲染（2026-05-25, plan §三十一）。
 
-    回傳 markdown / plain-text 段落（呼叫端注入 [[OPERATION_FRAMEWORK]] placeholder）。
+    回傳 HTML 段落（呼叫端注入 [[OPERATION_FRAMEWORK]] placeholder）。
     與 _decide_action 同源，確保 pill 與內文 100% 一致。
+
+    Opt-1 (2026-05-26, plan §三十二)：每行包 <div class="op-row"> 確保
+    HTML 渲染時自動換行（取代原 \\n 在 mistune→HTML 後被吃掉造成擠成
+    一行的 bug）；同時移除冗餘「五、操作框架」標題前綴（AI prompt
+    `### 五、波段操作框架` 已輸出節標題，避免重複）。
     """
     sl = swing_levels or {}
     rh = sl.get('range_high')
@@ -793,47 +798,51 @@ def _render_operation_framework(action_pill: str, direction: str,
         except (TypeError, ValueError, IndexError):
             return '—'
 
+    def _row(text):
+        return f'<div class="op-row">{text}</div>\n'
+
+    def _divider():
+        return '<div class="op-divider">─────────────────────</div>\n'
+
     if direction == 'long':
         if breakout:
             return (
-                "五、操作框架\n"
-                "─────────────────────\n"
-                f"建議動作：{action_pill}\n"
-                f"強勢突破追蹤：現價 > 前高 {_fmt(rh)} 元、量達門檻 → 可順勢追進\n"
-                f"  追進停損：{_fmt(rh)} 元（跌回前高即假突破）\n"
-                f"回測進場（保守）：{_fmt_zone(ez)} 元\n"
-                f"停損：{_fmt(inv)} 元 — 跌破即論點作廢\n"
-                f"目標：{_fmt(tg)} 元\n"
-                "─────────────────────"
+                _divider()
+                + _row(f'建議動作：{action_pill}')
+                + _row(f'強勢突破追蹤：現價 &gt; 前高 {_fmt(rh)} 元、量達門檻 → 可順勢追進')
+                + _row(f'　追進停損：{_fmt(rh)} 元（跌回前高即假突破）')
+                + _row(f'回測進場（保守）：{_fmt_zone(ez)} 元')
+                + _row(f'停損：{_fmt(inv)} 元 — 跌破即論點作廢')
+                + _row(f'目標：{_fmt(tg)} 元')
+                + _divider()
             )
         vol_str = (f"（觸發須量 ≥ {int(vol_threshold_zhang):,} 張）"
                    if vol_threshold_zhang else "")
         return (
-            "─────────────────────\n"
-            f"建議動作：{action_pill}\n"
-            f"進場區：{_fmt_zone(ez)} 元{vol_str}\n"
-            f"停損：{_fmt(inv)} 元 — 跌破即論點作廢\n"
-            f"目標：{_fmt(tg)} 元\n"
-            "─────────────────────"
+            _divider()
+            + _row(f'建議動作：{action_pill}')
+            + _row(f'進場區：{_fmt_zone(ez)} 元{vol_str}')
+            + _row(f'停損：{_fmt(inv)} 元 — 跌破即論點作廢')
+            + _row(f'目標：{_fmt(tg)} 元')
+            + _divider()
         )
 
     if direction == 'short':
         return (
-            "─────────────────────\n"
-            f"建議動作：{action_pill}\n"
-            f"空進：{_fmt_zone(ez)} 元（回測壓力佈空）\n"
-            f"空停：{_fmt(inv)} 元 — 站回突破即論點作廢\n"
-            f"空標：{_fmt(tg)} 元（P&F 下行目標）\n"
-            "─────────────────────"
+            _divider()
+            + _row(f'建議動作：{action_pill}')
+            + _row(f'空進：{_fmt_zone(ez)} 元（回測壓力佈空）')
+            + _row(f'空停：{_fmt(inv)} 元 — 站回突破即論點作廢')
+            + _row(f'空標：{_fmt(tg)} 元（P&amp;F 下行目標）')
+            + _divider()
         )
 
     # neutral
     return (
-        "五、操作框架\n"
-        "─────────────────────\n"
-        f"建議動作：{action_pill}\n"
-        "（neutral 觀望中，無進場 / 出場觸發價）\n"
-        "─────────────────────"
+        _divider()
+        + _row(f'建議動作：{action_pill}')
+        + _row('（neutral 觀望中，無進場 / 出場觸發價）')
+        + _divider()
     )
 
 
