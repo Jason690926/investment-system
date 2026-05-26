@@ -608,14 +608,28 @@ def _strong_breakout_state(enriched_data: dict, price_f) -> bool:
                 return True
 
         # C. 一字漲停型（漲幅≥9% + close 接近 high）
-        if price > range_high and len(daily_bars) >= 2:
+        # F6 §三十二 Bug-4：加附加條件「近 3 日 ≥2 根漲停（含今日）」避免單
+        # 根衝動誤判（瑞軒 5/22 首次一字漲停 → 5/26 -8.5% 翻車案例）。
+        # 結構性連續漲停（合晶 5/22~5/26 連 3+ 根）仍觸發。
+        if price > range_high and len(daily_bars) >= 4:
             today_close = float(daily_bars[-1]['close'])
             today_high = float(daily_bars[-1]['high'])
             yest_close = float(daily_bars[-2]['close'])
             if (yest_close > 0
                     and (today_close - yest_close) / yest_close >= 0.09
                     and today_close >= today_high * 0.99):
-                return True
+                # 近 3 日（含今日）漲停數
+                limit_up_count = 1  # 今日已知漲停
+                for j in (-2, -3):
+                    try:
+                        c_j = float(daily_bars[j]['close'])
+                        c_jm1 = float(daily_bars[j - 1]['close'])
+                        if c_jm1 > 0 and (c_j - c_jm1) / c_jm1 >= 0.09:
+                            limit_up_count += 1
+                    except (KeyError, IndexError, TypeError, ValueError):
+                        pass
+                if limit_up_count >= 2:
+                    return True
         return False
     except (TypeError, ValueError, KeyError, ZeroDivisionError):
         return False

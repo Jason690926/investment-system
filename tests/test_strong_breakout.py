@@ -86,22 +86,40 @@ def test_breakout_false_when_recent_close_dips_below_range_high():
     assert _strong_breakout_state(ed, price_f=53) is False
 
 
-def test_breakout_true_via_condition_c_one_word_limit_up():
-    """條件 C：一字漲停型（漲幅 ≥ 9% 且 close = high）→ True。
-    瑞軒 5/22 case：昨日 close=52，今日一字漲停 57.15（+9.9%）。
-    並把 idx 35 設成 30 讓 B 不過，isolate 出 C 單獨觸發。"""
-    daily = _peak_at_20_daily([30, 50, 51, 52, 53])  # 先佔位
-    # 改最後一根為一字漲停（昨日 52、今日 57.15）
+def test_breakout_true_via_condition_c_consecutive_limit_up():
+    """條件 C：連 2+ 根漲停型 → True。合晶 5/22~5/26 連 3 根漲停 case。
+    F6 §三十二 Bug-4：條件 C 加附加條件「近 3 日 ≥2 根漲停」避免單根衝動誤判。"""
+    daily = _peak_at_20_daily([30, 40, 45, 47, 52])  # 倒數第 2 根 close=47, 倒數第 1 = 52
+    # 倒數第 2 根改為漲停（idx 38）：昨日 (idx 37) close=45 → 今日漲幅 (47-45)/45 = 4.4% 不夠
+    # 先把 idx 37 改成 42.7 → idx 38 close=47 → 漲幅 +10.07%
+    daily[37]['close'] = 42.7
+    daily[38]['close'] = 47.0  # 漲幅 +10.07%
+    # 最後一根（idx 39）一字漲停：昨日 47 → 今日 51.6（漲幅 +9.79%）
+    daily[-1] = {
+        'date': '2026-04-28',
+        'open': 51.6, 'high': 51.6, 'low': 51.6, 'close': 51.6,
+        'volume_zhang': 500,
+    }
+    ed = {'daily_bars': daily, 'volume_zhang': 500, 'volume_5d_avg_zhang': 1000}
+    # A: 500 < 1500 量不過；B: idx 35 close=30 不過 5 根全站高
+    # C: 漲幅 9.79% + close=high + 近 3 日 2 根漲停（idx 38 + 39）→ True
+    assert _strong_breakout_state(ed, price_f=51.6) is True
+
+
+def test_breakout_false_via_condition_c_single_limit_up():
+    """F6 §三十二 Bug-4：單根一字漲停（前根非漲停）→ False。
+    瑞軒 5/22 case（5/21 爆量但非漲停 +18.9%、5/22 才首次一字漲停 +9.83%）→ 5/26 -8.5% 翻車。"""
+    daily = _peak_at_20_daily([30, 50, 51, 52, 53])
+    # 最後一根一字漲停（昨日 52、今日 57.15 +9.9%），但前一根 53→52 不是漲停
     daily[-1] = {
         'date': '2026-04-28',
         'open': 57.15, 'high': 57.15, 'low': 57.15, 'close': 57.15,
         'volume_zhang': 500,
     }
-    # 昨日 close 必須是 52 才能讓漲幅算出 +9.9%
     daily[-2]['close'] = 52.0
     ed = {'daily_bars': daily, 'volume_zhang': 500, 'volume_5d_avg_zhang': 1000}
-    # A: 量不過、B: idx 35 close=30 ≤ 31 不過、C: 漲幅 9.9% + close=high → 過
-    assert _strong_breakout_state(ed, price_f=57.15) is True
+    # A: 量不過、B: idx 35=30 不過、C: 漲幅 9.9% ✓ + close=high ✓ + 但近 3 日只 1 根漲停 ✗
+    assert _strong_breakout_state(ed, price_f=57.15) is False
 
 
 def test_breakout_false_when_limit_up_but_below_range_high():

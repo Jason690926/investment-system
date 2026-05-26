@@ -1587,7 +1587,7 @@ plan：`docs/superpowers/plans/2026-05-25-action-pill-and-framework.md`
 #### 次要 bug（紀錄不修，留下次或不修）
 
 - **Bug-3 撼訊 6150 pill 矛盾**：pill 🔴 不宜進（程式判結構已轉弱），AI 內文卻寫「方向一致順勢做多」「現價在進場區內」「威科夫(再積累)」— AI 沒遵守程式注入的 structure_flag。需 prompt 鐵律補強，下次處理。
-- **Bug-4 瑞軒 -8.50% 翻車**：`_strong_breakout_state` 條件 C「一字漲停封死」雖滿足形式，但實質過熱。本次修 Bug-1+2 已透過「target cap = price×2.0」+「retest = range_high ±3%」緩解（5/26 -8.5% 跌到 51.7 仍在追進停損 48.85 上方）。條件 C 是否該加 caveat（🟢 追進 ⚠️）下次評估。
+- **Bug-4 瑞軒 -8.50% 翻車** → **本次一併修**（見 F6）：`_strong_breakout_state` 條件 C「一字漲停封死」雖滿足形式，但實質過熱。加附加條件「近 3 日 ≥2 根漲停」區分結構性連續漲停（合晶 5/22~5/26 連 3+ 根 ✓）vs 單根衝動（瑞軒 5/22 首次 ✗）。條件 A/B 仍能涵蓋真強勢，不需新增 ⚠️ pill 變體。
 - **Bug-5 技嘉 short 但月線 5 連陽**：§三十 Bug A 邊界遺漏。`monthly_close_strict_up_3` 因 3 月陰打斷不觸發；`monthly_bull_count_6` 達 4 但與前者是 OR 仍不觸發 → 需 audit `compute_monthly_structure` 條件邏輯。下次處理。
 - **Bug-6 「等突破」vs「等回測」命名混淆** → **本次一併修**（見下方 F4）：`_decide_action` line 726「price > range_high → 🟡 等突破」字面誤導（已突破還等什麼），改為「🟡 突破未驗」（已突破，等量能驗證）。
 
@@ -1600,6 +1600,7 @@ plan：`docs/superpowers/plans/2026-05-25-action-pill-and-framework.md`
 | F3 | docs | `plan.md` + `docs/superpowers/{specs,plans}` | spec + impl plan + plan.md §三十二 |
 | F4 | 6 命名 | `modules/ai_analyzer_v2.py` + `tests/test_decide_action.py` | `_decide_action` 「🟡 等突破」→「🟡 突破未驗」（已突破等量能驗證），對應 test 字串同步 |
 | F5 | Opt-1 | `modules/ai_analyzer_v2.py` + `tests/test_operation_framework.py` | `_render_operation_framework` 每行包 `<div class="op-row">` 取代 `\n`（mistune→HTML 後吃掉換行造成擠成一行 bug，CLAUDE.md §三十一「已知小瑕疵」）；順手移除冗餘「五、操作框架」前綴（AI prompt 已輸出節標題，避免重複）；HTML escape `>`/`&` 字元 |
+| F6 | Bug-4 | `modules/ai_analyzer_v2.py` + `tests/test_strong_breakout.py` | `_strong_breakout_state` 條件 C 加附加條件「近 3 日 ≥2 根漲停（含今日）」避免單根衝動誤判（瑞軒 5/22 首次一字漲停 → 5/26 -8.5% 翻車）。結構性連續漲停（合晶 5/22~5/26 連 3+ 根）仍觸發；單根漲停降為「🟡 突破未驗」或其他依 entry_zone 判 |
 
 ### 設計決策
 
