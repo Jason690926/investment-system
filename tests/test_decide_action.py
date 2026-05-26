@@ -52,14 +52,14 @@ def test_watch_long_breakout_returns_chase():
 
 
 def test_watch_long_above_range_high_not_breakout_returns_wait_breakout():
-    """現價 > range_high 但 breakout=False（量未到）→ 🟡 等突破。"""
+    """現價 > range_high 但 breakout=False（量未到）→ 🟡 突破未驗。"""
     action = _decide_action(
         status='watch', direction='long',
         structure_flag='結構轉折中',
         swing_levels=_swing_long(rl=100, rh=120), breakout=False,
         price=122,  # > range_high=120
     )
-    assert action == '🟡 等突破'
+    assert action == '🟡 突破未驗'
 
 
 def test_watch_long_in_entry_zone_returns_in_entry():

@@ -723,7 +723,7 @@ def _decide_action(status: str, direction: str, structure_flag: str,
             if range_high is not None:
                 try:
                     if price_f > float(range_high):
-                        return '🟡 等突破'
+                        return '🟡 突破未驗'
                 except (TypeError, ValueError):
                     pass
             if entry_zone:
