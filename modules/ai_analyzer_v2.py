@@ -621,6 +621,43 @@ def _strong_breakout_state(enriched_data: dict, price_f) -> bool:
         return False
 
 
+def _breakout_overrides(swing_levels: dict, daily_bars: list,
+                         price) -> dict:
+    """強勢突破成立時覆寫 entry_zone 與 target（plan §三十二, spec 2026-05-26）。
+
+    既有 calc_swing_levels 的 entry_zone / target 對「箱型整理 → 等回測」場景
+    設計；強勢突破中該箱型已被穿過，需用「被突破前高」作 retest 錨點、
+    「過去 60 日絕對最低」作 base_low 重算等幅量度目標。
+
+    輸入：
+      - swing_levels: calc_swing_levels 結果（含 range_high）
+      - daily_bars: 日 K bars（取最後 60 根）
+      - price: 現價（float-able）
+
+    回傳：
+      - 成功：{'entry_zone': (rh*0.97, rh), 'target': bounded_etmm}
+      - 輸入不足/邏輯不通：{}（呼叫端不覆寫）
+    """
+    if not swing_levels or not daily_bars or price is None:
+        return {}
+    rh = swing_levels.get('range_high')
+    if rh is None:
+        return {}
+    try:
+        rh_f = float(rh)
+        price_f = float(price)
+        window = daily_bars[-60:] if len(daily_bars) >= 60 else daily_bars
+        deep_low = min(float(b['low']) for b in window)
+        if deep_low >= rh_f:
+            return {}
+        etmm = rh_f + (rh_f - deep_low)
+        target = min(etmm, price_f * 2.0)
+        retest_zone = (rh_f * 0.97, rh_f)
+        return {'entry_zone': retest_zone, 'target': target}
+    except (TypeError, ValueError, KeyError):
+        return {}
+
+
 def _decide_action(status: str, direction: str, structure_flag: str,
                    swing_levels: dict | None, breakout: bool,
                    price,
@@ -1122,6 +1159,15 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
         )
         _sl = _csl(enriched_data.get('daily_bars', []), result['direction'], _price_f)
         _breakout = _strong_breakout_state(enriched_data, _price_f)
+        # F2 §三十二：強勢突破成立 → 覆寫 entry_zone（retest）與 target
+        if _breakout and _sl:
+            _ov = _breakout_overrides(
+                _sl, enriched_data.get('daily_bars', []), _price_f
+            )
+            if _ov:
+                _sl = {**_sl, **_ov}
+                if result.get('direction') == 'long':
+                    result['target_pnf'] = _ov['target']
         _action = _decide_action(
             status=('hold' if status == 'holding' else 'watch'),
             direction=result['direction'],
@@ -1523,6 +1569,15 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
         )
         _sl = _csl(enriched_data.get('daily_bars', []), result['direction'], _price_f)
         _breakout = _strong_breakout_state(enriched_data, _price_f)
+        # F2 §三十二：強勢突破成立 → 覆寫 entry_zone（retest）與 target
+        if _breakout and _sl:
+            _ov = _breakout_overrides(
+                _sl, enriched_data.get('daily_bars', []), _price_f
+            )
+            if _ov:
+                _sl = {**_sl, **_ov}
+                if result.get('direction') == 'long':
+                    result['target_pnf'] = _ov['target']
         _action = _decide_action(
             status=('hold' if is_holding else 'watch'),
             direction=result['direction'],
