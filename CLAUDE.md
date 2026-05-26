@@ -6,7 +6,76 @@
 - **架構決策**：討論完方案後，先更新 `plan.md`，再開始寫程式
 - `plan.md` 只在需要查架構細節時才讀（節省 token）
 
-## 當前進度（2026-05-25 — §三十 + §三十一 已 deploy 驗收完成 ✅）
+## 當前進度（2026-05-26 — 5/25 報表 vs 5/26 收盤 cross-check：3 P0/P1 bug + 2 優化 7 commit）
+
+**所在週次：週8（AI 偏空校正 + 報表品質）**
+
+**狀態：HEAD = `c8861c5`；7 commits 已 push origin/main (`5c2e0c5..c8861c5`)，Render auto-deploy 觸發中。pytest 284/284 全綠（269 原 + 15 新）**
+
+### 緣起
+用戶提供 5/25 20:37 持股分析報告 PDF（14 股）+ 5/26 收盤截圖（瑞軒 -8.50% / 合晶仍漲停 +9.90% / 矽力 +1.94% / 東捷 +2.41%）cross-check。發現 5 檔強勢突破股共病 2 個 P0 bug + 3 個次要 bug + 1 個 UX 優化。
+
+### A. 修法總覽（7 commits，TDD 流程）
+
+| Commit | 類型 | Bug/Opt | 修法 |
+|--------|------|---------|------|
+| `5c2e0c5` | test | Bug-1+2 | `_breakout_overrides` 8 TDD case（東捷/合晶真實值 + cap 觸發 + 4 退讓邊界）|
+| `c897919` | feat | Bug-1+2 | 新增純函式 `_breakout_overrides(swing_levels, daily_bars, price)`；`analyze_stock_three_masters` / `analyze_market_only` 算完 `_breakout` 後覆寫 `_sl['entry_zone']`+`['target']`，同步 `result['target_pnf']` |
+| `aed5807` | docs | — | spec + impl plan + plan.md §三十二 |
+| `4f63bd2` | fix | Bug-6 | `_decide_action`「🟡 等突破」→「🟡 突破未驗」（已突破等量能驗證，語義更清楚）|
+| `53f339a` | fix | Opt-1 | `_render_operation_framework` 每行包 `<div class="op-row">` 取代 `\n`（mistune→HTML 後吃掉換行 bug）+ 移除冗餘「五、操作框架」前綴 + HTML escape |
+| `887e7cc` | fix | Bug-4 | `_strong_breakout_state` 條件 C 加附加條件「近 3 日 ≥2 根漲停（含今日）」避免單根衝動誤判（瑞軒 5/22 首次一字漲停 → 5/26 -8.5% 翻車）|
+| `c8861c5` | fix | Bug-5 | `compute_monthly_structure` 加 `monthly_inprogress_strong_up` 欄位（進行中月漲幅 ≥7% 且在 MA60 之上）；`_structure_flag` 強勢上漲否決加 OR 分支 — 修技嘉 5 月 V 反轉 +21% 但被排除而誤判 short |
+
+### B. 主要 P0 修法詳述
+
+**Bug-1 強勢突破股「回測進場」異常偏低**（5 檔受害）
+- 東捷 145.5 vs 回測 75-109.25（-25%~-48%）、矽力 618 vs 391-423.5、合晶 76.8 vs 52.1-55.7、瑞軒 56.5 vs 37.5-43.17、微星 127 vs 94.5-109.25
+- 根因：`calc_swing_levels` 用 60 日窗口「最近局部峰」，`_find_local_peaks(min_gap=3)` 需左右各 3 根確認 → 強勢突破中新峰尚未成形 → `entry_zone` 仍是舊箱型範圍
+- 修法：strong_breakout=True 時 retest zone = `(range_high × 0.97, range_high)` 單邊向下 3%（Darvas Box / 威科夫 SOT 原理，前高反轉為支撐）
+
+**Bug-2 強勢突破股 P&F 目標「— 元」缺失**（同 5 檔）
+- 根因：`calc_pnf_target` Filter A `current_price < base_high × 0.85` → 強勢突破中現價遠超 → 候選箱被全濾掉 → None
+- 修法：用「過去 60 日絕對最低」作 base_low 重算等幅量度，cap = price × 2.0 防離譜
+
+| 股 | retest zone | target |
+|----|------------|--------|
+| 東捷 | 139.20 ~ 143.50 | 243.75 |
+| 矽力 | 442.32 ~ 456.00 | 728.50 |
+| 合晶 | 57.52 ~ 59.30 | 90.35 |
+| 瑞軒 | 47.38 ~ 48.85 | 67.70 |
+| 微星 | 120.28 ~ 124.00 | 163.00 |
+
+### 驗證狀況
+- pytest **284/284 全綠**（269 + 8 F1 + 1 F4 + 3 F5 + 1 F6 + 3 F7 - 1 改名）
+- py_compile（ai_analyzer_v2 / data_enricher）+ syntax 全綠
+- 純加性 + helper / OR 分支 / 字串改名，無 DB migration
+
+### ⚠️ Deploy 驗收（用戶可執行，~$0.6 重跑驗全部）
+已 push → Render auto-deploy。燒 ~$0.6 跑一鍵分析 + 出 PDF 驗：
+
+1. **Bug-1+2**：矽力/東捷/合晶/瑞軒/微星 第五節 retest zone = 前高 ±3%、target 顯示上表數字（不再「— 元」）
+2. **Bug-4**：瑞軒 5/22 一字漲停（5/25 報表上）pill **不再** 🟢 追進 💪（單根漲停降級）；合晶 5/22~5/26 連 3+ 根漲停仍 🟢 追進 💪（A+C 雙過）
+3. **Bug-5**：技嘉結構旗標 = 「結構未轉弱」（5 月進行中 +21% 觸發 inprogress_strong_up），AI 禁標派發，方向應改 long 或 neutral
+4. **Bug-6**：大聯大 pill = 「🟡 突破未驗」（取代「🟡 等突破」）
+5. **Opt-1**：PDF 第五節操作框架每行清楚換行（不再擠成一行），無「五、操作框架」重複標題
+
+### 沿用未驗（持續觀察）
+- §三十 + §三十一 + §二十九 沿用，本次未退化
+- §三十二 次要 bug **未修**：
+  - **Bug-3 撼訊 6150 pill 矛盾**（pill 🔴 不宜進 / AI 內文「順勢做多」）— AI 沒遵守程式 structure_flag 注入；需 prompt 鐵律補強，下次處理
+  - **Opt-2/3 dashboard UX**（mini-card「尚未分析」顯示上次 pill + 錨點 strip）— 屬新功能，獨立 spec 下次處理
+- Dashboard 迷你 K 線快取漏洞（§二十七，暫不修）
+- Bug D 大盤對比 TWII rate limit（memory/bug-d-twii-rs-rate-limit.md）
+
+### 回滾策略
+7 commit 純加性 + 純函式 helper + OR 分支擴充，無 DB migration、無既有函式簽名改動。任一有問題 `git revert <commit>` 獨立回滾。
+- F2 (`c897919`) 影響面最大但有「helper 回 `{}` 退讓 → 沿用 calc_swing_levels 原值」雙層防護
+- F7 (`c8861c5`) 改 `_structure_flag` 簽名（加 optional 參數），但 default 為 False 向後相容
+
+---
+
+## 過往進度（2026-05-25 — §三十 + §三十一 已 deploy 驗收完成 ✅）
 
 **所在週次：週8（AI 偏空校正 + 報表品質）**
 
