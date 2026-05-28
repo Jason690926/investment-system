@@ -775,7 +775,7 @@ def api_recommend_stock(stock_id):
     from datetime import date as dt_date
     from modules.models import Stock, StockAnalysis, PersonalRecommendation
     from modules.data_enricher import get_stock_info
-    from modules.ai_analyzer_v2 import generate_personal_recommendation
+    from modules.ai_analyzer_v2 import generate_personal_recommendation, AIGenerationError
 
     db = SessionLocal()
     try:
@@ -791,11 +791,16 @@ def api_recommend_stock(stock_id):
             return jsonify({'error': '尚無市場分析，請先產生分析'}), 404
 
         # 嘗試讀今日既有 cache（同 user × symbol × date 已產生過則直接回）
+        # Bug-H §三十五：若 cache 內容是過往 error 字串（5/28 前殘留），跳過 cache 重新產生
         existing_rec = db.query(PersonalRecommendation).filter_by(
             user_id=current_user.id, symbol=stock.symbol, analysis_date=today
         ).first()
-        if existing_rec:
+        if existing_rec and existing_rec.html and not existing_rec.html.startswith('AI分析失敗'):
             return jsonify({'html': existing_rec.html, 'from_cache': True})
+        if existing_rec and existing_rec.html and existing_rec.html.startswith('AI分析失敗'):
+            # 清掉壞 cache 後重試
+            db.delete(existing_rec)
+            db.commit()
 
         info = get_stock_info(stock.symbol)
         current_price = info['price'] if info else 0
@@ -816,19 +821,25 @@ def api_recommend_stock(stock_id):
             except Exception:
                 pass
 
-        html = generate_personal_recommendation(
-            name=stock.name, symbol=stock.symbol,
-            current_price=current_price,
-            wyckoff_phase=cached.wyckoff_phase or '未知',
-            risk_pct=cached.risk_pct or 50,
-            support=float(cached.support_price)    if cached.support_price    else None,
-            resistance=float(cached.resistance_price) if cached.resistance_price else None,
-            target_pnf=float(cached.target_price)  if cached.target_price    else None,
-            status=stock.status,
-            avg_cost=avg,
-            total_zhang=total,
-            recent_bars=recent_bars,
-        )
+        try:
+            html = generate_personal_recommendation(
+                name=stock.name, symbol=stock.symbol,
+                current_price=current_price,
+                wyckoff_phase=cached.wyckoff_phase or '未知',
+                risk_pct=cached.risk_pct or 50,
+                support=float(cached.support_price)    if cached.support_price    else None,
+                resistance=float(cached.resistance_price) if cached.resistance_price else None,
+                target_pnf=float(cached.target_price)  if cached.target_price    else None,
+                status=stock.status,
+                avg_cost=avg,
+                total_zhang=total,
+                recent_bars=recent_bars,
+            )
+        except AIGenerationError as e:
+            # Bug-H §三十五：AI 失敗 → 不寫 cache + 友善訊息給用戶
+            print(f'[recommend] {stock.symbol} AI 失敗 ({e.kind}): {e.raw_error[:100]}')
+            status_code = 503 if e.kind in ('credit', 'rate_limit', 'timeout') else 500
+            return jsonify({'error': e.friendly_message, 'kind': e.kind}), status_code
 
         # 寫入 cache（同 key 已存在則 update，理論上前面 existing_rec 已 return）
         db.add(PersonalRecommendation(
