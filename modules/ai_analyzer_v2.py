@@ -873,18 +873,24 @@ def _decide_action(status: str, direction: str, structure_flag: str,
 
 
 def adjust_pill_for_deep_loss(action_pill, pl_pct, threshold_pct: float = -20.0):
-    """Bug-1 §三十四：HOLD 深虧時 post-process 覆寫 pill 避免「加碼」誤導。
+    """Bug-1 §三十四 + Bug-A §三十五：HOLD 深虧時 post-process 覆寫 pill。
 
     分析時 (analyze_market_only) 不知個人成本（DB 跨用戶共用 cache），故 base pill
     由結構面判定（_decide_action 不傳 pl_pct）。讀取端（print-report / dashboard）
     擁有個人 avg_cost + price → 算 pl_pct，呼叫此 helper 覆寫 pill。
 
     輸入：
-      - action_pill: 原 pill 字串（如 '🟢 加碼 💪'）
+      - action_pill: 原 pill 字串（如 '🟢 加碼 💪' / '🟢 續抱'）
       - pl_pct: 個人 P/L %（如 -33.9 = 虧 33.9%）；None → 不變動
       - threshold_pct: 深虧門檻（預設 -20%）
 
     回傳：覆寫後 pill（'🟡 觀望持有' if 觸發、原 pill if 未觸發或 None）
+
+    覆寫對象：
+      - '加碼' / '加碼 💪'：避免攤平擴大敞口（Bug-1 §三十四）
+      - '續抱'：晶心科 5/28 場景 — direction=neutral + entry_zone=None → default 續抱
+                但深虧 -38% 已跌穿停損，續抱對家人讀者誤導為「OK 繼續持有」
+                （Bug-A §三十五）
     """
     if not action_pill or pl_pct is None:
         return action_pill
@@ -893,8 +899,8 @@ def adjust_pill_for_deep_loss(action_pill, pl_pct, threshold_pct: float = -20.0)
             return action_pill
     except (TypeError, ValueError):
         return action_pill
-    # 觸發深虧 → 抑制任何「加碼」字眼
-    if '加碼' in action_pill:
+    # 觸發深虧 → 抑制「加碼」/「續抱」字眼（攤平 / 不採取行動皆有誤導風險）
+    if '加碼' in action_pill or '續抱' in action_pill:
         return '🟡 觀望持有'
     return action_pill
 
