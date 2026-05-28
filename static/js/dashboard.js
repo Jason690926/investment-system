@@ -218,24 +218,28 @@ function formatLastDate(iso) {
 }
 
 /* ── plan §三十三：錨點 strip — 方向 long/short/neutral 動態切換 label ─── */
+/* Bug-B §三十五：long phase 但 entry_low/high 都 None → fallback 走 neutral path
+   （AI direction=neutral 但 wyckoff_phase 仍 long phase 的 case，避免 strip 全「—」） */
 function renderAnchorStrip(s) {
   // 完全無分析資料（連 fallback 都沒命中）→ 不顯示
   if (s.risk_pct == null && !s.wyckoff_phase) return '';
   const dir = s.wyckoff_phase ? (phaseDirection(s.wyckoff_phase)?.t || null) : null;
   const fmt = (v) => (v != null ? `${v}` : '—');
+  // Bug-B §三十五：若是 long/short phase 但 entry_low/high 都 None
+  // 表示 AI direction=neutral（calc_swing_levels neutral 不回 entry_zone）
+  // → 改走 neutral path 用 support/resistance 區間顯示
+  const noEntryData = (s.entry_low == null && s.entry_high == null);
   let html = '';
-  if (dir === '空') {
+  if (dir === '空' && !noEntryData) {
     // short: 空進(entry_high) | 空停(stop_loss) | 空標(target_pnf)
     html = `空進 ${fmt(s.entry_high)} <span class="anchor-sep">|</span> 空停 ${fmt(s.stop_loss)} <span class="anchor-sep">|</span> 空標 ${fmt(s.target_pnf)}`;
-  } else if (dir === '多') {
+  } else if (dir === '多' && !noEntryData) {
     // long: 進(entry_low-entry_high) | 停(entry_low) | 標(target_pnf)
-    const entry = (s.entry_low != null && s.entry_high != null)
-      ? `${s.entry_low}-${s.entry_high}`
-      : '—';
-    const stop = s.stop_loss != null ? s.stop_loss : (s.entry_low != null ? s.entry_low : '—');
+    const entry = `${s.entry_low}-${s.entry_high}`;
+    const stop = s.stop_loss != null ? s.stop_loss : s.entry_low;
     html = `進 ${entry} <span class="anchor-sep">|</span> 停 ${fmt(stop)} <span class="anchor-sep">|</span> 標 ${fmt(s.target_pnf)}`;
   } else {
-    // neutral / 觀望：區間 + 雙向標示
+    // neutral / fallback：區間 + 雙向標示
     const range = (s.support != null && s.resistance != null)
       ? `${s.support}-${s.resistance}`
       : '—';
