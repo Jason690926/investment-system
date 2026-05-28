@@ -1782,3 +1782,82 @@ plan：`docs/superpowers/plans/2026-05-28-dashboard-stale-anchor.md`
 
 spec：`docs/superpowers/specs/2026-05-28-cross-check-6-fixes-design.md`
 plan：`docs/superpowers/plans/2026-05-28-cross-check-6-fixes.md`
+
+---
+
+## 三十五、5/28 cross-check Round 2：5 bug 修法（API error / 深虧續抱 / Filter B / RISK 隔離 / 錨點 fallback）（2026-05-28）
+
+### 緣起
+
+§三十四 修法 deploy 後（push origin/main `e5aed91`），用戶燒 ~$0.6 重跑 14 檔 5/28 報表 + 截圖。Cross-check 發現 5 個追加 bug：
+
+1. **Bug-H**（P0）：個股詳情頁「📌 持股操作建議」直接 leak Anthropic API raw error（credit balance too low）。DB cache 永久污染 — even credit 充值後 existing_rec 命中仍回 error 字串
+2. **Bug-A**（P0）：晶心科 5/28 cost=-38% / direction=neutral / entry_zone=None → _decide_action default 走「🟢 續抱」，§三十四 Bug-1 修法只 catch「加碼」字眼故未覆寫 → 家人讀者誤導
+3. **Bug-D**（P0）：Opt-1 relaxed sentence 對 Filter B 失敗場景（cur 已遠超 gate）仍寫「需先突破 Y」邏輯不通（矽力/東捷/合晶/瑞軒 4 檔受害）
+4. **Bug-G**（P1）：analyze_market_only 對 is_holding=True 注入【持倉提示】可能污染 RISK_PCT 客觀性（晶心科 42% → 62% 升幅可能含「持股人視角」加成）
+5. **Bug-B**（P1）：晶心科 dashboard 錨點 strip 完全「— | — | —」— frontend wyckoff='再積累'=long phase 但 AI direction=neutral → calc_swing_levels neutral 不回 entry_zone → DB entry_low/high=None → 全 '—'
+
+### A. 修法總覽（5 commit + 1 docs）
+
+| Commit | Bug | 內容 |
+|--------|-----|------|
+| `da4e3ac` | Bug-H | `AIGenerationError` 異常類別 + `_detect_error_kind` helper；`generate_personal_recommendation` 失敗 raise；`api_recommend_stock` catch → 503 + 友善訊息 + 不寫 cache；既有 5/28 兩筆 error cache（6533/6104）已 DB cleanup |
+| `db29965` | Bug-A | `adjust_pill_for_deep_loss` 擴大 catch：HOLD 深虧 ≤ -20% 時把「續抱」也改「🟡 觀望持有」（不只「加碼」） |
+| `8f0e973` | Bug-D | `calc_pnf_target_relaxed` signature 改 (target, gate, status) 三元組；'reached' 狀態下 `_dual_pnf` 寫新句「P&F概念目標：先前等幅量度 X 已達成（突破點 Y），等新箱形成」 |
+| `747fbb3` | Bug-G + B | analyze_market_only 兩處 prompt 強化：【持倉提示】明確隔離 + 風險評分加「客觀性鐵律」；dashboard.js renderAnchorStrip：entry_low/high 都 None 時 fallback 走 neutral path |
+| 本 commit | docs | plan.md §三十五（本節）+ spec + impl plan + CLAUDE.md 進度更新 |
+
+### B. 5/28 cross-check 證據摘要
+
+| 股 | 5/28 重跑後現象 | 修法結果 |
+|---|----------------|---------|
+| 晶心科 6533 (H) | pill=🟢 續抱 / cost=-38% / strip=「— \| — \| —」/ 個股詳情 leak error | Bug-A pill 覆寫 / Bug-B strip fallback / Bug-H 不再 leak |
+| 矽力/東捷/合晶/瑞軒 | 「需先突破 Y」但現價已遠超 Y | Bug-D 改新句「先前已達成」 |
+| 14 檔重跑 RISK 評分 | is_holding 可能暗中污染 | Bug-G prompt 強化客觀性鐵律 |
+| 個股詳情頁/PDF 個人建議 | DB 永久存 error 字串 | Bug-H raise + cleanup |
+
+### C. 為什麼這樣設計
+
+1. **Bug-H 採三層防護而非單點修**：
+   - `_generate` 保留 return error string（向後相容 analyze_market_only 等大盤 caller，不想牽動範圍）
+   - `generate_personal_recommendation` 失敗 raise（精準針對 PersonalRecommendation cache 路徑）
+   - `api_recommend_stock` catch + 不寫 cache + 友善訊息（端點級防護）
+   - 既有 cache cleanup 一次性 SQL（避免下次 read 再 leak）
+
+2. **Bug-A 擴大 catch 為「加碼/續抱」**：HOLD 深虧 + 結構未轉弱 + entry_zone=None → default 「續抱」是個常見路徑（直接 fall-through），單獨 catch「加碼」漏掉。
+
+3. **Bug-D status 三元組而非新函式**：與 calc_pnf_target_relaxed 共用箱體掃描，差別僅在 caller 看 status 決定 sentence。比拆兩函式 DRY。
+
+4. **Bug-G 純 prompt 而非結構改動**：is_holding 是必要旗標（觸發第六節），無法移除；只能靠 prompt 教 AI 隔離影響範圍。需重跑驗 prompt 行為。
+
+5. **Bug-B frontend 解 backend 限制**：calc_swing_levels neutral 不回 entry_zone 是 API 語意（neutral 無進場/出場觸發），改後端會破壞語意。frontend 偵測「同 phase 但 entry 為 None」即知後端走 neutral path，用 support/resistance 顯示「區間 X-Y | 雙向」對家人讀者更友善。
+
+### 驗證狀況
+
+- pytest **340/340 全綠**（既有 315 + 11 Bug-H + 9 Bug-A + 5 Bug-D）
+- py_compile（ai_analyzer_v2 / candlestick / app）+ `node -c dashboard.js` 全綠
+- 5 commit 純加性 + prompt 強化 + signature 擴展（既有 4 個 relaxed test 改三元組解構）
+
+### ⚠️ Deploy 驗收
+
+**零 token 立即生效**：
+1. **Bug-H**：個股詳情頁「持股操作建議」不再 leak raw API error；若 credit 不足 → 顯示「AI 服務額度不足，請聯絡管理員充值」
+2. **Bug-A**：晶心科 cost=-38% 場景，pill 從「🟢 續抱」覆寫為「🟡 觀望持有」
+3. **Bug-B**：晶心科 dashboard 卡片錨點 strip 從「— | — | —」改顯「區間 213-249.5 | 雙向」
+
+**燒 ~$0.6 重跑驗 prompt 行為**：
+4. **Bug-D**：強勢突破 4 檔（矽力/東捷/合晶/瑞軒）第五節 P&F 句改寫為「先前等幅量度 X 已達成」（不再「需先突破 Y」）
+5. **Bug-G**：14 檔重跑 RISK 評分對「持股 vs 觀察」狀態變化更穩定（同股切換 status 不應改 RISK）
+
+### 回滾策略
+
+5 commit 純加性 + 既有函式新參數 default：
+- `da4e3ac` revert → AIGenerationError 不存在 + api_recommend_stock 回到舊行為
+- `db29965` revert → adjust_pill_for_deep_loss 回到只 catch「加碼」
+- `8f0e973` revert → relaxed 回兩元組（既有 4 test 已 unpack 3 個，會 fail，故 revert 須一併改 test）
+- `747fbb3` revert → prompt 回舊版 + frontend 回 long-only path
+
+各 commit 獨立 revert（除 `8f0e973` 因 signature 改動需配對 test）。
+
+spec：`docs/superpowers/specs/2026-05-28-cross-check-round2-design.md`
+plan：`docs/superpowers/plans/2026-05-28-cross-check-round2.md`
