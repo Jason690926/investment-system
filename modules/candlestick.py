@@ -780,18 +780,20 @@ def calc_pnf_target(bars: list, lookback: int = 12,
 def calc_pnf_target_relaxed(bars: list, lookback: int = 12,
                              current_price: float = None,
                              direction: str = 'long') -> tuple | None:
-    """Opt-1 §三十四：放寬 Filter A/B 後的「理論等幅量度目標」+ 觸發 gate 價。
+    """Opt-1 §三十四 + Bug-D §三十五：放寬 Filter A/B 後的「理論等幅量度目標」。
 
     當 strict 版（calc_pnf_target）因 Filter A（現價未過/跌破箱頂/箱底）或
     Filter B（target 已被 cur 超過）回 None 時，此函式仍掃描全歷史找出**最近一個
-    有效盤整箱體**對應的目標 + 觸發 gate 價，讓 render 端顯示：
-      「理論目標 X 元 — 需先突破 Y 元觸發」(long)
-      「理論目標 X 元 — 需先跌破 Y 元觸發」(short)
+    有效盤整箱體**對應的目標 + 觸發 gate 價 + 狀態（pending / reached）。
 
-    比顯示「— 元」對家人讀者更有參考價值（揭露假設條件而非藏起來）。
+    Bug-D §三十五：原版（§三十四）只回 (target, gate) 兩元組，render 端對「Filter B
+    失敗（cur 已遠超 gate）」場景仍寫「需先突破 Y」邏輯不通。新版加 status 區分：
+      - 'pending' — Filter A 失敗（cur 未過/跌破 gate）→ render 寫「需先突破/跌破」
+      - 'reached' — Filter B 失敗（cur 已超 gate）→ render 寫「先前 P&F 已達成，
+                    等新箱形成」
 
     回傳：
-      - (target, gate_price) — 找到有效箱體
+      - (target, gate_price, status) — 找到有效箱體
       - None — 連箱體都找不到（趨勢段 / 波動率過大）
 
     與 calc_pnf_target 共用箱體掃描邏輯，差別在不套用 Filter A/B/C；
@@ -829,7 +831,13 @@ def calc_pnf_target_relaxed(bars: list, lookback: int = 12,
                 target = box_top + (box_top - box_bottom)
                 target_v = round(target) if target >= 100 else round(target, 1)
                 gate_v   = round(box_top) if box_top >= 100 else round(box_top, 1)
-                return (target_v, gate_v)
+                # Bug-D §三十五：cur 已遠超 gate（× 1.02 buffer）→ Filter B 失敗類型
+                cur = current_price
+                if cur is not None and float(cur) > box_top * 1.02:
+                    status = 'reached'
+                else:
+                    status = 'pending'
+                return (target_v, gate_v, status)
             else:
                 box_bottom = lows[i]
                 if not all(lows[j] >= box_bottom
@@ -849,7 +857,13 @@ def calc_pnf_target_relaxed(bars: list, lookback: int = 12,
                 target = box_bottom - (box_top - box_bottom)
                 target_v = round(target) if target >= 100 else round(target, 1)
                 gate_v   = round(box_bottom) if box_bottom >= 100 else round(box_bottom, 1)
-                return (target_v, gate_v)
+                # Bug-D §三十五：short cur 已遠跌破 gate（× 0.98 buffer）→ Filter B 失敗類型
+                cur = current_price
+                if cur is not None and float(cur) < box_bottom * 0.98:
+                    status = 'reached'
+                else:
+                    status = 'pending'
+                return (target_v, gate_v, status)
 
         return None
     except Exception as e:

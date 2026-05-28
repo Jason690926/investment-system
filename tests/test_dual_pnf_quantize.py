@@ -101,21 +101,44 @@ def test_dual_pnf_block_none_uses_no_target_sentence(monkeypatch):
 
 
 def test_dual_pnf_block_relaxed_sentence_when_strict_none(monkeypatch):
-    """Opt-1 §三十四：strict None + relaxed 有值 → 改用「P&F理論目標」句。"""
+    """Opt-1 §三十四 + Bug-D §三十五：strict None + relaxed 有值 → 依 status 改句。"""
     import modules.ai_analyzer_v2 as mod
     monkeypatch.setattr(mod, 'calc_pnf_target',
                         lambda bars, lookback, current_price, direction: None)
+    # Bug-D §三十五：relaxed 回 (target, gate, status) 三元組
     monkeypatch.setattr(
         mod, 'calc_pnf_target_relaxed',
         lambda bars, lookback, current_price, direction: (
-            (110.0, 100.0) if direction == 'long' else (80.0, 90.0)
+            (110.0, 100.0, 'pending') if direction == 'long' else (80.0, 90.0, 'pending')
         ),
     )
     _, _, block = _dual_pnf(_mock_enriched(), 95.0)
-    # long：理論 110、需先突破 100
+    # long pending：理論 110、需先突破 100
     assert 'P&F理論目標：110元 — 需先突破 100 元觸發' in block
-    # short：理論 80、需先跌破 90（< 100 → quantize 1 dp 顯示 80.0 / 90.0）
+    # short pending：理論 80、需先跌破 90（< 100 → quantize 1 dp 顯示 80.0 / 90.0）
     assert 'P&F理論目標：80.0元 — 需先跌破 90.0 元觸發' in block
+
+
+def test_dual_pnf_block_reached_sentence_bug_d(monkeypatch):
+    """Bug-D §三十五：status='reached' 改顯「先前等幅量度已達成」句。"""
+    import modules.ai_analyzer_v2 as mod
+    monkeypatch.setattr(mod, 'calc_pnf_target',
+                        lambda bars, lookback, current_price, direction: None)
+    # long reached: gate 100 已被 cur 133 遠超
+    monkeypatch.setattr(
+        mod, 'calc_pnf_target_relaxed',
+        lambda bars, lookback, current_price, direction: (
+            (110.0, 100.0, 'reached') if direction == 'long' else None
+        ),
+    )
+    _, _, block = _dual_pnf(_mock_enriched(), 133.0)
+    # 新句不含舊「需先突破 X」
+    assert '需先突破' not in block
+    # 應出現「先前等幅量度 110 元已達成」+「突破點 100 元」
+    assert '先前等幅量度' in block
+    assert '110 元已達成' in block
+    assert '突破點 100' in block
+    assert '等新箱形成' in block
 
 
 # ============================================================

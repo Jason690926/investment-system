@@ -374,17 +374,22 @@ def _dual_pnf(enriched_data: dict, price_f):
     pnf_long  = _quantize_price(pnf_long)
     pnf_short = _quantize_price(pnf_short)
 
-    # Opt-1 §三十四：strict 失敗時用 relaxed 揭露「理論目標 + 觸發 gate」
-    # 比「—（尚未接近突破點）」對家人讀者更有參考價值（揭露假設條件，不藏起來）
+    # Opt-1 §三十四 + Bug-D §三十五：strict 失敗時用 relaxed 揭露「理論目標 + 觸發 gate + 狀態」
+    # status='pending' → 「需先突破/跌破 Y」；status='reached' → 「先前已達成，等新箱形成」
     def _relaxed_sentence(dir_: str, fallback: str) -> str:
         for bars, lb in [(wk, 12), (dk, 20)]:
             r = calc_pnf_target_relaxed(bars, lookback=lb,
                                          current_price=price_f, direction=dir_)
             if r:
-                t, g = r
+                t, g, status = r
                 t_q = _quantize_price(t)
                 g_q = _quantize_price(g)
                 gate_verb = '突破' if dir_ == 'long' else '跌破'
+                if status == 'reached':
+                    # Filter B 失敗：cur 已遠超 gate → 先前等幅量度已達成
+                    return (f'P&F概念目標：先前等幅量度 {t_q} 元已達成（{gate_verb}點 {g_q} 元），'
+                            f'等新箱形成才能估算下一目標')
+                # status == 'pending'：Filter A 失敗 → 維持「需先突破/跌破」句
                 return f'P&F理論目標：{t_q}元 — 需先{gate_verb} {g_q} 元觸發（等幅量度）'
         return fallback
 

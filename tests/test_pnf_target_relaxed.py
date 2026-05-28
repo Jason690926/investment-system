@@ -41,7 +41,7 @@ def test_relaxed_returns_target_when_filter_a_fails():
     assert strict is None
     # relaxed 應回 (target, gate) — 演算法取最近一個有效箱（rightmost）
     assert relaxed is not None
-    target, gate = relaxed
+    target, gate, _status = relaxed
     assert target > gate         # long target 必 > gate
     assert gate >= 95            # gate (= box_top) 為現價需突破才生效
 
@@ -52,7 +52,7 @@ def test_relaxed_short_when_strict_filter_a_fails():
     relaxed = calc_pnf_target_relaxed(bars, lookback=20, current_price=92, direction='short')
     # short target < gate（下行目標 < 需跌破價）
     assert relaxed is not None
-    target, gate = relaxed
+    target, gate, _status = relaxed
     assert target < gate
     assert gate <= 92            # gate (= box_bottom) 為現價需跌破才生效
 
