@@ -120,6 +120,9 @@ function buildCard(s) {
   const badgeCls   = s.status === 'holding' ? 'badge-holding' : 'badge-watching';
   const badgeText  = s.status === 'holding' ? '已持有' : '觀察中';
   const isAnalyzed = riskPct != null;
+  // plan §三十三：sale fallback — is_today_analysis=false 表 fallback 命中前一日資料
+  const isToday    = s.is_today_analysis !== false;
+  const isStale    = isAnalyzed && !isToday;
 
   // Status row: 方向標籤 + wyckoff badge + risk inline chip + 建議動作 pill（並排）
   const _dir = wyckoff ? phaseDirection(wyckoff) : null;
@@ -137,9 +140,15 @@ function buildCard(s) {
   const actionChip = actionPill
     ? `<span class="action-pill ${actionClass(actionPill)}" title="建議動作">${actionPill}</span>`
     : '';
-  const statusRowHtml = (dirChip || wyckoffChip || riskChip || actionChip)
-    ? `<div class="card-status-row">${dirChip}${wyckoffChip}${riskChip}${actionChip}</div>`
+  // plan §三十三：fallback 時顯示「上次 MM-DD」tag
+  const lastTag = (isStale && s.last_analysis_date)
+    ? `<span class="last-analysis-tag" title="上次分析日">上次 ${formatLastDate(s.last_analysis_date)}</span>`
     : '';
+  const statusRowHtml = (dirChip || wyckoffChip || riskChip || actionChip || lastTag)
+    ? `<div class="card-status-row">${dirChip}${wyckoffChip}${riskChip}${actionChip}${lastTag}</div>`
+    : '';
+  // plan §三十三：錨點 strip（方向 long/short/neutral 動態切換 label）
+  const anchorStripHtml = renderAnchorStrip(s);
 
   // Meta row：holding 顯示張數+成本；watching 顯示「觀察中」
   let metaHtml = '';
@@ -152,8 +161,9 @@ function buildCard(s) {
     metaHtml = `<div class="card-meta" style="color:var(--muted);">觀察中 · 尚未建倉</div>`;
   }
 
+  const cardClasses = `stock-card${isAnalyzed ? ' analyzed' : ''}${isStale ? ' card-stale-data' : ''}`;
   return `
-  <div class="stock-card${isAnalyzed ? ' analyzed' : ''}" data-stock-id="${s.id}" onclick="openStockPage(${s.id})">
+  <div class="${cardClasses}" data-stock-id="${s.id}" onclick="openStockPage(${s.id})">
     <div class="card-row1">
       <div class="card-ident">
         <span class="badge ${badgeCls}">${badgeText}</span>
@@ -166,6 +176,7 @@ function buildCard(s) {
       </div>
     </div>
     ${statusRowHtml}
+    ${anchorStripHtml}
     <div class="card-spark-wrap">
       <span class="card-spark-title">近 20 日 K</span>
       <span class="card-spark-label flat">—</span>
@@ -181,6 +192,44 @@ function buildCard(s) {
       ${metaHtml}
     </div>
   </div>`;
+}
+
+/* ── plan §三十三：last-analysis-date 格式化（'2026-05-25' → '5/25'）─────── */
+function formatLastDate(iso) {
+  if (!iso || typeof iso !== 'string') return '';
+  const parts = iso.split('-');
+  if (parts.length < 3) return iso;
+  const mm = parseInt(parts[1], 10);
+  const dd = parseInt(parts[2], 10);
+  if (!Number.isFinite(mm) || !Number.isFinite(dd)) return iso;
+  return `${mm}/${dd}`;
+}
+
+/* ── plan §三十三：錨點 strip — 方向 long/short/neutral 動態切換 label ─── */
+function renderAnchorStrip(s) {
+  // 完全無分析資料（連 fallback 都沒命中）→ 不顯示
+  if (s.risk_pct == null && !s.wyckoff_phase) return '';
+  const dir = s.wyckoff_phase ? (phaseDirection(s.wyckoff_phase)?.t || null) : null;
+  const fmt = (v) => (v != null ? `${v}` : '—');
+  let html = '';
+  if (dir === '空') {
+    // short: 空進(entry_high) | 空停(stop_loss) | 空標(target_pnf)
+    html = `空進 ${fmt(s.entry_high)} <span class="anchor-sep">|</span> 空停 ${fmt(s.stop_loss)} <span class="anchor-sep">|</span> 空標 ${fmt(s.target_pnf)}`;
+  } else if (dir === '多') {
+    // long: 進(entry_low-entry_high) | 停(entry_low) | 標(target_pnf)
+    const entry = (s.entry_low != null && s.entry_high != null)
+      ? `${s.entry_low}-${s.entry_high}`
+      : '—';
+    const stop = s.stop_loss != null ? s.stop_loss : (s.entry_low != null ? s.entry_low : '—');
+    html = `進 ${entry} <span class="anchor-sep">|</span> 停 ${fmt(stop)} <span class="anchor-sep">|</span> 標 ${fmt(s.target_pnf)}`;
+  } else {
+    // neutral / 觀望：區間 + 雙向標示
+    const range = (s.support != null && s.resistance != null)
+      ? `${s.support}-${s.resistance}`
+      : '—';
+    html = `區間 ${range} <span class="anchor-sep">|</span> 雙向`;
+  }
+  return `<div class="card-anchor-strip">${html}</div>`;
 }
 
 /* ── 20 日迷你日 K 線 SVG 渲染（台股漲紅跌綠）──────────── */
@@ -394,6 +443,9 @@ async function analyzeAll() {
   }
 
   isAnalyzing = false;
+  // plan §三十三：reload 讓錨點 strip / pill / 撐壓目標等新欄位以最新資料渲染
+  // （markCardAnalyzed 只更新 wyckoff/risk chip；anchor strip 需要 entry_low/high 等欄位）
+  try { await loadStocks(); } catch { /* 失敗不影響分析完成訊息 */ }
   const cacheMsg = cached > 0 ? `，其中 ${cached} 支來自快取` : '';
   progress.innerHTML = `<span style="color:var(--green);font-weight:700;">✓ 分析完成（${stocks.length} 支${cacheMsg}）</span>`;
   btn.disabled = false;
@@ -413,6 +465,10 @@ function markCardAnalyzed(stockId, riskPct, wyckoffPhase) {
   const card = document.querySelector(`[data-stock-id="${stockId}"]`);
   if (!card) return;
   card.classList.add('analyzed');
+  // plan §三十三：今日分析完成 → 移除 stale 樣式 + 上次分析 tag
+  card.classList.remove('card-stale-data');
+  const oldTag = card.querySelector('.last-analysis-tag');
+  if (oldTag) oldTag.remove();
 
   // 找或建 card-status-row（插在 card-row1 後）
   let statusRow = card.querySelector('.card-status-row');

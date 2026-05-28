@@ -362,6 +362,50 @@ a:hover { text-decoration: underline; }
 .action-bear    { color: #EF4444; background: rgba(239,68,68,.12);  border: 1px solid rgba(239,68,68,.30); }
 .action-neutral { color: #94A3B8; background: rgba(148,163,184,.12);border: 1px solid rgba(148,163,184,.30); }
 
+/* ── plan §三十三：fallback stale 視覺 + 上次分析 tag + 錨點 strip ───── */
+/* 開盤前無今日分析時沿用前一日資料，主要區塊淡化 60% 視覺區分今日 vs 過往 */
+.stock-card.card-stale-data .card-status-row,
+.stock-card.card-stale-data .card-anchor-strip,
+.stock-card.card-stale-data .card-spark-wrap,
+.stock-card.card-stale-data .card-ohlc {
+  opacity: 0.6;
+}
+
+.last-analysis-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  font-size: 10px;
+  color: var(--muted);
+  background: rgba(148,163,184,.08);
+  border: 1px solid var(--border-soft);
+  border-radius: 4px;
+  font-feature-settings: 'tnum' on;
+  letter-spacing: .03em;
+}
+
+.card-anchor-strip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  padding: 6px 10px;
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--text-dim);
+  background: rgba(30,41,59,.50);
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  font-feature-settings: 'tnum' on;
+  gap: 4px;
+  white-space: nowrap;
+}
+.card-anchor-strip .anchor-sep {
+  color: var(--muted);
+  opacity: 0.55;
+  margin: 0 3px;
+}
+
 /* ── OHLC 行情列 ──────────────────────────────────────── */
 .card-ohlc {
   display: flex;
