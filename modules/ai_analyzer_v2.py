@@ -374,6 +374,29 @@ def _dual_pnf(enriched_data: dict, price_f):
     pnf_long  = _quantize_price(pnf_long)
     pnf_short = _quantize_price(pnf_short)
 
+    # Bug-I §三十六：偵測 long/short 論點是否已失效（避免「🔴 出場」+ P&F「需先突破」矛盾）
+    # long invalidated  ：cur < swing_low  × 0.985（跌穿支撐 1.5% 以上 — 明確破位）
+    # short invalidated ：cur > swing_high × 1.015（站回壓力 1.5% 以上）
+    from modules.candlestick import calc_swing_levels as _csl
+    long_inv_price = None
+    short_inv_price = None
+    try:
+        _sl_l = _csl(dk, 'long', price_f) if dk else None
+        if _sl_l and _sl_l.get('invalidation') is not None:
+            inv_l = float(_sl_l['invalidation'])
+            if float(price_f) < inv_l * 0.985:
+                long_inv_price = inv_l
+    except (TypeError, ValueError):
+        pass
+    try:
+        _sl_s = _csl(dk, 'short', price_f) if dk else None
+        if _sl_s and _sl_s.get('invalidation') is not None:
+            inv_s = float(_sl_s['invalidation'])
+            if float(price_f) > inv_s * 1.015:
+                short_inv_price = inv_s
+    except (TypeError, ValueError):
+        pass
+
     # Opt-1 §三十四 + Bug-D §三十五：strict 失敗時用 relaxed 揭露「理論目標 + 觸發 gate + 狀態」
     # status='pending' → 「需先突破/跌破 Y」；status='reached' → 「先前已達成，等新箱形成」
     def _relaxed_sentence(dir_: str, fallback: str) -> str:
@@ -393,12 +416,21 @@ def _dual_pnf(enriched_data: dict, price_f):
                 return f'P&F理論目標：{t_q}元 — 需先{gate_verb} {g_q} 元觸發（等幅量度）'
         return fallback
 
-    long_sentence  = (f'P&F概念目標：{pnf_long}元（等幅量度）'
-                      if pnf_long  is not None
-                      else _relaxed_sentence('long', 'P&F概念目標：—（無有效箱體可估算）'))
-    short_sentence = (f'P&F概念目標：{pnf_short}元（等幅量度）'
-                      if pnf_short is not None
-                      else _relaxed_sentence('short', 'P&F概念目標：—（無有效箱體可估算）'))
+    # Bug-I §三十六：論點失效時優先用失效句，覆蓋 strict / relaxed 既有邏輯
+    if long_inv_price is not None:
+        long_sentence = (f'P&F概念目標：論點已失效（跌穿支撐 {_quantize_price(long_inv_price)} 元），'
+                         f'論點重建前 P&F 不適用')
+    else:
+        long_sentence  = (f'P&F概念目標：{pnf_long}元（等幅量度）'
+                          if pnf_long  is not None
+                          else _relaxed_sentence('long', 'P&F概念目標：—（無有效箱體可估算）'))
+    if short_inv_price is not None:
+        short_sentence = (f'P&F概念目標：論點已失效（站回壓力 {_quantize_price(short_inv_price)} 元），'
+                          f'論點重建前 P&F 不適用')
+    else:
+        short_sentence = (f'P&F概念目標：{pnf_short}元（等幅量度）'
+                          if pnf_short is not None
+                          else _relaxed_sentence('short', 'P&F概念目標：—（無有效箱體可估算）'))
     block = (
         f"【P&F等幅量度·多方（程式計算成品句，verbatim 引用）】{long_sentence}\n"
         f"【P&F等幅量度·空方（程式計算成品句，verbatim 引用）】{short_sentence}\n"
