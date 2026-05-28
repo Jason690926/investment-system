@@ -1635,3 +1635,84 @@ plan：`docs/superpowers/plans/2026-05-25-action-pill-and-framework.md`
 
 spec：`docs/superpowers/specs/2026-05-26-strong-breakout-retest-and-target-design.md`
 plan：`docs/superpowers/plans/2026-05-26-strong-breakout-retest-and-target.md`
+
+---
+
+## 三十三、Dashboard 尚未分析顯示上次分析 + 錨點 strip（2026-05-28）
+
+### 緣起
+
+§三十二 8 commit deploy 驗收完成後，用戶提出 Opt-2/3 dashboard UX 兩件事：
+- **Opt-2**：新交易日開盤後 14:30 前，14 檔 mini-card 全部回到「尚未分析」灰色狀態，家人讀者失去前一日決策參考
+- **Opt-3**：mini-card 缺關鍵價位（進場區/停損/目標），需逐一點進個股詳情才能掃 → 14 檔過慢
+
+### 已決設計（用戶定案）
+
+| 設計問題 | 選擇 | 理由 |
+|----------|------|------|
+| 顯示時機 | B 都顯示（已分析+尚未分析 UI 結構一致） | 家人讀者一眼掃過所有持股錨點 |
+| 資料來源 | C+ 改 `stock_service.get_user_stocks()` 加 fallback | 零新 API、單一資料路徑 |
+| 舊資料視覺 | A 4 chip 淺灰 60% + 「上次 MM-DD」tag | 視覺清楚分辨今日 vs 上次 |
+| 失效策略 | 14 天 lookback + 超過 → 完全空白 | 涵蓋週末/假日避免極舊資料誤導 |
+| 錨點 strip 資料 | 加 entry_low / entry_high migration | 精確進場區間，sup/res 單值對 short 場景不對稱 |
+| 方向 awareness | 依方向動態切換 label（long/short/neutral） | 與既有 pill 概念一致 |
+| 時間 tag 格式 | 絕對日期「上次 5/25」 | 不會 stale，家人讀者易讀 |
+
+### 影響範圍（6 commit）
+
+| Commit | 類型 | 內容 |
+|--------|------|------|
+| F1 | feat(db) | `migrations/2026-05-28-add-entry-zone-columns.sql`（IF NOT EXISTS）+ `models.py` 加 `entry_low` / `entry_high` Numeric(10,2) Column |
+| F2 | test | `tests/test_stock_service_fallback.py` 5 TDD case（紅燈：主查詢命中 / fallback / 14 天邊界 / 取最近 / 混合）|
+| F3 | feat(analyzer) | `ai_analyzer_v2.py` 兩函式寫入 `result['entry_low/high']` 從 `_sl['entry_zone']`；`app.py` / `run_daily_report.py` 寫入端加 column 對應 |
+| F4 | feat(stock_service) | `get_user_stocks` 加 14-day fallback 查詢 + item dict 新增欄位（risk_pct/wyckoff_phase/action_pill 沿用 + support/resistance/target_pnf/stop_loss/entry_low/entry_high/is_today_analysis/last_analysis_date） |
+| F5 | feat(ui) | `dashboard.js` buildCard 加 `card-stale-data` class、`last-analysis-tag` chip、`renderAnchorStrip` direction-aware；`markCardAnalyzed` 移除 stale；`analyzeAll` 結尾 reload；`app.css` 4 新 class |
+| F6 | docs | spec + impl plan + plan.md §三十三 |
+
+### 為什麼這樣設計
+
+1. **加 entry_low / entry_high column 而非沿用 support 單值**：support_price 對 long ≈ entry_zone 下緣，但 short 場景「空進」是 resistance，概念不一致；從 html_content 解析脆弱。1 migration 換取「精確且 direction-aware」strip，成本可控。
+2. **14-day fallback 而非無限制**：週末(5) + 連假(6) + 系統暫停(1-2) < 14 天；超過代表停權/新觀察/系統故障，寧可空白避免誤導。
+3. **兩階段查詢（主+fallback）而非「一次查 14 天」**：主查詢命中率 ≈100%，fallback 只跑 missing 子集，DB 載入量最小。
+4. **正向命名 `is_today_analysis` 而非反向 `is_stale`**：undefined 為「今日已分析」邏輯與既有行為一致，避免新欄位破壞舊測試。
+5. **markCardAnalyzed 後 reload 整 grid 而非局部更新 strip**：strip 需要 entry_low/high 等多欄位，API response 不含；14 檔 grid render < 50ms，可接受。
+6. **`formatLastDate('2026-05-25') → '5/25'`**：家人讀者熟悉短日期，省 chip 空間。
+
+### 驗證狀況
+
+- pytest **296/296 全綠**（291 原 + 5 fallback）
+- py_compile（models / ai_analyzer_v2 / stock_service / app / run_daily_report）+ `node -c dashboard.js` 全綠
+- 5 commit 純加性 + 1 migration（IF NOT EXISTS 安全）+ 1 test 檔
+- 既有「今日已分析」路徑零退化（fallback 只對 missing symbol 觸發）
+
+### ⚠️ Deploy 順序（用戶必執行）
+
+1. **先跑 migration**（§三十一 踩過 UndefinedColumn 500 坑）：Supabase Web SQL Editor 跑 `migrations/2026-05-28-add-entry-zone-columns.sql`
+2. SQL 驗證：`SELECT column_name FROM information_schema.columns WHERE table_name='stock_analyses' AND column_name IN ('entry_low','entry_high');` 預期 2 row
+3. `git push origin main` → Render auto-deploy
+4. Dashboard hard refresh
+
+### 驗收兩階段
+
+**零 token（migration + deploy 後即可驗）：**
+1. 開盤前場景 09:00 TW → 14 檔顯示淺灰 60% + 4 chip + 「上次 5/26」tag + 錨點 strip（沿用昨日資料）
+2. 若 tag 顯示但 strip 顯示「—」→ 表示舊資料 entry_low/high 為 NULL（合理；新欄位 5/26 那次分析還沒寫入）→ 需重跑
+
+**燒 ~$0.6 重跑：**
+3. 按一鍵分析 → 14 檔 stale 樣式移除（回正常色彩）+ tag 消失
+4. 錨點 strip 顯示新分析錨點：
+   - long（如矽力突破中）：`進 442.3-456.0 | 停 224.5 | 標 728.5`
+   - short（如撼訊）：`空進 73.7 | 空停 76.0 | 空標 62.0`
+   - neutral：`區間 X-Y | 雙向`
+5. 隔日 09:00 開 dashboard → 14 檔自動回到 stale 視覺（沿用今日分析）→ Opt-2 完整驗收
+
+### 回滾策略
+
+F1-F5 commit 設計可單獨 revert，互不依賴：
+- F1 migration nullable 加性 → 留 NULL 不影響讀取（最壞 `DROP COLUMN IF EXISTS` 回退）
+- F3 寫入端 revert → DB 兩 column 留 NULL，前端 strip 顯示「—」
+- F4 fallback revert → 回到「主查詢 only」舊行為（早上 09:00 全部尚未分析灰色 = 修法前）
+- F5 前端 revert → 卡片回原樣（無 stale 視覺、無 strip），後端 fallback 仍工作但前端不消費
+
+spec：`docs/superpowers/specs/2026-05-28-dashboard-stale-anchor-design.md`
+plan：`docs/superpowers/plans/2026-05-28-dashboard-stale-anchor.md`
