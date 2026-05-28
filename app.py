@@ -125,11 +125,13 @@ def _render_one_block(s, a, q, idx, mode, personal_html=None):
 
     # 數據列（僅 holding）
     data_row_html = ''
+    user_pl_pct = None  # Bug-1 §三十四：傳給 adjust_pill_for_deep_loss
     if mode == 'holding' and s.status == 'holding' and s.trades:
         avg_cost = float(s.avg_cost) if s.avg_cost else 0.0
         qty = float(s.total_zhang) if s.total_zhang else 0.0
         if q and q.close is not None and avg_cost > 0:
             pnl_pct = (float(q.close) - avg_cost) / avg_cost * 100
+            user_pl_pct = pnl_pct
             pnl_dir = 'bull' if pnl_pct >= 0 else 'bear'
             pnl_html = f'<strong class="{pnl_dir}">{pnl_pct:+.1f}%</strong>'
         else:
@@ -184,7 +186,11 @@ def _render_one_block(s, a, q, idx, mode, personal_html=None):
     if mode == 'watching' and a and a.risk_pct is not None:
         pills.append(f'<span class="pill pill-amber-outline"><span class="lbl">風險 </span>{a.risk_pct}%</span>')
     # plan §三十一：建議動作 pill（emoji 開頭判 PDF pill 配色）
+    # Bug-1 §三十四：HOLD 深虧時抑制「加碼」改「觀望持有」（user-specific 覆寫）
     action_pill = getattr(a, 'action_pill', None) if a else None
+    if action_pill and mode == 'holding':
+        from modules.ai_analyzer_v2 import adjust_pill_for_deep_loss
+        action_pill = adjust_pill_for_deep_loss(action_pill, user_pl_pct)
     if action_pill:
         if action_pill.startswith('🟢'):
             _pcls = 'pill-bull'      # 進取（追進/加碼/續抱）→ 紅（台股漲色）

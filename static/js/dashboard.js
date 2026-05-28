@@ -114,6 +114,16 @@ function actionClass(pill) {
   return 'action-neutral';
 }
 
+// Bug-1 §三十四：HOLD 深虧 ≤ -20% 抑制「加碼」改「觀望持有」
+function adjustPillForDeepLoss(pill, status, avgCost, price) {
+  if (!pill || status !== 'holding') return pill;
+  if (avgCost == null || price == null || avgCost <= 0) return pill;
+  const plPct = (price - avgCost) / avgCost * 100;
+  if (plPct > -20) return pill;
+  if (pill.includes('加碼')) return '🟡 觀望持有';
+  return pill;
+}
+
 function buildCard(s) {
   const riskPct    = s.risk_pct  ?? null;
   const wyckoff    = s.wyckoff_phase ?? '';
@@ -136,7 +146,9 @@ function buildCard(s) {
     ? `<span class="risk-inline ${riskClass(riskPct)}">RISK ${riskPct}%</span>`
     : (wyckoff ? '' : '<span class="risk-inline-empty">尚未分析</span>');
   // plan §三十一：建議動作 pill（emoji 開頭判 color class）
-  const actionPill = s.action_pill || '';
+  // Bug-1 §三十四：HOLD 深虧 ≤ -20% 抑制「加碼」改「觀望持有」（user-specific 覆寫）
+  // 初始建卡時 price 未載入，pill 為 base；updateCardPrice 載入後重新評估
+  const actionPill = adjustPillForDeepLoss(s.action_pill || '', s.status, s.avg_cost, s._loaded_price);
   const actionChip = actionPill
     ? `<span class="action-pill ${actionClass(actionPill)}" title="建議動作">${actionPill}</span>`
     : '';
@@ -341,6 +353,23 @@ function updateCardPrice(stockId, q) {
         const [cls, text] = sparkPctLabel(q.spark_bars);
         labelEl.className = 'card-spark-label ' + cls;
         labelEl.textContent = text;
+      }
+    }
+  }
+
+  // Bug-1 §三十四：HOLD 深虧 ≤ -20% 載入後重新評估 pill（建卡時無 price）
+  const idx = allStocks.findIndex(x => x.id === stockId);
+  if (idx >= 0 && q.close != null) {
+    allStocks[idx]._loaded_price = q.close;
+    const s = allStocks[idx];
+    if (s.status === 'holding' && s.avg_cost && s.action_pill) {
+      const adjusted = adjustPillForDeepLoss(s.action_pill, s.status, s.avg_cost, q.close);
+      if (adjusted !== s.action_pill) {
+        const pillEl = card.querySelector('.action-pill');
+        if (pillEl) {
+          pillEl.textContent = adjusted;
+          pillEl.className = 'action-pill ' + actionClass(adjusted);
+        }
       }
     }
   }

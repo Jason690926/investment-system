@@ -694,10 +694,11 @@ def _breakout_overrides(swing_levels: dict, daily_bars: list,
 def _decide_action(status: str, direction: str, structure_flag: str,
                    swing_levels: dict | None, breakout: bool,
                    price,
-                   cost_stop_loss=None) -> str:
-    """建議動作決定樹（2026-05-25, plan §三十一）。
+                   cost_stop_loss=None,
+                   pl_pct=None) -> str:
+    """建議動作決定樹（2026-05-25, plan §三十一; Bug-1+3 §三十四 2026-05-28）。
 
-    根據 5 個輸入決定建議動作 pill 字串：
+    根據 6 個輸入決定建議動作 pill 字串：
     - status: 'hold' / 'watch'
     - direction: 'long' / 'short' / 'neutral'
     - structure_flag: '結構未轉弱' / '結構轉折中' / '結構已轉弱' / '資料不足'
@@ -705,6 +706,8 @@ def _decide_action(status: str, direction: str, structure_flag: str,
     - breakout: _strong_breakout_state 結果
     - price: 現價
     - cost_stop_loss: HOLD 個人成本停損（可選，優先於 swing invalidation）
+    - pl_pct: HOLD 個人 P/L 百分比（可選；< -20% 即抑制「加碼」改「觀望持有」，
+              避免家人讀者深虧仍重壓 — Bug-1 §三十四）
 
     回傳 pill 字串格式：'<emoji> <動作字> [💪]'，例如 '🟢 追進 💪' / '🟡 等回測'。
     """
@@ -720,6 +723,14 @@ def _decide_action(status: str, direction: str, structure_flag: str,
     entry_zone = sl.get('entry_zone')
     invalidation = sl.get('invalidation')
 
+    # Bug-1 §三十四：HOLD 深虧 gate（P/L ≤ -20% 抑制任何加碼建議）
+    deep_loss = False
+    if pl_pct is not None:
+        try:
+            deep_loss = float(pl_pct) <= -20.0
+        except (TypeError, ValueError):
+            pass
+
     # ---------- HOLD ----------
     if status == 'hold':
         stop = cost_stop_loss if cost_stop_loss is not None else invalidation
@@ -732,12 +743,14 @@ def _decide_action(status: str, direction: str, structure_flag: str,
         if structure_flag == '結構已轉弱':
             return '🟠 減碼'
         if breakout:
-            return '🟢 加碼 💪'
+            # Bug-1 §三十四：深虧時不標「加碼 💪」（避免攤平擴大敞口）
+            return '🟡 觀望持有' if deep_loss else '🟢 加碼 💪'
         if entry_zone:
             try:
                 zlo, zhi = float(entry_zone[0]), float(entry_zone[1])
                 if zlo <= price_f <= zhi:
-                    return '🟢 加碼'
+                    # Bug-1 §三十四：深虧時不標「加碼」
+                    return '🟡 觀望持有' if deep_loss else '🟢 加碼'
                 if structure_flag == '結構轉折中':
                     mid = (zlo + zhi) / 2
                     if price_f < mid:
@@ -782,9 +795,13 @@ def _decide_action(status: str, direction: str, structure_flag: str,
             if entry_zone:
                 try:
                     zlo, zhi = float(entry_zone[0]), float(entry_zone[1])
-                    if zlo <= price_f <= zhi:
+                    # Bug-3 §三十四：boundary buffer 0.5% — 現價貼近 zlo 下緣
+                    # 視為「空進區下方等反彈」，避免撼訊 5/26 收 70 vs zlo 69.6
+                    # 邊界 case 標「分批佈空」但 5/27 即跌至 66.8 已驗證為下行
+                    zlo_buf = zlo * 1.005
+                    if zlo_buf <= price_f <= zhi:
                         return '🔴 分批佈空'
-                    if price_f < zlo:
+                    if price_f < zlo_buf:
                         return '🟡 等反彈佈空'
                 except (TypeError, ValueError, IndexError):
                     pass
@@ -794,6 +811,33 @@ def _decide_action(status: str, direction: str, structure_flag: str,
         return '⚪ 觀望'
 
     return '⚪ 觀望'
+
+
+def adjust_pill_for_deep_loss(action_pill, pl_pct, threshold_pct: float = -20.0):
+    """Bug-1 §三十四：HOLD 深虧時 post-process 覆寫 pill 避免「加碼」誤導。
+
+    分析時 (analyze_market_only) 不知個人成本（DB 跨用戶共用 cache），故 base pill
+    由結構面判定（_decide_action 不傳 pl_pct）。讀取端（print-report / dashboard）
+    擁有個人 avg_cost + price → 算 pl_pct，呼叫此 helper 覆寫 pill。
+
+    輸入：
+      - action_pill: 原 pill 字串（如 '🟢 加碼 💪'）
+      - pl_pct: 個人 P/L %（如 -33.9 = 虧 33.9%）；None → 不變動
+      - threshold_pct: 深虧門檻（預設 -20%）
+
+    回傳：覆寫後 pill（'🟡 觀望持有' if 觸發、原 pill if 未觸發或 None）
+    """
+    if not action_pill or pl_pct is None:
+        return action_pill
+    try:
+        if float(pl_pct) > threshold_pct:
+            return action_pill
+    except (TypeError, ValueError):
+        return action_pill
+    # 觸發深虧 → 抑制任何「加碼」字眼
+    if '加碼' in action_pill:
+        return '🟡 觀望持有'
+    return action_pill
 
 
 def _render_operation_framework(action_pill: str, direction: str,
