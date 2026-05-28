@@ -1861,3 +1861,59 @@ plan：`docs/superpowers/plans/2026-05-28-cross-check-6-fixes.md`
 
 spec：`docs/superpowers/specs/2026-05-28-cross-check-round2-design.md`
 plan：`docs/superpowers/plans/2026-05-28-cross-check-round2.md`
+
+---
+
+## 三十六、5/28 cross-check Round 3：Bug-I 跌穿停損 P&F 矛盾 + Bug-J WATCH long 跌穿 pill（2026-05-28）
+
+### 緣起
+
+§三十五 deploy 後用戶 21:14 重跑（credit 已充）。對照新 PDF 發現兩個新 bug：
+
+1. **Bug-I**（P1）：晶心科 pill=「🔴 出場」（程式偵測跌穿停損 224.5→219.5）+ 同段 P&F 顯示「需先突破 260 元觸發」邏輯矛盾。家人讀者「該出場還是該等突破？」
+2. **Bug-J**（P2）：瑞耘 phase=再積累 (long) 但收 96.2 < entry_low 96.8 → _decide_action fall-through 到 default ⚪ 觀望 + 顯示「停損 96.80（已跌穿）」邏輯矛盾
+
+### A. 修法總覽（2 commit + 1 docs）
+
+| Commit | Bug | 修法 |
+|--------|-----|------|
+| `9611f02` | Bug-I | `_dual_pnf` 加 invalidation gate：long 跌穿 swing_low × 0.985 / short 站回 swing_high × 1.015 → P&F 句改「論點已失效」覆蓋既有 strict / relaxed 句 |
+| `8946529` | Bug-J | `_decide_action` WATCH long path 加跌穿 entry_low 判斷 → 新 pill「🟡 跌穿觀察」（取代 fall-through 觀望）|
+| 本 commit | docs | plan.md §三十六（本節）+ spec + impl plan |
+
+### B. 為什麼這樣設計
+
+1. **Bug-I 在 _dual_pnf 早期判斷而非 _render_operation_framework 後置**：P&F 句是注入 AI prompt 的 block text，AI verbatim 引用到第四節。後處理無法乾淨覆寫 AI 內文。在 _dual_pnf 階段就把 sentence 改寫，AI 自然會引用新句。
+
+2. **1.5% buffer 避免過度觸發**：晶心科 219.5 / stop 224.5 = -2.2% 跌穿；buffer 0.985 (1.5%) 表示「明確破位」才觸發失效，避免「現價貼著停損晃動」反覆切換語義。
+
+3. **Bug-J pill 字典擴充而非沿用「⚪ 觀望」**：⚪ 觀望語義「無動作」，但跌穿 entry_low 的情境需要「主動觀察止跌訊號」，🟡 跌穿觀察 更符合家人讀者實務行為。
+
+4. **「結構已轉弱」優先級高於跌穿判定**：若結構已轉弱仍走 🔴 不宜進（pill 字典原邏輯）。跌穿觀察只在「結構未轉弱但價跌穿」的灰色地帶觸發。
+
+### 驗證狀況
+
+- pytest **349/349 全綠**（既有 340 + 5 Bug-I + 4 Bug-J）
+- py_compile + node -c 全綠
+- 2 commit 純加性 helper / 新 pill 字典項 / 不影響其他既有 caller
+
+### ⚠️ Deploy 驗收
+
+**零 token 立即生效**：
+- 晶心科 5/28 既有 cache + read-time 不會有效果（cache 已寫入舊 P&F sentence）→ 需重跑
+
+**燒 ~$0.05 重跑單檔驗證**：
+- 晶心科 / 瑞耘 重跑後 PDF 該檔第四節 P&F 句應為：
+  - 晶心科：「P&F概念目標：論點已失效（跌穿支撐 224.5 元），論點重建前 P&F 不適用」
+  - 瑞耘：「🟡 跌穿觀察」pill 取代「⚪ 觀望」
+
+### 回滾策略
+
+2 commit 純加性 + 新 pill 字典項：
+- `9611f02` revert → _dual_pnf 回 §三十五 邏輯（晶心科又顯示「需先突破 260」誤導）
+- `8946529` revert → WATCH long 跌穿回 default ⚪ 觀望
+
+各 commit 獨立 revert 互不依賴。
+
+spec：`docs/superpowers/specs/2026-05-28-cross-check-round3-design.md`
+plan：`docs/superpowers/plans/2026-05-28-cross-check-round3.md`
