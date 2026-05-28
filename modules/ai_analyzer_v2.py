@@ -875,6 +875,11 @@ def _decide_action(status: str, direction: str, structure_flag: str,
                         return '🟢 進場區可佈'
                     if price_f > zhi:
                         return '🟡 等回測'
+                    # Bug-J §三十六：跌穿 entry_low（失效價）→ 「跌穿觀察」
+                    # 瑞耘 5/28 場景：phase=再積累 但 price 96.2 < entry_low 96.8
+                    # 既有 fall-through 到 '⚪ 觀望' 對「停損已被跌穿」語意太溫和
+                    if price_f < zlo:
+                        return '🟡 跌穿觀察'
                 except (TypeError, ValueError, IndexError):
                     pass
             return '⚪ 觀望'
