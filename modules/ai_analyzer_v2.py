@@ -887,9 +887,11 @@ def _render_operation_framework(action_pill: str, direction: str,
                 _divider()
                 + _row(f'建議動作：{action_pill}')
                 + _row(f'強勢突破追蹤：現價 &gt; 前高 {_fmt(rh)} 元、量達門檻 → 可順勢追進')
-                + _row(f'　追進停損：{_fmt(rh)} 元（跌回前高即假突破）')
+                + _row('⚠️ <strong>突破首日反轉風險</strong>：假突破常於突破後 1-2 日翻盤，'
+                       '跌回前高即出場（東捷/瑞軒 5/26 範例）')
+                + _row(f'🔴 <strong>主停損</strong>（觸發即出場）：{_fmt(rh)} 元 — 跌回前高即假突破確認')
                 + _row(f'回測進場（保守）：{_fmt_zone(ez)} 元')
-                + _row(f'停損：{_fmt(inv)} 元 — 跌破即論點作廢')
+                + _row(f'🟠 <strong>次停損</strong>（整波論點作廢）：{_fmt(inv)} 元 — 跌穿即多頭翻空')
                 + _row(f'目標：{_fmt(tg)} 元')
                 + _divider()
             )
