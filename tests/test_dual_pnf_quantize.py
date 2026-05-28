@@ -85,13 +85,37 @@ def test_dual_pnf_block_contains_full_verbatim_sentence(monkeypatch):
 
 
 def test_dual_pnf_block_none_uses_no_target_sentence(monkeypatch):
-    """pnf_long/short 皆 None → 注入「P&F概念目標：—（尚未接近突破點）」整句"""
+    """pnf strict + relaxed 都 None → 注入「無有效箱體可估算」句 (Opt-1 §三十四)。
+
+    Opt-1 §三十四 後行為：strict None → 嘗試 relaxed → relaxed 也 None 才回
+    「無有效箱體可估算」；relaxed 有值則回「P&F理論目標：X — 需先突破/跌破 Y」。
+    """
     import modules.ai_analyzer_v2 as mod
     monkeypatch.setattr(mod, 'calc_pnf_target',
                         lambda bars, lookback, current_price, direction: None)
+    monkeypatch.setattr(mod, 'calc_pnf_target_relaxed',
+                        lambda bars, lookback, current_price, direction: None)
     _, _, block = _dual_pnf(_mock_enriched(), 70.0)
-    assert 'P&F概念目標：—（尚未接近突破點）' in block
-    assert 'P&F概念目標：—（尚未接近跌破點）' in block
+    # 新句：「P&F概念目標：—（無有效箱體可估算）」(strict + relaxed 都 None 時)
+    assert 'P&F概念目標：—（無有效箱體可估算）' in block
+
+
+def test_dual_pnf_block_relaxed_sentence_when_strict_none(monkeypatch):
+    """Opt-1 §三十四：strict None + relaxed 有值 → 改用「P&F理論目標」句。"""
+    import modules.ai_analyzer_v2 as mod
+    monkeypatch.setattr(mod, 'calc_pnf_target',
+                        lambda bars, lookback, current_price, direction: None)
+    monkeypatch.setattr(
+        mod, 'calc_pnf_target_relaxed',
+        lambda bars, lookback, current_price, direction: (
+            (110.0, 100.0) if direction == 'long' else (80.0, 90.0)
+        ),
+    )
+    _, _, block = _dual_pnf(_mock_enriched(), 95.0)
+    # long：理論 110、需先突破 100
+    assert 'P&F理論目標：110元 — 需先突破 100 元觸發' in block
+    # short：理論 80、需先跌破 90（< 100 → quantize 1 dp 顯示 80.0 / 90.0）
+    assert 'P&F理論目標：80.0元 — 需先跌破 90.0 元觸發' in block
 
 
 # ============================================================

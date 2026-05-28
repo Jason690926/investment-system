@@ -777,6 +777,86 @@ def calc_pnf_target(bars: list, lookback: int = 12,
         return None
 
 
+def calc_pnf_target_relaxed(bars: list, lookback: int = 12,
+                             current_price: float = None,
+                             direction: str = 'long') -> tuple | None:
+    """Opt-1 §三十四：放寬 Filter A/B 後的「理論等幅量度目標」+ 觸發 gate 價。
+
+    當 strict 版（calc_pnf_target）因 Filter A（現價未過/跌破箱頂/箱底）或
+    Filter B（target 已被 cur 超過）回 None 時，此函式仍掃描全歷史找出**最近一個
+    有效盤整箱體**對應的目標 + 觸發 gate 價，讓 render 端顯示：
+      「理論目標 X 元 — 需先突破 Y 元觸發」(long)
+      「理論目標 X 元 — 需先跌破 Y 元觸發」(short)
+
+    比顯示「— 元」對家人讀者更有參考價值（揭露假設條件而非藏起來）。
+
+    回傳：
+      - (target, gate_price) — 找到有效箱體
+      - None — 連箱體都找不到（趨勢段 / 波動率過大）
+
+    與 calc_pnf_target 共用箱體掃描邏輯，差別在不套用 Filter A/B/C；
+    箱寬上限仍套用（避免趨勢段假箱）。
+    """
+    if not bars or len(bars) < 5:
+        return None
+    if direction not in ('long', 'short'):
+        return None
+    try:
+        n         = len(bars)
+        confirm   = 2 if lookback <= 14 else 3
+        max_range = 0.20 if lookback <= 14 else 0.15
+
+        highs = [float(b['high']) for b in bars]
+        lows  = [float(b['low'])  for b in bars]
+
+        for i in range(n - confirm - 2, 0, -1):
+            if direction == 'long':
+                box_top = highs[i]
+                if not all(highs[j] <= box_top
+                           for j in range(i + 1, min(i + confirm + 1, n))):
+                    continue
+                search_end = min(i + confirm + 5, n)
+                window     = lows[i:search_end]
+                box_bottom = min(window)
+                low_idx    = i + window.index(box_bottom)
+                if low_idx + confirm >= n:
+                    continue
+                if not all(lows[j] >= box_bottom
+                           for j in range(low_idx + 1, min(low_idx + confirm + 1, n))):
+                    continue
+                if box_bottom <= 0 or (box_top - box_bottom) / box_bottom > max_range:
+                    continue
+                target = box_top + (box_top - box_bottom)
+                target_v = round(target) if target >= 100 else round(target, 1)
+                gate_v   = round(box_top) if box_top >= 100 else round(box_top, 1)
+                return (target_v, gate_v)
+            else:
+                box_bottom = lows[i]
+                if not all(lows[j] >= box_bottom
+                           for j in range(i + 1, min(i + confirm + 1, n))):
+                    continue
+                search_end = min(i + confirm + 5, n)
+                window     = highs[i:search_end]
+                box_top    = max(window)
+                high_idx   = i + window.index(box_top)
+                if high_idx + confirm >= n:
+                    continue
+                if not all(highs[j] <= box_top
+                           for j in range(high_idx + 1, min(high_idx + confirm + 1, n))):
+                    continue
+                if box_bottom <= 0 or (box_top - box_bottom) / box_bottom > max_range:
+                    continue
+                target = box_bottom - (box_top - box_bottom)
+                target_v = round(target) if target >= 100 else round(target, 1)
+                gate_v   = round(box_bottom) if box_bottom >= 100 else round(box_bottom, 1)
+                return (target_v, gate_v)
+
+        return None
+    except Exception as e:
+        print(f'[candlestick] calc_pnf_target_relaxed 失敗: {e}')
+        return None
+
+
 def get_pattern_summary(patterns):
     if not patterns:
         return '無明顯K線型態', 'neutral'

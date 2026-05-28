@@ -10,7 +10,7 @@ import time
 import anthropic
 from datetime import datetime
 from dotenv import load_dotenv
-from modules.candlestick import detect_from_bars, label_bars, calc_pnf_target
+from modules.candlestick import detect_from_bars, label_bars, calc_pnf_target, calc_pnf_target_relaxed
 from modules.data_enricher import compute_monthly_structure
 
 load_dotenv()
@@ -331,10 +331,27 @@ def _dual_pnf(enriched_data: dict, price_f):
                  or calc_pnf_target(dk, lookback=20, current_price=price_f, direction='short'))
     pnf_long  = _quantize_price(pnf_long)
     pnf_short = _quantize_price(pnf_short)
+
+    # Opt-1 §三十四：strict 失敗時用 relaxed 揭露「理論目標 + 觸發 gate」
+    # 比「—（尚未接近突破點）」對家人讀者更有參考價值（揭露假設條件，不藏起來）
+    def _relaxed_sentence(dir_: str, fallback: str) -> str:
+        for bars, lb in [(wk, 12), (dk, 20)]:
+            r = calc_pnf_target_relaxed(bars, lookback=lb,
+                                         current_price=price_f, direction=dir_)
+            if r:
+                t, g = r
+                t_q = _quantize_price(t)
+                g_q = _quantize_price(g)
+                gate_verb = '突破' if dir_ == 'long' else '跌破'
+                return f'P&F理論目標：{t_q}元 — 需先{gate_verb} {g_q} 元觸發（等幅量度）'
+        return fallback
+
     long_sentence  = (f'P&F概念目標：{pnf_long}元（等幅量度）'
-                      if pnf_long  is not None else 'P&F概念目標：—（尚未接近突破點）')
+                      if pnf_long  is not None
+                      else _relaxed_sentence('long', 'P&F概念目標：—（無有效箱體可估算）'))
     short_sentence = (f'P&F概念目標：{pnf_short}元（等幅量度）'
-                      if pnf_short is not None else 'P&F概念目標：—（尚未接近跌破點）')
+                      if pnf_short is not None
+                      else _relaxed_sentence('short', 'P&F概念目標：—（無有效箱體可估算）'))
     block = (
         f"【P&F等幅量度·多方（程式計算成品句，verbatim 引用）】{long_sentence}\n"
         f"【P&F等幅量度·空方（程式計算成品句，verbatim 引用）】{short_sentence}\n"
