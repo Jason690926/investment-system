@@ -1716,3 +1716,69 @@ F1-F5 commit 設計可單獨 revert，互不依賴：
 
 spec：`docs/superpowers/specs/2026-05-28-dashboard-stale-anchor-design.md`
 plan：`docs/superpowers/plans/2026-05-28-dashboard-stale-anchor.md`
+
+---
+
+## 三十四、5/28 cross-check：6 bug 修法（pill P/L gate / 雙重停損 / boundary buffer / P&F 揭露）（2026-05-28）
+
+### 緣起
+
+用戶 5/26 21:46 跑 14 支報表，5/27 沒重跑、5/28 收盤後做 cross-check。
+我手動撈 5/27-5/28 OHLC（9 檔走 yfinance、5 檔走 TPEx 新 endpoint
+`https://www.tpex.org.tw/www/zh-tw/afterTrading/tradingStock`）對照 5/26 PDF
+14 檔報表預測，發現 5 bug + 1 優化 + 1 文件不一致。
+
+### A. 修法總覽（4 commit + 1 docs）
+
+| Commit | Bug | 修法 |
+|--------|-----|------|
+| `cec5bff` | Bug-1+3 | _decide_action 加 pl_pct 參數 + HOLD 深虧 ≤ -20% 抑制「加碼」改「觀望持有」；short path 加 zlo×1.005 buffer 讓 boundary case 改判等反彈佈空。adjust_pill_for_deep_loss helper 在 PDF / dashboard 讀取端 post-process（避免 DB cross-user pollution） |
+| `3e1cc23` | Bug-2+4 | _render_operation_framework breakout=True 分支加「⚠️ 突破首日反轉風險」watermark + 主停損（追進停損 = rh）/ 次停損（論點作廢 = inv）label hierarchy |
+| `51145a9` | Opt-1 | calc_pnf_target_relaxed 新函式：放寬 Filter A/B/C 仍回 (target, gate_price)；_dual_pnf 整合 → strict None 時注入「P&F理論目標：X 元 — 需先突破/跌破 Y 元觸發」整句替代「— 元」 |
+| 本 commit | Bug-5 + docs | CLAUDE.md §三十二 驗收表更正：微星實際 4/5 ✅ (非 5/5)；plan.md §三十四（本節）+ spec + impl plan |
+
+### B. cross-check 證據摘要（用戶決策參考）
+
+| 股 | 5/26→5/28 % | 5/26 報表 pill | 結論 |
+|---|------------|--------------|------|
+| 晶心科 (H) | **-6.40%** | 🟢 加碼（cost=355 虧 -34%）| ❌ Bug-1 主訴求 |
+| 東捷 | **-10.74%** | 🟢 追進 💪 | ❌ Bug-2/Bug-4 主訴求 |
+| 瑞軒 | -7.16% | 🟢 追進 💪 | ❌ Bug-2/Bug-4 同 |
+| 撼訊 (short) | -2.86% | 🔴 分批佈空（70 vs zlo 69.6 邊界）| ❌ Bug-3 主訴求 |
+
+### C. 為什麼這樣設計
+
+1. **Bug-1 用 user 端 post-process 而非分析時 inject pl_pct**：DB StockAnalysis 跨用戶共用 cache，若分析時根據個人 cost 算 pill 會污染 cross-user。讀取端（PDF / dashboard）有用戶 avg_cost + price 才能精確算 pl_pct，post-process 覆寫 base pill 是乾淨的分層設計。
+2. **Bug-3 buffer 用 ×1.005（0.5%）**：撼訊 5/26 70.0 vs zlo 69.60 距離 +0.57%，buffer 須 ≥ 此值才生效。再大會誤殺真正在區內的 case。
+3. **Bug-4 hierarchy 用 🔴 主 / 🟠 次 emoji**：與 _decide_action pill 配色一致（🔴 退出 / 🟠 警戒），語義延續性高。
+4. **Opt-1 用「理論目標 — 需先突破 Y」而非「P&F 概念目標：X」**：揭露「未觸發」狀態，避免家人讀者以為已是確定目標。
+
+### 驗證狀況
+
+- pytest **315/315 全綠**（原 304 + 8 Bug-1/3 + 6 Bug-2/4 + 4 Opt-1 - 部分 test 改寫重複扣除）
+- py_compile 全綠
+- 4 commit 純加性（helper 新增 + 既有函式新參數 default None）
+- 純 docs commit 更正 CLAUDE.md §三十二 微星驗收
+
+### ⚠️ Deploy 驗收（用戶可執行，需重跑 ~$0.6 驗 AI prompt 行為）
+
+**零 token 視覺驗收**（push 後 hard refresh）：
+1. 晶心科 print PDF / dashboard：HOLD + cost=355 / price~234 → pill 應顯示「🟡 觀望持有」非「🟢 加碼」（既有 5/26 cache 透過 read-time post-process 覆寫）
+2. 撼訊 print PDF：第五節未變（沿用 5/26 cache）但下次重跑生效
+
+**燒 ~$0.6 重跑**（5/27-5/28 走勢已知，驗 prompt + 渲染）：
+3. 東捷 / 瑞軒 / 矽力 / 合晶 第五節含「⚠️ 突破首日反轉風險：假突破常於突破後 1-2 日翻盤...」watermark
+4. 4 檔強勢突破第五節停損改 hierarchy：「🔴 主停損（觸發即出場）：rh 元」+「🟠 次停損（整波論點作廢）：rl 元」（取代「停損：X 元」單字段）
+5. 撼訊重跑後 pill 若仍在區下方 → 「🟡 等反彈佈空」（buffer 0.5% 生效）
+6. 11 檔原顯示「P&F 目標：—」者重跑後改顯示「P&F理論目標：X 元 — 需先突破/跌破 Y 元觸發」
+
+### 回滾策略
+
+4 commit 純加性 + helper 新增 + 既有函式新參數 default None：
+- C1 (cec5bff)：revert → _decide_action 回 §三十一 簽名 + dashboard 無 deep loss adjust
+- C2 (3e1cc23)：revert → 強勢突破第五節回單一「停損」+ 無 watermark
+- C3 (51145a9)：revert → calc_pnf_target_relaxed 函式不存在 + _dual_pnf 沿用「—」
+- 各自獨立 revert 不依賴
+
+spec：`docs/superpowers/specs/2026-05-28-cross-check-6-fixes-design.md`
+plan：`docs/superpowers/plans/2026-05-28-cross-check-6-fixes.md`
