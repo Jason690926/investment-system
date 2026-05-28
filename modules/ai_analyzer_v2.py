@@ -1228,6 +1228,15 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
                 _sl = {**_sl, **_ov}
                 if result.get('direction') == 'long':
                     result['target_pnf'] = _ov['target']
+        # F3 §三十三：寫入 entry_zone 拆欄位（DB 持久化支援 dashboard 錨點 strip）
+        _ez = _sl.get('entry_zone') if _sl else None
+        if _ez and len(_ez) == 2:
+            try:
+                result['entry_low']  = float(_ez[0])
+                result['entry_high'] = float(_ez[1])
+            except (TypeError, ValueError):
+                result['entry_low']  = None
+                result['entry_high'] = None
         _action = _decide_action(
             status=('hold' if status == 'holding' else 'watch'),
             direction=result['direction'],
@@ -1646,6 +1655,15 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
                 _sl = {**_sl, **_ov}
                 if result.get('direction') == 'long':
                     result['target_pnf'] = _ov['target']
+        # F3 §三十三：寫入 entry_zone 拆欄位（DB 持久化支援 dashboard 錨點 strip）
+        _ez = _sl.get('entry_zone') if _sl else None
+        if _ez and len(_ez) == 2:
+            try:
+                result['entry_low']  = float(_ez[0])
+                result['entry_high'] = float(_ez[1])
+            except (TypeError, ValueError):
+                result['entry_low']  = None
+                result['entry_high'] = None
         _action = _decide_action(
             status=('hold' if is_holding else 'watch'),
             direction=result['direction'],

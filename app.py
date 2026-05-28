@@ -717,6 +717,8 @@ def api_analyze_stock(stock_id):
         _res = result.get('resistance_anchor') or result.get('resistance')
         _tgt = result.get('target_pnf')
         _stp = result.get('stop_loss_anchor')
+        _elo = result.get('entry_low')   # plan §三十三
+        _ehi = result.get('entry_high')  # plan §三十三
 
         if existing:
             existing.html_content     = result['html']
@@ -725,6 +727,8 @@ def api_analyze_stock(stock_id):
             existing.resistance_price = Decimal(str(_res)) if _res else None
             existing.target_price     = Decimal(str(_tgt)) if _tgt else None
             existing.stop_loss        = Decimal(str(_stp)) if _stp else None
+            existing.entry_low        = Decimal(str(_elo)) if _elo else None
+            existing.entry_high       = Decimal(str(_ehi)) if _ehi else None
             existing.wyckoff_phase    = result['wyckoff_phase']
             existing.action_pill      = result.get('action_pill')  # plan §三十一
             existing.generated_at     = _dt.datetime.utcnow()
@@ -736,6 +740,8 @@ def api_analyze_stock(stock_id):
                 resistance_price=Decimal(str(_res)) if _res else None,
                 target_price=Decimal(str(_tgt)) if _tgt else None,
                 stop_loss=Decimal(str(_stp)) if _stp else None,
+                entry_low=Decimal(str(_elo)) if _elo else None,
+                entry_high=Decimal(str(_ehi)) if _ehi else None,
                 wyckoff_phase=result['wyckoff_phase'],
                 action_pill=result.get('action_pill'),  # plan §三十一
             ))
