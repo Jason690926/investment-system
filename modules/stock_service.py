@@ -28,7 +28,7 @@ def get_user_stocks(db: Session, user_id: int) -> list:
                         Stock.created_at)
               .all())
 
-    # 只取「當前分析日」的快取；14:30 前算昨日，14:30 後算今日
+    # 主查詢：當前分析日（14:30 前算昨日，14:30 後算今日）
     analysis_day = _analysis_day_tw()
     symbols = [s.symbol for s in stocks]
     analyses = {}
@@ -43,6 +43,27 @@ def get_user_stocks(db: Session, user_id: int) -> list:
         )
         analyses = {r.symbol: r for r in rows}
 
+    # plan §三十三 F4：fallback 對未命中 symbol 撈 14 天內最近一筆，
+    # 讓開盤前 dashboard 沿用前一日決策（is_today_analysis=False 由前端淡化顯示）
+    missing = [sym for sym in symbols if sym not in analyses]
+    fallback_analyses = {}
+    if missing:
+        cutoff = analysis_day - timedelta(days=14)
+        rows = (
+            db.query(StockAnalysis)
+            .filter(StockAnalysis.symbol.in_(missing),
+                    StockAnalysis.analysis_type == 'daily',
+                    StockAnalysis.analysis_date >= cutoff,
+                    StockAnalysis.analysis_date < analysis_day,
+                    StockAnalysis.html_content.isnot(None))
+            .order_by(StockAnalysis.symbol,
+                      StockAnalysis.analysis_date.desc())
+            .all()
+        )
+        for r in rows:
+            if r.symbol not in fallback_analyses:
+                fallback_analyses[r.symbol] = r
+
     result = []
     for s in stocks:
         item = {
@@ -51,11 +72,21 @@ def get_user_stocks(db: Session, user_id: int) -> list:
             'name': s.name,
             'status': s.status,
         }
-        analysis = analyses.get(s.symbol)
-        if analysis:
-            item['risk_pct']      = analysis.risk_pct
-            item['wyckoff_phase'] = analysis.wyckoff_phase
-            item['action_pill']   = analysis.action_pill  # plan §三十一
+        primary = analyses.get(s.symbol)
+        fallback = fallback_analyses.get(s.symbol)
+        a = primary or fallback
+        if a:
+            item['risk_pct']      = a.risk_pct
+            item['wyckoff_phase'] = a.wyckoff_phase
+            item['action_pill']   = a.action_pill  # plan §三十一
+            item['support']       = float(a.support_price)    if a.support_price    is not None else None
+            item['resistance']    = float(a.resistance_price) if a.resistance_price is not None else None
+            item['target_pnf']    = float(a.target_price)     if a.target_price     is not None else None
+            item['stop_loss']     = float(a.stop_loss)        if a.stop_loss        is not None else None
+            item['entry_low']     = float(a.entry_low)        if a.entry_low        is not None else None
+            item['entry_high']    = float(a.entry_high)       if a.entry_high       is not None else None
+            item['is_today_analysis']  = (primary is not None)
+            item['last_analysis_date'] = a.analysis_date.isoformat()
         if s.status == 'holding' and s.trades:
             total = s.total_zhang
             item['total_zhang'] = float(total)
