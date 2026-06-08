@@ -188,9 +188,8 @@ def _render_one_block(s, a, q, idx, mode, personal_html=None):
     # plan §三十一：建議動作 pill（emoji 開頭判 PDF pill 配色）
     # Bug-1 §三十四：HOLD 深虧時抑制「加碼」改「觀望持有」（user-specific 覆寫）
     action_pill = getattr(a, 'action_pill', None) if a else None
-    if action_pill and mode == 'holding':
-        from modules.ai_analyzer_v2 import adjust_pill_for_deep_loss
-        action_pill = adjust_pill_for_deep_loss(action_pill, user_pl_pct)
+    # §三十七：建議動作客觀化 — 移除標頭 deep-loss 疊加（A 法）；
+    # 個人深虧由 P/L 列紅字 + 第六節持倉建議承載，標頭保持對所有讀者一致
     if action_pill:
         if action_pill.startswith('🟢'):
             _pcls = 'pill-bull'      # 進取（追進/加碼/續抱）→ 紅（台股漲色）

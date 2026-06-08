@@ -1392,7 +1392,8 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
                 result['entry_low']  = None
                 result['entry_high'] = None
         _action = _decide_action(
-            status=('hold' if status == 'holding' else 'watch'),
+            # §三十七：建議動作客觀化 — 不因持有而異（持倉操作走第六節）
+            status='watch',
             direction=result['direction'],
             structure_flag=_ms.get('structure_flag', '資料不足'),
             swing_levels=_sl,
@@ -1824,7 +1825,8 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
                 result['entry_low']  = None
                 result['entry_high'] = None
         _action = _decide_action(
-            status=('hold' if is_holding else 'watch'),
+            # §三十七：建議動作客觀化 — 不因持有而異（持倉操作走第六節）
+            status='watch',
             direction=result['direction'],
             structure_flag=_ms.get('structure_flag', '資料不足'),
             swing_levels=_sl,
