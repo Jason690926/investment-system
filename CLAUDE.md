@@ -10,9 +10,9 @@
 
 **所在週次：週8（AI 偏空校正 + 報表品質）**
 
-**狀態：HEAD = `eb40a86`（已 push origin/main，本地與遠端同步）；§三十三 6 + §三十四 4 + §三十五 5 + §三十六 3 = 18 commit；pytest 349/349 全綠**
+**狀態：§三十三~§三十六 共 18 commit 在 origin/main（HEAD `eb40a86`，待 deploy 驗收）；§三十七 4 commit（T1~T4）在本地 branch `feat/objective-action-decouple`，待 merge + push；pytest 358/358 全綠**
 
-### 四輪修法時間軸
+### 修法時間軸
 
 | 章節 | 日期 | commit 數 | 主題 |
 |------|------|-----------|------|
@@ -20,6 +20,22 @@
 | §三十四 | 5/28 Round 1 | 4 | 6 bug：pill P/L gate / 雙重停損 hierarchy / short boundary buffer / P&F 揭露 |
 | §三十五 | 5/28 Round 2 | 5 | 5 bug：API error leak + cache 污染 / 深虧續抱 / Filter B 矛盾 / RISK 隔離 / 錨點 fallback |
 | §三十六 | 5/28 Round 3 | 3 | 2 bug：跌穿停損 P&F 矛盾 / WATCH long 跌穿 entry_low 新 pill |
+| §三十七 | 6/8 | 4 (+docs) | **建議動作客觀化（與持有解耦）** F1 + short 空標 P&F 下行 F2(P1-1) + 方向 badge 同源 F3(P2-1) |
+
+### 🆕 §三十七（2026-06-08，branch `feat/objective-action-decouple`，未 merge）
+
+**用戶架構訴求**：建議動作不該因「持有」而異 — 每檔分析給客觀局勢判讀，持倉操作只在第六節。
+
+| commit | 內容 |
+|--------|------|
+| `5844c1a` test | `test_objective_action_decouple.py`（F1/F2/F3，9 case）|
+| `c57a80b` feat F1 | `_decide_action` 兩 call site `status` 恆 `'watch'` + `app.py` 移除標頭 `adjust_pill_for_deep_loss` 疊加。**結構性解掉 §三十四/三十五 殘留矛盾**（創惟/大聯大 加碼 vs §6 不加碼、晶心科 出場 vs §6 觀望持有）|
+| `d7dbe90` fix F2 | `app.py:169` short 空標 `support_price`→`target_price`（P&F 下行 + guard < 現價）|
+| `09f4a19` fix F3 | 相位反推 long/short 但 entry 皆 None → badge neutral（采鈺）|
+
+⚠️ **§三十七 取消 §三十五 Bug-A 的 deep-loss 覆寫**（A 法）：標頭 pill 不再因深虧 read-time 覆寫成「觀望持有」，改純客觀；個人深虧由 P/L 列紅字 + 第六節承載。故下方 Step 3 第 3 項（晶心科 -38% → 觀望持有）**預期改變**：晶心科標頭應顯客觀 short 字（如🟡 等反彈佈空），非觀望持有。
+
+**驗收（merge + 重跑後）**：創惟/大聯大標頭=客觀字 + §6 仍給不加碼（不再矛盾）；晶心科/華星光空標 < 現價；采鈺方向 badge=觀望。零 migration。spec/plan：`docs/superpowers/{specs,plans}/2026-06-08-objective-action-decouple-holding*`
 
 ### 🚧 待用戶執行 — Deploy 驗收（4 件事，分兩階段）
 

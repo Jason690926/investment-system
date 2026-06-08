@@ -1917,3 +1917,57 @@ plan：`docs/superpowers/plans/2026-05-28-cross-check-round2.md`
 
 spec：`docs/superpowers/specs/2026-05-28-cross-check-round3-design.md`
 plan：`docs/superpowers/plans/2026-05-28-cross-check-round3.md`
+
+---
+
+## 三十七、6/8 cross-check：建議動作客觀化（與持有解耦）+ 2 渲染 bug（2026-06-08）
+
+### 緣起
+
+用戶提供 6/8 20:06 持股分析報告 PDF（23 頁、3 持股 + 9 觀察）。當日大盤 -3.48% 重挫、多檔跳空跌破箱底，逼出渲染邊界 bug。用戶提出**架構層訴求**：「不要因為持有該檔股票所以建議操作而有所不同；持有會有持有的建議操作（第六節），但每檔分析應該是更專業的對當下局勢/走勢來建議」。
+
+查證確認：`_decide_action(status='hold'/'watch')` 對同一客觀局勢依持有與否產生不同字典（hold=加碼/續抱/減碼/出場；watch=進場區可佈/等回測/等反彈佈空…），標頭 pill 與第五節都隨持有變動。RISK/方向/相位/量價已由 §三十五 Bug-G 隔離；第六節為持倉專屬。
+
+### 用戶定案
+
+- 建議 pill + 一~五節**全客觀**（持股人/觀察者同一套）
+- 持倉專屬只留 COST/QTY/P-L 列 + 第六節（AI user-agnostic，不動）
+- deep-loss 採 **A 法**：不做標頭個人化覆寫，靠 P/L 列紅字 + §6 承載
+
+### A. 修法總覽（待執行，5 commit）
+
+| Commit | 項 | 修法 |
+|--------|-----|------|
+| T1 | test | `tests/test_objective_action_decouple.py` 紅燈（F1 客觀化 + F2 空標 + F3 badge）|
+| T2 | feat F1 | `_decide_action` 兩 call site `status` 恆 `'watch'`（`ai_analyzer_v2.py:1395/1827`）+ 移除 `app.py:191-193` 標頭 deep-loss 疊加。**結構性解掉 P1-2（創惟/大聯大 加碼 vs 不加碼）+ P2-2（晶心科 出場 vs 觀望持有）** |
+| T3 | fix F2 (P1-1) | `app.py:169` short 空標 `support_price` → `target_price`（P&F 下行，恆在價下）+ guard ≥ price 不顯示 |
+| T4 | fix F3 (P2-1) | `app.py:156-184` 相位反推 long/short 但 entry_low/high 皆 None → badge 走 neutral（采鈺「多 vs neutral」）|
+| T5 | docs | plan.md §三十七 + spec + impl plan + CLAUDE.md |
+
+### B. 為什麼這樣設計
+
+1. **status 恆 watch 而非刪 HOLD 分支**：最小可逆改動，HOLD 分支與測試保持綠，未來 §6 可複用其判斷。
+2. **deep-loss A 法**：標頭客觀化與個人化覆寫衝突；§6 user-agnostic 無法承載個人損益（硬塞回退 §二十八 跨用戶污染）；-43% 已由 P/L 紅字顯示 + §6 結構建議，足以提醒。
+3. **第五節 direction 驅動本就客觀**：pill 僅 echo，客觀化後自動對齊，不動 framework。
+4. **P1-1 改 target_pnf**：short 下行目標恆在價下且 = 第四節 P&F 同源；range_low 在跳空跌破時滯留價上是反向 bug 來源。
+5. **P2-1 零-migration**：沿用 §三十五 Bug-B dashboard「entry 皆 None → neutral」判據，前後端一致。
+
+### 證據（6/8 PDF）
+
+| 股 | 現象 | 解法 |
+|----|------|------|
+| 創惟/大聯大 | pill 🟢 加碼 vs §6「不加碼」 | F1 結構性解 |
+| 晶心科 | pill 🔴 出場 vs §6「觀望持有」 | F1 結構性解 |
+| 晶心科/華星光 | 標頭空標(224.5/594) > 現價(202.5/537) | F2 |
+| 采鈺 | 方向 badge 多 vs 結論 neutral | F3 |
+
+### 範圍邊界（不做）
+
+進場區 <3% 過近 pill 細化（已由 `_entry_proximity_warning` 在文字呈現）/ 強勢回檔寬停損（矽力 -25%/合晶 -35%，列觀察）/ deep-loss B 法 / 新增 direction 欄位。
+
+### 回滾策略
+
+T2/T3/T4 各自獨立 revert（見 impl plan 表）。T2 為行為主軸但純客觀化、不碰 §6/RISK。零 migration。
+
+spec：`docs/superpowers/specs/2026-06-08-objective-action-decouple-holding-design.md`
+plan：`docs/superpowers/plans/2026-06-08-objective-action-decouple-holding.md`
