@@ -156,6 +156,13 @@ def _render_one_block(s, a, q, idx, mode, personal_html=None):
     if a:
         from modules.ai_analyzer_v2 import phase_to_direction
         _dir = phase_to_direction(a.wyckoff_phase)
+        # §三十七 P2-1：相位反推 long/short 但 entry_low/high 皆 None → AI 實際判
+        # neutral（跌穿失效價等）。沿用 §三十五 Bug-B dashboard 判據，使方向 badge
+        # 與 pill（⚪ 觀望）同源，避免「badge 多 vs 結論 neutral」矛盾（采鈺 6/8）。
+        if (_dir in ('long', 'short')
+                and getattr(a, 'entry_low', None) is None
+                and getattr(a, 'entry_high', None) is None):
+            _dir = 'neutral'
         if _dir == 'short':
             dir_badge = '空'
             pills.append(f'<span class="pill pill-ink"><span class="lbl">方向 </span>{dir_badge}</span>')

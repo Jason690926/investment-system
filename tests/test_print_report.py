@@ -50,6 +50,8 @@ def _make_analysis(**overrides):
         support_price=Decimal('1050'),
         resistance_price=Decimal('1120'),
         target_price=Decimal('1180'),
+        entry_low=Decimal('1040'),   # §三十七：真實 long/short 分析含進場區
+        entry_high=Decimal('1090'),
         analysis_date=date(2026, 5, 3),
         html_content='<p>分析內容</p>',
     )
@@ -269,6 +271,8 @@ def _make_short_analysis(**overrides):
         resistance_price=Decimal('227'),  # 中性語意 = 箱頂 = 空進
         target_price=Decimal('190'),      # P&F 下行目標 = 空標（§三十七 P1-1）
         stop_loss=Decimal('234'),         # range_high × 1.03 = 空停
+        entry_low=Decimal('222'),         # §三十七：short 放空區（entry 存在 → 不被當 neutral）
+        entry_high=Decimal('227'),
         analysis_date=date(2026, 5, 19),
         html_content='<p>派發股分析</p>',
     )
