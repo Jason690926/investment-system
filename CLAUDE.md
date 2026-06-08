@@ -6,11 +6,13 @@
 - **架構決策**：討論完方案後，先更新 `plan.md`，再開始寫程式
 - `plan.md` 只在需要查架構細節時才讀（節省 token）
 
-## 當前進度（2026-05-28 — §三十三 ~ §三十六 共 18 commit 已 push origin/main，待 deploy 驗收）
+## 當前進度（2026-06-08 — §三十三 ~ §三十七 共 24 commit 已 push origin/main，待用戶重跑 cross-check）
 
 **所在週次：週8（AI 偏空校正 + 報表品質）**
 
-**狀態：§三十三~§三十六 共 18 commit 在 origin/main（HEAD `eb40a86`，待 deploy 驗收）；§三十七 4 commit（T1~T4）在本地 branch `feat/objective-action-decouple`，待 merge + push；pytest 358/358 全綠**
+**狀態：HEAD = `ecd3f06`（本地 = origin/main 同步）；§三十三 6 + §三十四 4 + §三十五 5 + §三十六 3 + §三十七 6（5 commit + docs）= 24 commit 全在 origin/main；pytest 358/358 全綠；feature branch 已 merge(ff) + 刪除**
+
+**收工點（6/8）**：§三十七 已 merge+push、Render auto-deploy 觸發。下次開工接手 = 用戶重跑 14 檔後提供新 PDF 做 cross-check 驗收（見下方 §三十七 驗收項 + Deploy 驗收）。
 
 ### 修法時間軸
 
@@ -22,16 +24,19 @@
 | §三十六 | 5/28 Round 3 | 3 | 2 bug：跌穿停損 P&F 矛盾 / WATCH long 跌穿 entry_low 新 pill |
 | §三十七 | 6/8 | 4 (+docs) | **建議動作客觀化（與持有解耦）** F1 + short 空標 P&F 下行 F2(P1-1) + 方向 badge 同源 F3(P2-1) |
 
-### 🆕 §三十七（2026-06-08，branch `feat/objective-action-decouple`，未 merge）
+### 🆕 §三十七（2026-06-08，已 merge + push origin/main，HEAD `ecd3f06`）
 
 **用戶架構訴求**：建議動作不該因「持有」而異 — 每檔分析給客觀局勢判讀，持倉操作只在第六節。
 
 | commit | 內容 |
 |--------|------|
 | `5844c1a` test | `test_objective_action_decouple.py`（F1/F2/F3，9 case）|
-| `c57a80b` feat F1 | `_decide_action` 兩 call site `status` 恆 `'watch'` + `app.py` 移除標頭 `adjust_pill_for_deep_loss` 疊加。**結構性解掉 §三十四/三十五 殘留矛盾**（創惟/大聯大 加碼 vs §6 不加碼、晶心科 出場 vs §6 觀望持有）|
-| `d7dbe90` fix F2 | `app.py:169` short 空標 `support_price`→`target_price`（P&F 下行 + guard < 現價）|
-| `09f4a19` fix F3 | 相位反推 long/short 但 entry 皆 None → badge neutral（采鈺）|
+| `c57a80b` feat F1 | `_decide_action` 兩 call site（`ai_analyzer_v2.py:1395/1827`）`status` 恆 `'watch'` + `app.py` 移除標頭 `adjust_pill_for_deep_loss` 疊加。**結構性解掉 §三十四/三十五 殘留矛盾**（創惟/大聯大 加碼 vs §6 不加碼、晶心科 出場 vs §6 觀望持有）|
+| `d7dbe90` fix F2 | `app.py:169` short 空標 `support_price`→`target_price`（P&F 下行 + guard < 現價）；同步更新 test_print_report 3 short 測試 |
+| `09f4a19` fix F3 | `app.py:158` 相位反推 long/short 但 entry_low/high 皆 None → badge neutral（采鈺）；更新 2 fixture |
+| `ecd3f06` docs | plan.md §三十七 + spec + impl plan + 本進度 |
+
+**dashboard 無孿生 bug**：`renderAnchorStrip`（dashboard.js:235）早用 `target_pnf` 當 short 空標；F2 是把 PDF 對齊 dashboard 既有正確行為。
 
 ⚠️ **§三十七 取消 §三十五 Bug-A 的 deep-loss 覆寫**（A 法）：標頭 pill 不再因深虧 read-time 覆寫成「觀望持有」，改純客觀；個人深虧由 P/L 列紅字 + 第六節承載。故下方 Step 3 第 3 項（晶心科 -38% → 觀望持有）**預期改變**：晶心科標頭應顯客觀 short 字（如🟡 等反彈佈空），非觀望持有。
 
@@ -48,7 +53,7 @@
 **Step 3 — 零 token 立即生效驗收**（hard refresh 即可）
 1. **§三十三**：開盤前 14:30 前 dashboard 14 檔顯示淺灰 60% + 4 chip + 「上次 5/26」tag + 錨點 strip（沿用舊資料）
 2. **§三十五 Bug-H**：個股詳情頁「持股操作建議」不再 leak Anthropic API raw error；credit 不足顯示「AI 服務額度不足，請聯絡管理員充值」
-3. **§三十五 Bug-A**：晶心科 cost=-38% pill 由 read-time 覆寫為「🟡 觀望持有」（不再顯示「🟢 續抱」）
+3. ~~**§三十五 Bug-A**：晶心科 cost=-38% pill 覆寫為「🟡 觀望持有」~~ **← §三十七 A 法已取消此 read-time 覆寫**：晶心科標頭改純客觀 short 字（如🟡 等反彈佈空），深虧由 P/L 列紅字 + §6 承載
 4. **§三十五 Bug-B**：晶心科 dashboard 錨點 strip 從「— \| — \| —」改顯「區間 213-249.5 \| 雙向」
 
 **Step 4 — 燒 ~$0.6 重跑 14 檔驗 prompt / 渲染**
