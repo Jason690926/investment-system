@@ -6,11 +6,252 @@
 - **架構決策**：討論完方案後，先更新 `plan.md`，再開始寫程式
 - `plan.md` 只在需要查架構細節時才讀（節省 token）
 
-## 當前進度（2026-05-26 — §三十二 8 commit 已 deploy 驗收完成 ✅）
+## 當前進度（2026-05-28 — §三十三 ~ §三十六 共 18 commit 已 push origin/main，待 deploy 驗收）
 
 **所在週次：週8（AI 偏空校正 + 報表品質）**
 
-**狀態：HEAD = `7b099de`（含驗收後 snapshot）；§三十二 8 commit 全部 deploy 驗收通過；pytest 291/291 全綠**
+**狀態：HEAD = `eb40a86`（已 push origin/main，本地與遠端同步）；§三十三 6 + §三十四 4 + §三十五 5 + §三十六 3 = 18 commit；pytest 349/349 全綠**
+
+### 四輪修法時間軸
+
+| 章節 | 日期 | commit 數 | 主題 |
+|------|------|-----------|------|
+| §三十三 | 5/27 | 6 | Dashboard Opt-2/3：stale 視覺 + 錨點 strip + entry_low/high column |
+| §三十四 | 5/28 Round 1 | 4 | 6 bug：pill P/L gate / 雙重停損 hierarchy / short boundary buffer / P&F 揭露 |
+| §三十五 | 5/28 Round 2 | 5 | 5 bug：API error leak + cache 污染 / 深虧續抱 / Filter B 矛盾 / RISK 隔離 / 錨點 fallback |
+| §三十六 | 5/28 Round 3 | 3 | 2 bug：跌穿停損 P&F 矛盾 / WATCH long 跌穿 entry_low 新 pill |
+
+### 🚧 待用戶執行 — Deploy 驗收（4 件事，分兩階段）
+
+**Step 1 — Supabase migration（§三十三 必跑，否則 500 UndefinedColumn）**
+- Supabase Web SQL Editor 跑 `migrations/2026-05-28-add-entry-zone-columns.sql`
+- 驗證：`SELECT column_name FROM information_schema.columns WHERE table_name='stock_analyses' AND column_name IN ('entry_low','entry_high');` 預期 2 row
+
+**Step 2 — Render auto-deploy**（push 已觸發）
+
+**Step 3 — 零 token 立即生效驗收**（hard refresh 即可）
+1. **§三十三**：開盤前 14:30 前 dashboard 14 檔顯示淺灰 60% + 4 chip + 「上次 5/26」tag + 錨點 strip（沿用舊資料）
+2. **§三十五 Bug-H**：個股詳情頁「持股操作建議」不再 leak Anthropic API raw error；credit 不足顯示「AI 服務額度不足，請聯絡管理員充值」
+3. **§三十五 Bug-A**：晶心科 cost=-38% pill 由 read-time 覆寫為「🟡 觀望持有」（不再顯示「🟢 續抱」）
+4. **§三十五 Bug-B**：晶心科 dashboard 錨點 strip 從「— \| — \| —」改顯「區間 213-249.5 \| 雙向」
+
+**Step 4 — 燒 ~$0.6 重跑 14 檔驗 prompt / 渲染**
+5. **§三十四 Bug-2/4**：強勢突破 4 檔（東捷/瑞軒/矽力/合晶）第五節含「⚠️ 突破首日反轉風險」watermark + 「🔴 主停損 / 🟠 次停損」hierarchy
+6. **§三十四 Bug-3**：撼訊 short pill 在區下方時應「🟡 等反彈佈空」（0.5% buffer 生效）
+7. **§三十四 Opt-1**：11 檔原顯示 P&F「—」者改顯「P&F 理論目標：X — 需先突破/跌破 Y 觸發」
+8. **§三十五 Bug-D**：強勢突破 4 檔 P&F 句改「先前等幅量度 X 已達成」（不再「需先突破 Y」）
+9. **§三十五 Bug-G**：14 檔 RISK 評分對 is_holding 切換更穩定（持股 vs 觀察 RISK 不應大幅變動）
+10. **§三十六 Bug-I**：晶心科第四節 P&F 改「論點已失效（跌穿支撐 224.5 元）」
+11. **§三十六 Bug-J**：瑞耘 phase=再積累 但跌穿 entry_low 96.8 → pill「🟡 跌穿觀察」（取代「⚪ 觀望」）
+
+### 進度安全網
+- pytest 349/349 全綠（291 §三十二 baseline + 5 §三十三 + 14 §三十四 + 25 §三十五 + 9 §三十六，部分 test 改寫重複扣除）
+- py_compile（ai_analyzer_v2 / candlestick / app / models / stock_service / run_daily_report）+ `node -c dashboard.js` 全綠
+- 18 commit 純加性 / helper 新增 / 既有函式 optional 參數 / 1 nullable migration → 任一 commit `git revert` 可獨立回滾（§三十五 `8f0e973` 因 signature 改三元組需配對 test）
+
+### 未追蹤檔案（cross-check 暫存，不需 commit）
+`_crosscheck_fetch.py` / `_pdf_526_dump.txt` / `_pdf_528_dump.txt` / `_pdf_528_v2_dump.txt` / `_report_extract.txt`
+
+---
+
+## 過往進度（2026-05-28 — §三十六 5/28 Round 3：Bug-I + Bug-J 2 commit）
+
+**HEAD = `eb40a86`（含 docs）；feat HEAD = `8946529`**
+
+### 緣起
+§三十五 deploy 後用戶 21:14 重跑（credit 已充）。對新 PDF cross-check 發現兩個邏輯矛盾。
+
+### 修法 2 commit
+
+| Commit | Bug | 修法 |
+|--------|-----|------|
+| `9611f02` | **I**（P1）晶心科 pill=「🔴 出場」+ 同段 P&F「需先突破 260 元觸發」邏輯矛盾 | `_dual_pnf` 加 invalidation gate：long 跌穿 swing_low × 0.985 / short 站回 swing_high × 1.015 → P&F 句改「論點已失效」覆蓋 strict / relaxed |
+| `8946529` | **J**（P2）瑞耘 phase=再積累 (long) 但收 96.2 < entry_low 96.8 → fall-through 到 default ⚪ 觀望 + 顯示「停損已跌穿」邏輯矛盾 | `_decide_action` WATCH long path 加跌穿 entry_low 判斷 → 新 pill「🟡 跌穿觀察」（取代 default 觀望） |
+
+### 設計決策
+1. **invalidation 在 _dual_pnf 而非 _render_operation_framework**：P&F 句注入 AI prompt，AI verbatim 引用；早期改寫才能讓 AI 自然引用新句。
+2. **1.5% buffer**（晶心科 219.5/224.5=-2.2%）：明確破位才觸發，避免價格貼著停損晃動反覆切換語義。
+3. **🟡 跌穿觀察新 pill**：⚪ 觀望語義「無動作」不符「主動觀察止跌」實務行為。
+4. **「結構已轉弱」優先級高於跌穿**：結構轉弱仍走 🔴 不宜進；跌穿觀察只在「結構未轉弱+價跌穿」灰色地帶觸發。
+
+spec：`docs/superpowers/specs/2026-05-28-cross-check-round3-design.md`
+plan：`docs/superpowers/plans/2026-05-28-cross-check-round3.md`
+
+---
+
+## 過往進度（2026-05-28 — §三十五 5/28 Round 2：5 bug 修法 5 commit）
+
+**feat HEAD = `747fbb3`（docs `3a319aa`）**
+
+### 緣起
+§三十四 deploy 後用戶燒 ~$0.6 重跑 14 檔 5/28 報表。Cross-check 抓出 5 個追加 bug，含 2 P0。
+
+### 修法 5 commit
+
+| Commit | Bug | 內容 |
+|--------|-----|------|
+| `da4e3ac` | **H**（P0）個股詳情頁「持股操作建議」直接 leak Anthropic raw error（credit too low），DB cache 永久污染 | 三層防護：`AIGenerationError` 新異常 + `generate_personal_recommendation` 失敗 raise + `api_recommend_stock` catch → 503 友善訊息 + 不寫 cache；既有 5/28 兩筆 error cache（6533/6104）DB cleanup |
+| `db29965` | **A**（P0）晶心科 cost=-38% / direction=neutral / entry_zone=None → default「🟢 續抱」，§三十四 Bug-1 只 catch「加碼」漏掉 | `adjust_pill_for_deep_loss` 擴大 catch：HOLD 深虧 ≤ -20% 把「續抱」也改「🟡 觀望持有」 |
+| `8f0e973` | **D**（P0）Opt-1 relaxed sentence 對 Filter B 失敗場景（cur 已遠超 gate）仍寫「需先突破 Y」邏輯不通（矽力/東捷/合晶/瑞軒 4 檔受害） | `calc_pnf_target_relaxed` signature 改 (target, gate, status) 三元組；'reached' 狀態 `_dual_pnf` 寫「先前等幅量度 X 已達成，等新箱形成」 |
+| `747fbb3` | **G**（P1）analyze_market_only 對 is_holding=True 注入【持倉提示】可能污染 RISK_PCT（晶心科 42%→62%）<br>**B**（P1）晶心科 dashboard 錨點 strip 全「—」— wyckoff=long phase 但 AI direction=neutral → entry_low/high=None | analyze_market_only 兩處 prompt 加「客觀性鐵律」隔離 is_holding；dashboard.js `renderAnchorStrip` entry_low/high 都 None 時 fallback 走 neutral path 顯示「區間 X-Y \| 雙向」 |
+
+### 設計決策
+1. **Bug-H 三層防護**：`_generate` 保留 return error string（向後相容大盤 caller）+ personal_recommendation 失敗 raise（精準 cache 路徑）+ api endpoint catch（端點級防護）+ 既有 cache 一次性 cleanup。
+2. **Bug-A 擴大「加碼/續抱」**：HOLD 深虧 + 結構未轉弱 + entry_zone=None → default「續抱」是常見 fall-through，單獨 catch「加碼」漏掉。
+3. **Bug-D status 三元組**：與 calc_pnf_target_relaxed 共用箱體掃描，caller 看 status 決定 sentence，DRY。
+4. **Bug-G 純 prompt 而非結構改動**：is_holding 是必要旗標（觸發第六節），只能靠 prompt 教 AI 隔離影響。
+5. **Bug-B frontend 解 backend 限制**：calc_swing_levels neutral 不回 entry_zone 是 API 語意；frontend 偵測「同 phase 但 entry=None」改顯「區間 X-Y \| 雙向」對家人讀者更友善。
+
+### 驗證
+- pytest **340/340 全綠**（315 §三十四 baseline + 11 Bug-H + 9 Bug-A + 5 Bug-D）
+- `8f0e973` 因 signature 改動，4 個 relaxed test 配對改三元組解構
+
+### 回滾
+5 commit 純加性 + 既有函式新參數 default；`8f0e973` revert 須配對改 test，其他獨立。
+
+spec：`docs/superpowers/specs/2026-05-28-cross-check-round2-design.md`
+plan：`docs/superpowers/plans/2026-05-28-cross-check-round2.md`
+
+---
+
+## 過往進度（2026-05-28 — §三十四 5/28 Round 1：6 bug + Opt-1 修法 4 commit）
+
+**feat HEAD = `51145a9`（docs `e5aed91`）**
+
+### 緣起
+用戶 5/26 21:46 跑 14 支報表，5/27 沒重跑、5/28 收盤後做 cross-check。手動撈 5/27-5/28 OHLC（9 檔 yfinance + 5 檔 TPEx endpoint）對照 5/26 PDF 預測，發現 5 bug + 1 優化 + 1 文件不一致。
+
+### cross-check 證據
+| 股 | 5/26→5/28 % | 5/26 報表 pill | 結論 |
+|---|------------|--------------|------|
+| 晶心科 (H) | **-6.40%** | 🟢 加碼（cost=355 虧 -34%） | ❌ Bug-1 主訴求 |
+| 東捷 | **-10.74%** | 🟢 追進 💪 | ❌ Bug-2/Bug-4 主訴求 |
+| 瑞軒 | -7.16% | 🟢 追進 💪 | ❌ 同 |
+| 撼訊 (short) | -2.86% | 🔴 分批佈空（70 vs zlo 69.6 邊界）| ❌ Bug-3 主訴求 |
+
+### 修法 4 commit
+
+| Commit | Bug | 修法 |
+|--------|-----|------|
+| `cec5bff` | **1**+**3** | _decide_action 加 pl_pct 參數 + HOLD 深虧 ≤ -20% 抑制「加碼」改「觀望持有」；short path 加 zlo×1.005 buffer 讓 boundary case 改判等反彈佈空。`adjust_pill_for_deep_loss` helper 在 PDF / dashboard 讀取端 post-process（避免 DB cross-user pollution） |
+| `3e1cc23` | **2**+**4** | _render_operation_framework breakout=True 分支加「⚠️ 突破首日反轉風險」watermark + 主停損（追進停損 = rh）/ 次停損（論點作廢 = inv）label hierarchy |
+| `51145a9` | **Opt-1** | `calc_pnf_target_relaxed` 新函式：放寬 Filter A/B/C 仍回 (target, gate_price)；_dual_pnf 整合 → strict None 時注入「P&F理論目標：X 元 — 需先突破/跌破 Y 元觸發」整句替代「— 元」 |
+| `e5aed91` | docs + **5** | CLAUDE.md §三十二 微星驗收更正：實際 4/5 ✅（非 5/5，因 `_strong_breakout_state` 未觸發 P&F 仍 —）；plan.md §三十四 + spec + impl plan |
+
+### 設計決策
+1. **Bug-1 用 user 端 post-process 而非分析時 inject pl_pct**：DB StockAnalysis 跨用戶共用 cache，分析時 inject 會污染 cross-user。讀取端有 avg_cost + price 才能精確算 pl_pct，post-process 覆寫 base pill 是乾淨分層。
+2. **Bug-3 buffer ×1.005（0.5%）**：撼訊 5/26 70.0 vs zlo 69.60 距離 +0.57%，buffer 須 ≥ 此值才生效；再大會誤殺真正在區內的 case。
+3. **Bug-4 hierarchy 🔴 主 / 🟠 次**：與 _decide_action pill 配色一致（🔴 退出 / 🟠 警戒），語義延續性高。
+4. **Opt-1「理論目標 — 需先突破 Y」**：揭露「未觸發」狀態，避免家人讀者以為已是確定目標。
+
+### 驗證
+- pytest **315/315 全綠**（304 §三十三 baseline + 8 Bug-1/3 + 6 Bug-2/4 + 4 Opt-1 - 改寫重複扣除）
+- py_compile 全綠
+- 4 commit 純加性（helper 新增 + 既有函式新參數 default None）
+
+### 回滾
+4 commit 純加性各自獨立 revert，不依賴。
+
+spec：`docs/superpowers/specs/2026-05-28-cross-check-6-fixes-design.md`
+plan：`docs/superpowers/plans/2026-05-28-cross-check-6-fixes.md`
+
+---
+
+## 過往進度（2026-05-27 — §三十三 Dashboard Opt-2/3 stale 視覺 + 錨點 strip 6 commit）
+
+**feat HEAD = `f2a2ece`（docs `bfcd515`）；含 1 Supabase migration**
+
+### 緣起
+§三十二 deploy 驗收完成後接手 §三十二 收工提到的 Opt-2/3：
+- **Opt-2**：新交易日 14:30 前 dashboard 14 檔全部「尚未分析」灰色 → 家人讀者失去前一日決策參考
+- **Opt-3**：mini-card 缺關鍵價位（進場/停損/目標），須逐一點進個股詳情才能掃 → 14 檔過慢
+
+### 用戶定案設計
+| 設計問題 | 選擇 | 理由 |
+|----------|------|------|
+| 顯示時機 | B 都顯示（已分析+尚未分析 UI 結構一致） | 家人讀者一眼掃過所有持股錨點 |
+| 資料來源 | C+ 改 `get_user_stocks` 加 fallback | 零新 API、單一資料路徑 |
+| 舊資料視覺 | A 4 chip 淺灰 60% + 「上次 MM-DD」tag | 視覺分辨今日 vs 上次 |
+| 失效策略 | 14 天 lookback + 超過完全空白 | 涵蓋週末/假日避免極舊資料誤導 |
+| 錨點 strip 資料 | 加 entry_low / entry_high migration | 精確進場區間，sup/res 單值對 short 不對稱 |
+| 方向 awareness | 依方向動態切換 label（long/short/neutral） | 與既有 pill 概念一致 |
+| 時間 tag 格式 | 絕對日期「上次 5/25」 | 不會 stale，家人讀者易讀 |
+
+### 修法 6 commit
+
+| Commit | 類型 | 內容 |
+|--------|------|------|
+| `825a354` | feat(db) | `migrations/2026-05-28-add-entry-zone-columns.sql`（IF NOT EXISTS）+ `models.py` 加 `entry_low` / `entry_high` Numeric(10,2) |
+| `162df60` | test | `tests/test_stock_service_fallback.py` 5 TDD case |
+| `c492231` | feat(analyzer) | `ai_analyzer_v2.py` 兩函式寫入 `result['entry_low/high']` 從 `_sl['entry_zone']`；`app.py` / `run_daily_report.py` 寫入端加 column |
+| `30a6fa5` | feat(stock_service) | `get_user_stocks` 加 14-day fallback + item dict 新增 support/resistance/target_pnf/stop_loss/entry_low/entry_high/is_today_analysis/last_analysis_date |
+| `f2a2ece` | feat(ui) | `dashboard.js` buildCard 加 `card-stale-data` class、`last-analysis-tag` chip、`renderAnchorStrip` direction-aware；`markCardAnalyzed` 移除 stale；`analyzeAll` 結尾 reload；`app.css` 4 新 class |
+| `bfcd515` | docs | spec + impl plan + plan.md §三十三 |
+
+### 設計決策
+1. **加 entry_low/high column 而非沿用 support 單值**：support_price 對 long ≈ entry_zone 下緣，但 short「空進」是 resistance，概念不一致；從 html_content 解析脆弱。1 migration 換 direction-aware strip。
+2. **14-day fallback**：週末(5)+連假(6)+系統暫停(1-2) < 14 天；超過代表停權/新觀察/系統故障，寧可空白避免誤導。
+3. **兩階段查詢（主+fallback）而非「一次查 14 天」**：主查詢命中率 ≈100%，fallback 只跑 missing 子集，DB 載入量最小。
+4. **正向命名 `is_today_analysis`**：undefined 為「今日已分析」邏輯與既有行為一致，避免破壞舊測試。
+5. **markCardAnalyzed 後 reload 整 grid**：strip 需多欄位 API response 不含；14 檔 render < 50ms 可接受。
+
+### 驗證
+- pytest **296/296 全綠**（291 + 5 fallback）
+- py_compile + node -c 全綠
+- 5 commit 純加性 + 1 nullable migration
+
+### ⚠️ Deploy 必看
+**先跑 migration**（§三十一 踩過 UndefinedColumn 500 坑）：Supabase Web SQL Editor 跑 `migrations/2026-05-28-add-entry-zone-columns.sql`，再 push / refresh。
+
+### 回滾
+F1-F5 各自獨立 revert：F1 migration nullable 加性留 NULL 不影響讀取；F3 寫入端 revert → entry_low/high 留 NULL，前端 strip 顯示「—」；F4 fallback revert → 早上 09:00 全部尚未分析灰色（修法前狀態）；F5 前端 revert → 卡片回原樣。
+
+spec：`docs/superpowers/specs/2026-05-28-dashboard-stale-anchor-design.md`
+plan：`docs/superpowers/plans/2026-05-28-dashboard-stale-anchor.md`
+
+---
+
+## 過往進度（2026-05-26 — §三十二 5 檔強勢突破股 8 commit deploy 驗收通過 ✅）
+
+**HEAD = `7b099de`；pytest 291/291 全綠**
+
+### 驗收結果（5/26 21:46 PDF cross-check）
+| Bug/Opt | 5/26 驗證證據 | 結果 |
+|---------|-------------|------|
+| **Bug-1** 5 檔回測前高 ±3% | 矽力 `442.32~456.00` / 東捷 `139.19~143.50` / 合晶 `57.52~59.30` / 瑞軒 `47.38~48.85`（微星未生效 — 見 §三十四 修法）| 4/5 ✅ |
+| **Bug-2** P&F 目標不再「— 元」 | 矽力 684.5 / 東捷 / 合晶 88 / 瑞軒 68.2 都有具體數字（微星仍「—」因 `_strong_breakout_state` 未觸發）| 4/5 ✅ |
+| **Bug-3** 撼訊 pill vs 內文一致 | direction=short / phase=派發 / pill=🔴 分批佈空 / 內文 DIRECTION=short ← AI 第一次重跑就遵守 prompt 鐵律，post-process safety net 沒觸發 | ✅ |
+| **Bug-4** 條件 C 降級 | 瑞軒 5/26 觸發 B 條件（5 日連續站高），保留 🟢 追進 💪 合理 | ✅ |
+| **Bug-5** 技嘉強漲否決 | direction=long / phase=上漲 / pill=🟡 等回測 — `inprogress_strong_up` 觸發 | ✅ |
+| **Bug-6** 命名 | 微星 5/26 顯示 🟡 突破未驗（取代舊「等突破」）| ✅ |
+| **Opt-1** HTML 換行 | 第五節有清楚 `─` 分隔 + 每行縮排 | ✅ |
+
+### 8 commit 摘要（TDD 流程）
+
+| Commit | 類型 | Bug/Opt | 修法 |
+|--------|------|---------|------|
+| `5c2e0c5` | test | Bug-1+2 | `_breakout_overrides` 8 TDD case |
+| `c897919` | feat | Bug-1+2 | 純函式 `_breakout_overrides(swing_levels, daily_bars, price)`；strong_breakout=True 時 retest = `(rh × 0.97, rh)` 單邊向下 3%、target 用「過去 60 日絕對最低」作 base_low 重算等幅量度、cap = price × 2.0 |
+| `aed5807` | docs | — | spec + impl plan + plan.md §三十二 |
+| `4f63bd2` | fix | Bug-6 | 「🟡 等突破」→「🟡 突破未驗」 |
+| `53f339a` | fix | Opt-1 | `_render_operation_framework` 每行包 `<div class="op-row">` 取代 `\n`（mistune→HTML 吃換行 bug）+ HTML escape |
+| `887e7cc` | fix | Bug-4 | `_strong_breakout_state` 條件 C 加附加「近 3 日 ≥2 根漲停」避免單根衝動誤判（瑞軒 5/22 一字漲停 → 5/26 -8.5% 翻車）|
+| `c8861c5` | fix | Bug-5 | `compute_monthly_structure` 加 `monthly_inprogress_strong_up`；`_structure_flag` 強勢上漲否決加 OR 分支（修技嘉 5 月 V 反轉 +21% 誤判 short）|
+| `b531711` | fix | Bug-3 | 雙層：`_structure_block` gate_hint「結構已轉弱」三重禁令 + `_apply_structure_safety_net` post-process 安全網強制覆寫 neutral |
+
+### 5 檔預期錨點（已驗 4/5）
+| 股 | retest zone | target |
+|----|------------|--------|
+| 東捷 | 139.20 ~ 143.50 | 243.75 |
+| 矽力 | 442.32 ~ 456.00 | 728.50 |
+| 合晶 | 57.52 ~ 59.30 | 90.35 |
+| 瑞軒 | 47.38 ~ 48.85 | 67.70 |
+| 微星 | 120.28 ~ 124.00 | 163.00 |
+
+### 沿用未驗（持續觀察）
+- §三十 + §三十一 + §二十九 沿用，本次未退化
+- Dashboard 迷你 K 線快取漏洞（§二十七，暫不修）
+- Bug D 大盤對比 TWII rate limit（`memory/bug-d-twii-rs-rate-limit.md`）
 
 ### ✅ 驗收結果（5/26 21:46 PDF cross-check）
 
