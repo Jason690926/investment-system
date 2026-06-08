@@ -165,8 +165,13 @@ def _render_one_block(s, a, q, idx, mode, personal_html=None):
             stop = getattr(a, 'stop_loss', None)
             if stop is not None:
                 pills.append(f'<span class="pill pill-amber"><span class="lbl">空停 </span>{_format_price(stop)}</span>')
-            if a.support_price is not None:
-                pills.append(f'<span class="pill pill-support"><span class="lbl">空標 </span>{_format_price(a.support_price)}</span>')
+            # §三十七 P1-1：空標改用 target_price（P&F 下行目標，與第四/五節同源），
+            # 取代 support_price（range_low）— 跳空跌破箱底時 range_low 滯留於現價
+            # 上方，當「下行目標」語義反向。guard：須在現價下方才顯示（誠實 > 錯誤）。
+            _price_now = float(q.close) if (q and q.close is not None) else None
+            if (a.target_price is not None and _price_now is not None
+                    and float(a.target_price) < _price_now):
+                pills.append(f'<span class="pill pill-support"><span class="lbl">空標 </span>{_format_price(a.target_price)}</span>')
             if a.wyckoff_phase:
                 pills.append(f'<span class="pill pill-ink"><span class="lbl">威科夫 </span>{a.wyckoff_phase}</span>')
         else:
