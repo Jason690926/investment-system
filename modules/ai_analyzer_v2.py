@@ -903,15 +903,18 @@ def _decide_action(status: str, direction: str, structure_flag: str,
             if entry_zone:
                 try:
                     zlo, zhi = float(entry_zone[0]), float(entry_zone[1])
+                    # Bug-J §三十六：跌穿 entry_low（失效價）→ 「跌穿觀察」（最優先）
+                    # 瑞耘 5/28 場景：phase=再積累 但 price 96.2 < entry_low 96.8
+                    if price_f < zlo:
+                        return '🟡 跌穿觀察'
+                    # §三十八：區間過寬（強漲回測，箱沒跟上）→ 強漲回測觀望
+                    # 合晶/矽力：_breakout_overrides 未觸發、沿用大箱不可操作
+                    if _strong_pullback_state(price_f, (zlo, zhi)):
+                        return '🟡 強漲回測觀望'
                     if zlo <= price_f <= zhi:
                         return '🟢 進場區可佈'
                     if price_f > zhi:
                         return '🟡 等回測'
-                    # Bug-J §三十六：跌穿 entry_low（失效價）→ 「跌穿觀察」
-                    # 瑞耘 5/28 場景：phase=再積累 但 price 96.2 < entry_low 96.8
-                    # 既有 fall-through 到 '⚪ 觀望' 對「停損已被跌穿」語意太溫和
-                    if price_f < zlo:
-                        return '🟡 跌穿觀察'
                 except (TypeError, ValueError, IndexError):
                     pass
             return '⚪ 觀望'
