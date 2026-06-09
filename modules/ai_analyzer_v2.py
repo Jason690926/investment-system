@@ -787,6 +787,38 @@ def _breakout_overrides(swing_levels: dict, daily_bars: list,
         return {}
 
 
+def _strong_pullback_state(price, entry_zone, threshold=0.25):
+    """強漲回測誠實揭露狀態判定（純函式，§三十八 2026-06-09）。
+
+    強漲後回測股 _breakout_overrides 未觸發 → 沿用 calc_swing_levels 大箱
+    （停損價~箱頂），進場區過寬到不可操作。此函式偵測該狀態。
+
+    觸發條件（僅 long 場景使用）：
+      entry_zone 有效 + price >= entry_low（非跌穿，跌穿交給「跌穿觀察」）
+      + (entry_high - entry_low) / price > threshold（區間過寬）
+    回傳 None（不觸發）或：
+      {'symptom': '脫離原箱'（price > entry_high）| '區間過寬'（price 在區內）,
+       'width_pct': <int 寬度÷現價的百分比>}
+    """
+    if price is None or not entry_zone:
+        return None
+    try:
+        price_f = float(price)
+        elo = float(entry_zone[0])
+        ehi = float(entry_zone[1])
+    except (TypeError, ValueError, IndexError):
+        return None
+    if price_f <= 0 or ehi <= elo:
+        return None
+    if price_f < elo:            # 跌穿 → 不觸發（讓 _decide_action 走跌穿觀察）
+        return None
+    width_ratio = (ehi - elo) / price_f
+    if width_ratio <= threshold:
+        return None
+    symptom = '脫離原箱' if price_f > ehi else '區間過寬'
+    return {'symptom': symptom, 'width_pct': round(width_ratio * 100)}
+
+
 def _decide_action(status: str, direction: str, structure_flag: str,
                    swing_levels: dict | None, breakout: bool,
                    price,
