@@ -225,19 +225,41 @@ function renderAnchorStrip(s) {
   if (s.risk_pct == null && !s.wyckoff_phase) return '';
   const dir = s.wyckoff_phase ? (phaseDirection(s.wyckoff_phase)?.t || null) : null;
   const fmt = (v) => (v != null ? `${v}` : '—');
-  // Bug-B §三十五：若是 long/short phase 但 entry_low/high 都 None
-  // 表示 AI direction=neutral（calc_swing_levels neutral 不回 entry_zone）
-  // → 改走 neutral path 用 support/resistance 區間顯示
   const noEntryData = (s.entry_low == null && s.entry_high == null);
+  const pill = s.action_pill || '';
+  const price = (s._loaded_price != null) ? Number(s._loaded_price) : null;
   let html = '';
+  let extraCls = '';
   if (dir === '空' && !noEntryData) {
     // short: 空進(entry_high) | 空停(stop_loss) | 空標(target_pnf)
     html = `空進 ${fmt(s.entry_high)} <span class="anchor-sep">|</span> 空停 ${fmt(s.stop_loss)} <span class="anchor-sep">|</span> 空標 ${fmt(s.target_pnf)}`;
   } else if (dir === '多' && !noEntryData) {
-    // long: 進(entry_low-entry_high) | 停(entry_low) | 標(target_pnf)
-    const entry = `${s.entry_low}-${s.entry_high}`;
-    const stop = s.stop_loss != null ? s.stop_loss : s.entry_low;
-    html = `進 ${entry} <span class="anchor-sep">|</span> 停 ${fmt(stop)} <span class="anchor-sep">|</span> 標 ${fmt(s.target_pnf)}`;
+    // §三十八 #2：強漲回測觀望 → 誠實 strip（失效 X · 症狀待新箱）
+    if (pill.includes('強漲回測觀望')) {
+      const stop = s.stop_loss != null ? s.stop_loss : s.entry_low;
+      let sym = '強漲回測';
+      if (price != null && s.entry_high != null) {
+        sym = (price > Number(s.entry_high)) ? '脫離原箱' : '區間過寬';
+      }
+      html = `失效 ${fmt(stop)} <span class="anchor-sep">·</span> ${sym}待新箱`;
+    } else {
+      // 正常 long strip：進(entry_low-entry_high) | 停(entry_low) | 標(target_pnf)
+      const entry = `${s.entry_low}-${s.entry_high}`;
+      const stop = s.stop_loss != null ? s.stop_loss : s.entry_low;
+      html = `進 ${entry} <span class="anchor-sep">|</span> 停 ${fmt(stop)} <span class="anchor-sep">|</span> 標 ${fmt(s.target_pnf)}`;
+      // §三十八 #1：即時價漂出進場區（pill 為 🟢 actionable 且非追進）→ 變灰 + ↑/↓ 微標
+      if (price != null && pill.startsWith('🟢') && !pill.includes('追進')) {
+        const ehi = (s.entry_high != null) ? Number(s.entry_high) : null;
+        const elo = (s.entry_low  != null) ? Number(s.entry_low)  : null;
+        if (ehi != null && price > ehi) {
+          extraCls = ' drift-out';
+          html += ` <span class="anchor-drift-tag">↑ 價已離區</span>`;
+        } else if (elo != null && price < elo) {
+          extraCls = ' drift-out';
+          html += ` <span class="anchor-drift-tag">↓ 跌穿</span>`;
+        }
+      }
+    }
   } else {
     // neutral / fallback：區間 + 雙向標示
     const range = (s.support != null && s.resistance != null)
@@ -245,7 +267,7 @@ function renderAnchorStrip(s) {
       : '—';
     html = `區間 ${range} <span class="anchor-sep">|</span> 雙向`;
   }
-  return `<div class="card-anchor-strip">${html}</div>`;
+  return `<div class="card-anchor-strip${extraCls}">${html}</div>`;
 }
 
 /* ── 20 日迷你日 K 線 SVG 渲染（台股漲紅跌綠）──────────── */
@@ -366,6 +388,12 @@ function updateCardPrice(stockId, q) {
   if (idx >= 0 && q.close != null) {
     allStocks[idx]._loaded_price = q.close;
     const s = allStocks[idx];
+    // §三十八：即時價載入後重繪錨點 strip（#1 離區灰標 + #2 症狀標籤需 price）
+    const stripEl = card.querySelector('.card-anchor-strip');
+    if (stripEl) {
+      const freshStrip = renderAnchorStrip(s);
+      if (freshStrip) stripEl.outerHTML = freshStrip;
+    }
     if (s.status === 'holding' && s.avg_cost && s.action_pill) {
       const adjusted = adjustPillForDeepLoss(s.action_pill, s.status, s.avg_cost, q.close);
       if (adjusted !== s.action_pill) {
