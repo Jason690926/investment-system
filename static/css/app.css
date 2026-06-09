@@ -405,6 +405,17 @@ a:hover { text-decoration: underline; }
   opacity: 0.55;
   margin: 0 3px;
 }
+/* §三十八：即時價漂出進場區 → strip 變灰（過時提示）*/
+.card-anchor-strip.drift-out {
+  opacity: 0.55;
+}
+/* ↑ 價已離區 / ↓ 跌穿 微標 — 琥珀色、不隨 strip 變灰 */
+.card-anchor-strip .anchor-drift-tag {
+  opacity: 1;
+  margin-left: 4px;
+  font-weight: 600;
+  color: var(--risk-mid, #F59E0B);
+}
 
 /* ── OHLC 行情列 ──────────────────────────────────────── */
 .card-ohlc {
