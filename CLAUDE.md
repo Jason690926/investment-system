@@ -6,13 +6,13 @@
 - **架構決策**：討論完方案後，先更新 `plan.md`，再開始寫程式
 - `plan.md` 只在需要查架構細節時才讀（節省 token）
 
-## 當前進度（2026-06-08 — §三十三 ~ §三十七 共 24 commit 已 push origin/main，待用戶重跑 cross-check）
+## 當前進度（2026-06-09 — §三十八 強漲回測誠實揭露已 merge+push origin/main）
 
 **所在週次：週8（AI 偏空校正 + 報表品質）**
 
-**狀態：HEAD = `ecd3f06`（本地 = origin/main 同步）；§三十三 6 + §三十四 4 + §三十五 5 + §三十六 3 + §三十七 6（5 commit + docs）= 24 commit 全在 origin/main；pytest 358/358 全綠；feature branch 已 merge(ff) + 刪除**
+**狀態：HEAD = `0da2e24`（本地 = origin/main 同步）；§三十三~§三十七 24 commit + §三十八 8 commit（2 docs 先進 main + 6 實作）全在 origin/main；pytest 375/375 全綠；feature branch 已 merge(ff) + 刪除**
 
-**收工點（6/8）**：§三十七 已 merge+push、Render auto-deploy 觸發。下次開工接手 = 用戶重跑 14 檔後提供新 PDF 做 cross-check 驗收（見下方 §三十七 驗收項 + Deploy 驗收）。
+**收工點（6/9）**：§三十八 已 merge+push、Render auto-deploy 觸發。§三十三 `entry_low/high` migration **已確認跑過**（information_schema 查證：2 欄存在 + 47 筆已填）。下次開工接手 = 用戶 (a) hard refresh 驗 #1 看板離區灰標（零 token）+ (b) 重跑 14 檔驗 §三十八 #2 強漲回測 pill + §三十七 客觀化（見下方驗收項）。
 
 ### 修法時間軸
 
@@ -23,8 +23,32 @@
 | §三十五 | 5/28 Round 2 | 5 | 5 bug：API error leak + cache 污染 / 深虧續抱 / Filter B 矛盾 / RISK 隔離 / 錨點 fallback |
 | §三十六 | 5/28 Round 3 | 3 | 2 bug：跌穿停損 P&F 矛盾 / WATCH long 跌穿 entry_low 新 pill |
 | §三十七 | 6/8 | 4 (+docs) | **建議動作客觀化（與持有解耦）** F1 + short 空標 P&F 下行 F2(P1-1) + 方向 badge 同源 F3(P2-1) |
+| §三十八 | 6/9 | 6 (+2 docs) | **強漲回測股誠實揭露**（合晶/矽力寬區間）gate=區間過寬25% → 🟡 強漲回測觀望 + 看板即時離區灰標(#1) |
 
-### 🆕 §三十七（2026-06-08，已 merge + push origin/main，HEAD `ecd3f06`）
+### 🆕 §三十八（2026-06-09，已 merge + push origin/main，HEAD `0da2e24`）
+
+**緣起**：用戶 6/9 收盤截圖 cross-check 6/8 報表。合晶/矽力「5月強漲→6月回測」，進場區是 `calc_swing_levels` 大箱（合晶 52.1–76.8 寬31%、矽力 391–542 寬29%），價已脫離/停損距現價-25%+，P&F「已達成」標「—」→ 家人讀者不可操作。根因：§三十二 `_breakout_overrides` 只在「新鮮突破」縮窄區間，強漲回測股不觸發。
+
+**決策（brainstorming）**：誠實揭露（不硬縮/不湊）；**gate=區間過寬（(entry_high−entry_low)÷price > 25%）**，①脫離原箱僅作 strip 標籤（①單獨會誤殺窄區間正常等回測）；pill 統一 `🟡 強漲回測觀望`；**僅 long**；零 migration。
+
+| commit | 內容 |
+|--------|------|
+| `f0e3bd2` feat | `_strong_pullback_state` 純函式（區間過寬偵測，8 case）|
+| `1b8ebc8` feat | `_decide_action` WATCH long 插 gate → 強漲回測觀望（跌穿優先、breakout 不誤觸，6 case）|
+| `12b56ad` feat | `_render_operation_framework` 誠實第五節（砍假進場區/「—」目標、留客觀失效價）+ `price` 參數 + 兩 call site（3 case）|
+| `4283920` feat | 看板 `renderAnchorStrip` #2 誠實 strip + #1 即時離區灰標(↑/↓) + `updateCardPrice` 價載入後重繪 |
+| `b75bea0` feat | app.css `.drift-out` 灰 + `.anchor-drift-tag` 琥珀微標 |
+| `0da2e24` docs | plan.md §三十八（spec/plan 已先進 main `0a7d7b0`/`2c2a5a7`）|
+
+**app.py 零改**：PDF 第五節經 `[[OPERATION_FRAMEWORK]]` 注入、PDF 建議 pill 讀 DB `action_pill`，兩者隨後端自動同步。#1 為看板限定（PDF 是分析時靜態快照）。
+
+**驗收**：
+- 🟢 **零 token（hard refresh）#1**：微星(139.5>137.25)/創惟(102.5>100.9) strip 變灰 + ↑ 價已離區
+- 🔥 **燒 ~$0.6 重跑 14 檔 #2**：合晶/矽力 pill=`🟡 強漲回測觀望`；第五節無假進場區/目標，只剩「失效（整波論點作廢）：X 元」+「待新箱形成後估算」；strip=`失效 52.1 · 脫離原箱待新箱`（合晶）/`失效 391 · 區間過寬待新箱`（矽力）。可一併驗 §三十七（創惟/大聯大客觀字、采鈺方向 badge=觀望）
+
+spec/plan：`docs/superpowers/{specs,plans}/2026-06-09-strong-pullback-honest-disclosure*`
+
+### 🆕 §三十七（2026-06-08，已 merge + push origin/main）
 
 **用戶架構訴求**：建議動作不該因「持有」而異 — 每檔分析給客觀局勢判讀，持倉操作只在第六節。
 
@@ -44,9 +68,9 @@
 
 ### 🚧 待用戶執行 — Deploy 驗收（4 件事，分兩階段）
 
-**Step 1 — Supabase migration（§三十三 必跑，否則 500 UndefinedColumn）**
-- Supabase Web SQL Editor 跑 `migrations/2026-05-28-add-entry-zone-columns.sql`
-- 驗證：`SELECT column_name FROM information_schema.columns WHERE table_name='stock_analyses' AND column_name IN ('entry_low','entry_high');` 預期 2 row
+**Step 1 — Supabase migration（§三十三）✅ 已確認跑過（2026-06-09 查證）**
+- ~~Supabase Web SQL Editor 跑 `migrations/2026-05-28-add-entry-zone-columns.sql`~~
+- information_schema 查證：`entry_low`/`entry_high` 兩欄存在（numeric）+ 47 筆已填 → **無 migration 阻塞**
 
 **Step 2 — Render auto-deploy**（push 已觸發）
 
@@ -66,7 +90,7 @@
 11. **§三十六 Bug-J**：瑞耘 phase=再積累 但跌穿 entry_low 96.8 → pill「🟡 跌穿觀察」（取代「⚪ 觀望」）
 
 ### 進度安全網
-- pytest 349/349 全綠（291 §三十二 baseline + 5 §三十三 + 14 §三十四 + 25 §三十五 + 9 §三十六，部分 test 改寫重複扣除）
+- pytest 375/375 全綠（358 §三十七 baseline + §三十八 8 strong_pullback + 6 decide_action_pullback + 3 operation_framework_pullback）
 - py_compile（ai_analyzer_v2 / candlestick / app / models / stock_service / run_daily_report）+ `node -c dashboard.js` 全綠
 - 18 commit 純加性 / helper 新增 / 既有函式 optional 參數 / 1 nullable migration → 任一 commit `git revert` 可獨立回滾（§三十五 `8f0e973` 因 signature 改三元組需配對 test）
 
