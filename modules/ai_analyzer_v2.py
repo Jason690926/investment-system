@@ -984,7 +984,7 @@ def adjust_pill_for_deep_loss(action_pill, pl_pct, threshold_pct: float = -20.0)
 
 def _render_operation_framework(action_pill: str, direction: str,
                                  swing_levels: dict | None, breakout: bool,
-                                 vol_threshold_zhang=None) -> str:
+                                 vol_threshold_zhang=None, price=None) -> str:
     """第五節「操作框架」結構化渲染（2026-05-25, plan §三十一）。
 
     回傳 HTML 段落（呼叫端注入 [[OPERATION_FRAMEWORK]] placeholder）。
@@ -1024,6 +1024,23 @@ def _render_operation_framework(action_pill: str, direction: str,
         return '<div class="op-divider">─────────────────────</div>\n'
 
     if direction == 'long':
+        # §三十八：強漲回測觀望 → 誠實第五節（保留客觀失效價、砍假進場區/目標）
+        if '強漲回測觀望' in (action_pill or ''):
+            _sp = _strong_pullback_state(price, ez)
+            if _sp and _sp['symptom'] == '脫離原箱':
+                _sym = _row('強漲後回測，現價已脫離原箱（原進場區已不適用）')
+            elif _sp:
+                _sym = _row(f"強漲後回測，進場區過寬 {_sp['width_pct']}%，停損距現價過遠")
+            else:
+                _sym = _row('強漲後回測，原進場區已不適用')
+            return (
+                _divider()
+                + _row(f'建議動作：{action_pill}')
+                + _sym
+                + _row(f'失效（整波論點作廢）：{_fmt(inv)} 元 — 跌破即多頭翻空')
+                + _row('目標：待新箱形成後估算（先前等幅量度已達成）')
+                + _divider()
+            )
         if breakout:
             return (
                 _divider()
@@ -1449,6 +1466,7 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
             swing_levels=_sl,
             breakout=_breakout,
             vol_threshold_zhang=_vol_thr,
+            price=_price_f,
         )
         result['action_pill'] = _action
         _html = result.get('html', '') or ''
@@ -1882,6 +1900,7 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
             swing_levels=_sl,
             breakout=_breakout,
             vol_threshold_zhang=_vol_thr,
+            price=_price_f,
         )
         result['action_pill'] = _action
         _html2 = result.get('html', '') or ''
