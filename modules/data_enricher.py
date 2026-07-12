@@ -240,28 +240,36 @@ def _structure_flag(monthly_structure: str, price_vs_ma60: str,
                     consecutive_bear: int,
                     close_strict_up_3: bool = False,
                     bull_count_6: int = 0,
-                    inprogress_strong_up: bool = False) -> str:
-    """綜合 → 結構旗標。判定順序：已轉弱 > 未轉弱（含強勢上漲否決）> 轉折中。
+                    inprogress_strong_up: bool = False,
+                    ma_alignment: bool = False,
+                    weekly_momentum: str = '資料不足') -> str:
+    """綜合 → 結構旗標。判定順序：已轉弱（否決層，不可被推翻）> 未轉弱/轉折中
+    （證據層，加權評分 + 門檻 1.5）。
 
-    強勢上漲否決（2026-05-25, plan §三十 Bug A）：即使 _hl_trend 因 lows 不
-    嚴格升回「轉折」，只要 close 嚴格上揚或近 6 月陽月數 ≥ 4，仍視為結構
-    未轉弱（涵蓋東捷型強勢起漲、中間有 1 月修正陰的案例）。
+    2026-07-12 plan §三十九：證據層從 OR 疊加布林改為呼叫
+    `_trend_evidence_score()` 加權評分。四個既有觸發條件（monthly_structure
+    升/橫、close_strict_up_3、bull_count_6≥4、inprogress_strong_up）權重
+    與門檻相等，無新訊號時逐位元組相容舊版。ma_alignment/weekly_momentum
+    為新增訊號，權重恆低於門檻，只能聯手推升分數，不會單獨觸發。
 
-    F7 §三十二 Bug-5：加 inprogress_strong_up 旗標 — 進行中月漲幅 ≥ 7%
-    且在 MA60 之上，也算強勢上漲否決（技嘉 5 月 +21% V 型反轉 case）。
+    否決層（已轉弱三條件）完全不受本次改動影響，任何訊號都無法推翻。
     """
     if monthly_structure == '資料不足':
         return '資料不足'
     if (price_vs_ma60 == '在下' or monthly_structure == '跌'
             or consecutive_bear >= 2):
         return '結構已轉弱'
-    if price_vs_ma60 == '在上' and consecutive_bear <= 1 and (
-        monthly_structure in ('升', '橫')
-        or close_strict_up_3
-        or bull_count_6 >= 4
-        or inprogress_strong_up
-    ):
-        return '結構未轉弱'
+    if price_vs_ma60 == '在上' and consecutive_bear <= 1:
+        score = _trend_evidence_score(
+            monthly_structure,
+            close_strict_up_3=close_strict_up_3,
+            bull_count_6=bull_count_6,
+            inprogress_strong_up=inprogress_strong_up,
+            ma_alignment=ma_alignment,
+            weekly_momentum=weekly_momentum,
+        )
+        if score >= _TREND_SCORE_THRESHOLD:
+            return '結構未轉弱'
     return '結構轉折中'
 
 

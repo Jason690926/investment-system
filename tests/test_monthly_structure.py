@@ -367,3 +367,48 @@ def test_trend_evidence_score_ma_alignment_plus_weekly_sideways_below_threshold(
 
 def test_trend_evidence_score_no_evidence_zero():
     assert _trend_evidence_score(monthly_structure='轉折') == 0.0
+
+
+# ---------- _structure_flag 加權評分整合（2026-07-12, plan §三十九）----------
+from modules.data_enricher import _structure_flag
+
+
+def test_structure_flag_existing_triggers_still_byte_compatible():
+    """既有 4 個觸發條件單獨仍各自成立（零退化直接證明，byte-compat）。"""
+    assert _structure_flag('升', '在上', 0) == '結構未轉弱'
+    assert _structure_flag('橫', '在上', 0) == '結構未轉弱'
+    assert _structure_flag('轉折', '在上', 0, close_strict_up_3=True) == '結構未轉弱'
+    assert _structure_flag('轉折', '在上', 0, bull_count_6=4) == '結構未轉弱'
+    assert _structure_flag('轉折', '在上', 0, inprogress_strong_up=True) == '結構未轉弱'
+    assert _structure_flag('轉折', '在上', 0) == '結構轉折中'
+
+
+def test_structure_flag_ma_alignment_plus_weekly_up_promotes_inflection():
+    """轉折中 + 均線多頭排列 + 週K動能升 → 聯手達門檻 1.5 → 結構未轉弱（新案例）。"""
+    flag = _structure_flag('轉折', '在上', 1, ma_alignment=True, weekly_momentum='升')
+    assert flag == '結構未轉弱'
+
+
+def test_structure_flag_ma_alignment_alone_not_enough():
+    """僅均線多頭排列（無其他證據）→ 分數 1.0 < 門檻 → 仍轉折中。"""
+    flag = _structure_flag('轉折', '在上', 1, ma_alignment=True)
+    assert flag == '結構轉折中'
+
+
+def test_structure_flag_weekly_up_alone_not_enough():
+    """僅週K動能升（無其他證據）→ 分數 0.5 < 門檻 → 仍轉折中。"""
+    flag = _structure_flag('轉折', '在上', 1, weekly_momentum='升')
+    assert flag == '結構轉折中'
+
+
+def test_structure_flag_veto_not_overridden_by_new_signals():
+    """否決層優先於證據層：即使均線多頭排列+週K動能升，價跌破MA60 仍判已轉弱。"""
+    flag = _structure_flag('轉折', '在下', 0, ma_alignment=True, weekly_momentum='升')
+    assert flag == '結構已轉弱'
+
+
+def test_structure_flag_new_signal_params_default_no_change():
+    """不傳新參數時（呼叫端尚未升級）行為與升級前完全一致。"""
+    assert _structure_flag('升', '在上', 0) == '結構未轉弱'
+    assert _structure_flag('跌', '在上', 0) == '結構已轉弱'
+    assert _structure_flag('轉折', '在下', 0) == '結構已轉弱'
