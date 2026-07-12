@@ -6,7 +6,71 @@
 - **架構決策**：討論完方案後，先更新 `plan.md`，再開始寫程式
 - `plan.md` 只在需要查架構細節時才讀（節省 token）
 
-## 當前進度（2026-06-09 — §三十八 強漲回測誠實揭露已 merge+push origin/main）
+## 當前進度（2026-07-12 — §三十九 趨勢判斷加權證據評分 + 全系統健檢 + Supabase pause 事故排除）
+
+**所在週次：週8（AI 偏空校正 + 報表品質）**
+
+**狀態：HEAD = `5c1f797`（已 push origin/main）；§三十九 5 commit（spec+plan+3 feat/fix，TDD）+ 1 臨時診斷 commit（已 revert 乾淨）；pytest 403/403 全綠**
+
+### 本次緣起
+用戶要求對全系統做一次前後端健檢（4 個 subagent 平行審視：後端架構/安全性、AI 決策引擎、資料層/部署、前端 UI/UX）。審視完後接續討論並實作「趨勢判斷收斂為加權證據評分」（§三十九）；deploy 後用戶登入時遇到 Internal Server Error，展開一段系統性除錯，最終發現是 Supabase 免費專案閒置暫停 + 恢復後連線池殘留問題，非程式碼 bug。
+
+### 一、全系統健檢（4 subagent 平行審視，未落地 commit，純報告）
+完整報告存於本機 scratchpad（未進 repo）：`C:\Users\frodo.MSI\AppData\Local\Temp\claude\...\scratchpad\2026-07-12-system-audit.md`（session 專屬暫存路徑，非永久位置，下次要用建議先搬進 repo 或做成文件）。
+
+**🔴 最高優先發現**（尚未修）：
+1. `/debug-oauth` 端點未認證即洩漏 OAuth 密鑰片段（app.py:277-286）——應直接刪除
+2. OAuth 註冊完全開放無 allowlist，任何 Google 帳號可自動建帳號消耗 AI 額度
+3. 自訂股票名稱/收件人 email 可造成 Stored XSS（後端 `_render_one_block` f-string 未 escape + 前端 `innerHTML` 未 escape，兩處呼應）
+4. TWII 大盤對比抓取無重試無快取——`memory/bug-d-twii-rs-rate-limit.md` 記錄的已知 bug 真正根因
+5. 無 DB schema 一致性檢查機制（`init_db()` 只 `create_all()`，不會 `ALTER TABLE`）
+6. `requirements.txt` 混入大量無關套件（Jupyter 全套、google-generativeai、gspread、plotly、weasyprint、peewee 等）
+7. **約 2500+ 行完全脫鉤生產環境的舊系統**（`main.py`/`web_dashboard/`/無 `_v2` 後綴的 `ai_analyzer.py`/`wyckoff.py`/`livermore.py`/`pdf_generator.py` 等）——Procfile 只跑 `python app.py`，這批檔案 2 個月未動且無生產路徑呼叫，風險是未來（含未來 AI session）誤改錯檔案做白工
+
+**🟡 中優先**：`api_clear_today_cache` 名不符實（清全部非僅今日）、`FLASK_SECRET_KEY` 無 env var 時靜默 fallback、無 CSRF 防護、`ai_analyzer_v2.py` 兩函式 pipeline+prompt 大量重複（過去多輪 bug 根因）、手機版 dashboard grid 版面因 inline style 蓋過 media query 從未生效（真 bug）、`app.py`/`run_daily_report.py` 的 `StockAnalysis` 寫入邏輯重複、migration 兩種風格並存無追蹤表。
+
+**整體評語**：安全性（尤其 #1#2#3）是最值得優先處理的類別，成本都很低；核心決策邏輯品質其實不錯（純函式+測試覆蓋完整），問題多半在紀律沒延伸到的邊界（安全、部署腳手架、前端）。**這批發現都還沒修，下次開工可從這裡接續。**
+
+### 二、§三十九：趨勢判斷收斂為加權證據評分（已完成+deploy+驗收）
+**緣起**：AI 引擎審視抓到 `_structure_flag()` 自 §三十起連續 3 輪修法都是疊加布林 override（`close_strict_up_3`/`bull_count_6`/`inprogress_strong_up`），維護成本遞增；`ma5`/`ma20`/`weekly_momentum` 已算出卻未用於判斷。
+
+**決策**：否決層（結構已轉弱三條件）完全不動；證據層改加權評分，四個既有觸發條件權重與門檻相等（1.5=1.5）保證零退化；新增均線多頭排列（+1.0）+ 週K動能升/橫（+0.5/+0.2）**只加分不扣分**（用戶明確選保守起點）。附帶修 `_apply_structure_safety_net` short 方向鏡像防護缺口（原本只單向保護 long）。
+
+**5 commit（TDD，pytest 375→403 全綠）**：
+| commit | 內容 |
+|--------|------|
+| `0d64d24` | `_trend_evidence_score()` 加權評分純函式 |
+| `b414396` | `_structure_flag()` 證據層改加權評分，否決層逐字不動 |
+| `f38500e` | `compute_monthly_structure()` 加 ma5/ma20 參數 + ma_alignment 訊號 |
+| `115c39c` | `_structure_block()` 呼叫端補傳 ma5/ma20 |
+| `399cedf` | `_apply_structure_safety_net` 加 short 方向鏡像防護 |
+
+spec：`docs/superpowers/specs/2026-07-12-trend-evidence-score-design.md`
+plan：`docs/superpowers/plans/2026-07-12-trend-evidence-score.md`
+
+**✅ 驗收完成**：用戶重跑一鍵分析（14 支），逐一核對「方向↔結構旗標↔pill」全部自洽，無矛盾；東捷（§三十 Bug A 原始案例）驗證加權評分與舊 OR 邏輯數值完全相容。真實精準度提升（新訊號聯手拉抬邊界案例）需等下次 cross-check 觀察，非本次可靜態證明。
+
+**回滾**：5 commit 純加性各自獨立，無 DB/migration。
+
+### 三、Supabase pause 事故排除（非程式 bug，操作性事故）
+用戶 deploy 後登入出現 Internal Server Error。系統性排除過程：
+1. `/login` 正常（Flask app 活著）→ 範圍收斂到 `/auth/callback`（需連 DB）
+2. 用戶截圖確認 Supabase 專案顯示「Paused」→ 手動 restore 後登入恢復正常
+3. 恢復後又發現：dashboard 報價正確、但 PDF 報價卡在 `2026-06-09`（超過一個月前）
+4. 排除多個假說（DB migration 缺欄位、寫入例外被吞、`_analysis_day_tw()` 週末邏輯 vs 即時報價「今天」算法不同）後，用 Supabase SQL Editor 直查 `quote_cache` 表證實：**寫入從 6/9 起完全沒有成功過**
+5. 加臨時診斷（`_upsert_quote_cache` 失敗時把錯誤訊息帶進 API 回應）deploy 後測試，發現**寫入其實已經恢復正常**（無錯誤）——證實是 Supabase pause 恢復後 SQLAlchemy connection pool 殘留舊連線，隨請求逐漸被 `pool_pre_ping` 汰換乾淨，過一段時間自癒，非程式碼 bug
+6. 診斷 commit 已 `git revert` 乾淨（`83e3c79` → revert `5c1f797`）
+
+**根因知識已記錄進 memory**（`project_investment_system.md`）：Supabase pause 恢復後連線池不穩定期、`/print-report` 與 dashboard 讀報價是兩條不同路徑、「清快取」按鈕不會清到 `QuoteCache`、`_analysis_day_tw()` 週末邏輯與即時報價「今天」算法不同——下次同類「dashboard 對但 PDF/報表錯」症狀可直接查 memory 加速排查。
+
+### 下次開工建議接手點
+1. **全系統健檢的 🔴 高優先項**（見上方一）尚未動工，尤其 #1（刪 `/debug-oauth`）、#2（OAuth allowlist）成本很低值得優先
+2. §三十九驗收提到的「真實精準度提升」需等用戶下次自然重跑報表時順便觀察，非主動待辦
+3. scratchpad 裡的健檢報告全文建議找時間搬進 repo（`docs/` 或類似路徑）避免遺失
+
+---
+
+## 過往進度（2026-06-09 — §三十八 強漲回測誠實揭露已 merge+push origin/main）
 
 **所在週次：週8（AI 偏空校正 + 報表品質）**
 
