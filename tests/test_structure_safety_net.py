@@ -44,3 +44,18 @@ def test_safety_net_empty_flag_unchanged():
     """空旗標 + 任意 direction → 不變（防 NoneType / 缺欄位 crash）。"""
     assert _apply_structure_safety_net('', 'long') == 'long'
     assert _apply_structure_safety_net('', '') == ''
+
+
+def test_safety_net_not_weakened_short_overridden_to_neutral():
+    """結構未轉弱 + AI 標 short → 強制 neutral（2026-07-12 plan §三十九 short 鏡像修法）。"""
+    assert _apply_structure_safety_net('結構未轉弱', 'short') == 'neutral'
+
+
+def test_safety_net_inflection_short_unchanged():
+    """結構轉折中 + AI 標 short → 不變（允許 AI 判斷邊界 case，鏡像不誤殺）。"""
+    assert _apply_structure_safety_net('結構轉折中', 'short') == 'short'
+
+
+def test_safety_net_insufficient_data_short_unchanged():
+    """資料不足 + AI 標 short → 不變（無依據覆寫，鏡像不誤殺）。"""
+    assert _apply_structure_safety_net('資料不足', 'short') == 'short'

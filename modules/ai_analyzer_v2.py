@@ -732,20 +732,21 @@ def _strong_breakout_state(enriched_data: dict, price_f) -> bool:
 
 
 def _apply_structure_safety_net(structure_flag: str, direction: str) -> str:
-    """F8 §三十二 Bug-3：結構閘安全網（純函式 testable）。
+    """F8 §三十二 Bug-3 + F9 §三十九：結構閘安全網（純函式 testable）。
 
-    AI 違反 prompt 鐵律時的最後防線：結構閘已判定「結構已轉弱」
-    （程式層硬事實），AI 卻仍標 DIRECTION=long → 強制覆寫為 neutral，
-    避免下游 pill / 第五節 / target_pnf 出現多頭錨點與 pill 矛盾。
-
-    撼訊 5/25 報表案例：pill = 🔴 不宜進（結構已轉弱反推）；AI 內文
-    「方向一致順勢做多 / 再積累 / 進場區內」明顯違反 gate_hint。
+    AI 違反 prompt 鐵律時的最後防線，雙向對稱：
+    - 結構已轉弱 + AI 標 long → 強制 neutral（撼訊 5/25 報表案例）
+    - 結構未轉弱 + AI 標 short → 強制 neutral（2026-07-12 補上的鏡像防護，
+      避免下游 dashboard 方向 badge / _dual_pnf 選邊 / 錨點選取 出現與
+      pill 矛盾的空方污染）
 
     輸入：structure_flag（'結構已轉弱' / '結構轉折中' / '結構未轉弱' / '資料不足'）、
           direction（'long' / 'short' / 'neutral'）
     回傳：safe direction（與輸入相同或被覆寫為 'neutral'）
     """
     if structure_flag == '結構已轉弱' and direction == 'long':
+        return 'neutral'
+    if structure_flag == '結構未轉弱' and direction == 'short':
         return 'neutral'
     return direction
 
