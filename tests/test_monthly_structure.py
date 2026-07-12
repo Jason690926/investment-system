@@ -300,3 +300,70 @@ def test_structure_flag_inprogress_strong_up_below_ma60_not_overridden():
     assert r['price_vs_ma60'] == '在下'
     assert r['monthly_inprogress_strong_up'] is False  # 在下→不觸發
     assert r['structure_flag'] == '結構已轉弱'
+
+
+# ---------- _trend_evidence_score（2026-07-12, plan §三十九）----------
+from modules.data_enricher import _trend_evidence_score
+
+
+def test_trend_evidence_score_monthly_up_alone_reaches_threshold():
+    assert _trend_evidence_score(monthly_structure='升') == 1.5
+
+
+def test_trend_evidence_score_monthly_sideways_alone_reaches_threshold():
+    assert _trend_evidence_score(monthly_structure='橫') == 1.5
+
+
+def test_trend_evidence_score_close_strict_up_alone_reaches_threshold():
+    assert _trend_evidence_score(monthly_structure='轉折', close_strict_up_3=True) == 1.5
+
+
+def test_trend_evidence_score_bull_count_alone_reaches_threshold():
+    assert _trend_evidence_score(monthly_structure='轉折', bull_count_6=4) == 1.5
+
+
+def test_trend_evidence_score_bull_count_below_4_no_score():
+    assert _trend_evidence_score(monthly_structure='轉折', bull_count_6=3) == 0.0
+
+
+def test_trend_evidence_score_inprogress_strong_up_alone_reaches_threshold():
+    assert _trend_evidence_score(monthly_structure='轉折', inprogress_strong_up=True) == 1.5
+
+
+def test_trend_evidence_score_ma_alignment_alone_below_threshold():
+    score = _trend_evidence_score(monthly_structure='轉折', ma_alignment=True)
+    assert score == 1.0
+    assert score < 1.5
+
+
+def test_trend_evidence_score_weekly_up_alone_below_threshold():
+    score = _trend_evidence_score(monthly_structure='轉折', weekly_momentum='升')
+    assert score == 0.5
+    assert score < 1.5
+
+
+def test_trend_evidence_score_weekly_sideways_alone_below_threshold():
+    score = _trend_evidence_score(monthly_structure='轉折', weekly_momentum='橫')
+    assert score == 0.2
+    assert score < 1.5
+
+
+def test_trend_evidence_score_weekly_falling_or_inflection_no_score():
+    assert _trend_evidence_score(monthly_structure='轉折', weekly_momentum='跌') == 0.0
+    assert _trend_evidence_score(monthly_structure='轉折', weekly_momentum='轉折') == 0.0
+    assert _trend_evidence_score(monthly_structure='轉折', weekly_momentum='資料不足') == 0.0
+
+
+def test_trend_evidence_score_ma_alignment_plus_weekly_up_reaches_threshold():
+    score = _trend_evidence_score(monthly_structure='轉折', ma_alignment=True, weekly_momentum='升')
+    assert score == 1.5
+
+
+def test_trend_evidence_score_ma_alignment_plus_weekly_sideways_below_threshold():
+    score = _trend_evidence_score(monthly_structure='轉折', ma_alignment=True, weekly_momentum='橫')
+    assert score == 1.2
+    assert score < 1.5
+
+
+def test_trend_evidence_score_no_evidence_zero():
+    assert _trend_evidence_score(monthly_structure='轉折') == 0.0

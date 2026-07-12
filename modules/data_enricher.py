@@ -201,6 +201,41 @@ def _consecutive_bear(bars: list) -> int:
     return cnt
 
 
+def _trend_evidence_score(monthly_structure: str,
+                          close_strict_up_3: bool = False,
+                          bull_count_6: int = 0,
+                          inprogress_strong_up: bool = False,
+                          ma_alignment: bool = False,
+                          weekly_momentum: str = '資料不足') -> float:
+    """Stage 2 證據層加權評分（2026-07-12, plan §三十九）。
+
+    取代原本的 OR 疊加布林邏輯。四個既有觸發條件權重與門檻（1.5）相等，
+    保證無新訊號時輸出與舊版逐位元組相容；新訊號權重恆低於門檻，只能
+    聯手推升分數，不會單獨觸發、也不會扣分拉低既有觸發條件的判定。
+
+    spec: docs/superpowers/specs/2026-07-12-trend-evidence-score-design.md
+    """
+    score = 0.0
+    if monthly_structure in ('升', '橫'):
+        score += 1.5
+    if close_strict_up_3:
+        score += 1.5
+    if bull_count_6 >= 4:
+        score += 1.5
+    if inprogress_strong_up:
+        score += 1.5
+    if ma_alignment:
+        score += 1.0
+    if weekly_momentum == '升':
+        score += 0.5
+    elif weekly_momentum == '橫':
+        score += 0.2
+    return score
+
+
+_TREND_SCORE_THRESHOLD = 1.5
+
+
 def _structure_flag(monthly_structure: str, price_vs_ma60: str,
                     consecutive_bear: int,
                     close_strict_up_3: bool = False,
