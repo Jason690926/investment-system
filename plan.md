@@ -2014,3 +2014,33 @@ plan：`docs/superpowers/plans/2026-06-08-objective-action-decouple-holding.md`
 
 spec：`docs/superpowers/specs/2026-06-09-strong-pullback-honest-disclosure-design.md`
 plan：`docs/superpowers/plans/2026-06-09-strong-pullback-honest-disclosure.md`
+
+---
+
+## §三十九 趨勢判斷收斂為加權證據評分 + short 安全網鏡像修法（2026-07-12）
+
+### 緣起
+用戶要求對全系統做一次後端+前端健檢（4 個平行 subagent 審視）。AI 決策引擎審視抓到
+`_structure_flag()` 自 §三十起連續 3 輪 cross-check 修法都用「疊加布林 override」模式
+（`close_strict_up_3`/`bull_count_6`/`inprogress_strong_up`），每次新案例就加一個新 if
+分支，維護成本遞增；同時 `ma5`/`ma20`（已算出）、`weekly_momentum`（已算出但唯讀不
+gate）完全沒用於判斷。另抓到 `_apply_structure_safety_net`（§三十二 Bug-3）只單向保護
+long 方向，short 方向的鏡像違規（結構未轉弱時 AI 仍標 short）沒有 post-process 防護。
+
+### 決策（brainstorming，用戶拍板）
+- **驗收優先序**：操作建議準確度優先於維護成本，但新模型不得讓既有 38 輪歷史 cross-check
+  案例退化（`test_monthly_structure.py` 21 個既有測試逐字通過為底線）
+- **兩階段設計**：否決層（結構已轉弱三條件）完全不動；證據層（未轉弱 vs 轉折中）從 OR
+  布林改加權評分（`_trend_evidence_score`），四個舊觸發條件權重與門檻相等（1.5=1.5）
+  保證零退化；新增均線多頭排列（+1.0）+ 週K動能升/橫（+0.5/+0.2）**只加分不扣分**
+  （用戶明確選擇保守起點，新訊號不能把既有「未轉弱」案例拉回「轉折中」）
+- **附帶修法**：`_apply_structure_safety_net` 加 short 鏡像分支（結構未轉弱 + AI 標
+  short → neutral），與本次改動同一批消費端、同一批測試檔，一併做
+
+### 不做（YAGNI）
+- 不對外新增欄位、不改 `structure_flag` 三態字串值域（`_decide_action`/prompt 樣板/
+  8+ 測試檔的字串比對呼叫點全部不用改）
+- 不允許新訊號扣分（用戶選擇保守起點，之後有需要再議）
+
+spec：`docs/superpowers/specs/2026-07-12-trend-evidence-score-design.md`
+plan：`docs/superpowers/plans/2026-07-12-trend-evidence-score.md`
