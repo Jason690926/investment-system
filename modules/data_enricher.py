@@ -274,7 +274,7 @@ def _structure_flag(monthly_structure: str, price_vs_ma60: str,
 
 
 def compute_monthly_structure(monthly_bars: list, weekly_bars: list,
-                              price, ma60) -> dict:
+                              price, ma60, ma5=None, ma20=None) -> dict:
     """從 12 月K + 26 週K + MA60 算出【月線結構客觀事實】。
 
     spec: docs/superpowers/specs/2026-05-21-wyckoff-phase-gate-design.md
@@ -293,6 +293,8 @@ def compute_monthly_structure(monthly_bars: list, weekly_bars: list,
         'monthly_bull_count_6':      0,
         # F7 §三十二 Bug-5：進行中月強漲否決
         'monthly_inprogress_strong_up': False,
+        # 均線多頭排列（2026-07-12, plan §三十九）
+        'ma_alignment': False,
     }
 
     # 月K：需 >= 4 根（3 已收盤 + 1 進行中）
@@ -315,6 +317,13 @@ def compute_monthly_structure(monthly_bars: list, weekly_bars: list,
     # 現價 vs 季線 MA60
     if price is not None and ma60:
         result['price_vs_ma60'] = '在上' if float(price) >= float(ma60) else '在下'
+
+    # 均線多頭排列（2026-07-12, plan §三十九）：MA5 > MA20 > MA60
+    if ma5 is not None and ma20 is not None and ma60:
+        try:
+            result['ma_alignment'] = bool(float(ma5) > float(ma20) > float(ma60))
+        except (TypeError, ValueError):
+            result['ma_alignment'] = False
 
     # F7 §三十二 Bug-5：進行中月強漲否決（漲幅 ≥7% + 在 MA60 之上）
     if (monthly_bars and len(monthly_bars) >= 1
@@ -349,6 +358,8 @@ def compute_monthly_structure(monthly_bars: list, weekly_bars: list,
         close_strict_up_3=result['monthly_close_strict_up_3'],
         bull_count_6=result['monthly_bull_count_6'],
         inprogress_strong_up=result['monthly_inprogress_strong_up'],
+        ma_alignment=result['ma_alignment'],
+        weekly_momentum=result['weekly_momentum'],
     )
     return result
 

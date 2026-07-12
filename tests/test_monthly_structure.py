@@ -412,3 +412,68 @@ def test_structure_flag_new_signal_params_default_no_change():
     assert _structure_flag('升', '在上', 0) == '結構未轉弱'
     assert _structure_flag('跌', '在上', 0) == '結構已轉弱'
     assert _structure_flag('轉折', '在下', 0) == '結構已轉弱'
+
+
+# ---------- compute_monthly_structure ma5/ma20 整合（2026-07-12, plan §三十九）----------
+def test_compute_monthly_structure_ma_alignment_true_when_bullish_order():
+    completed = _mbars([
+        (200, 234, 157, 220),
+        (300, 421, 213, 400),
+        (429, 471, 372, 408),
+    ])
+    inprogress = [_bar(412, 448, 402, 439, date='2026-05-01')]
+    r = compute_monthly_structure(completed + inprogress, [], price=439, ma60=300,
+                                   ma5=440, ma20=380)
+    assert r['ma_alignment'] is True
+
+
+def test_compute_monthly_structure_ma_alignment_false_when_not_bullish_order():
+    completed = _mbars([
+        (200, 234, 157, 220),
+        (300, 421, 213, 400),
+        (429, 471, 372, 408),
+    ])
+    inprogress = [_bar(412, 448, 402, 439, date='2026-05-01')]
+    r = compute_monthly_structure(completed + inprogress, [], price=439, ma60=300,
+                                   ma5=370, ma20=380)
+    assert r['ma_alignment'] is False
+
+
+def test_compute_monthly_structure_ma_alignment_false_when_ma_missing():
+    completed = _mbars([
+        (200, 234, 157, 220),
+        (300, 421, 213, 400),
+        (429, 471, 372, 408),
+    ])
+    inprogress = [_bar(412, 448, 402, 439, date='2026-05-01')]
+    r = compute_monthly_structure(completed + inprogress, [], price=439, ma60=300)
+    assert r['ma_alignment'] is False
+
+
+def test_compute_monthly_structure_ma_alignment_promotes_inflection_to_not_weak():
+    """示範案例（非真實歷史 cross-check 還原）：monthly_structure=轉折、四個舊觸發皆
+    不成立，但均線多頭排列(ma5>ma20>ma60)+週K動能升 聯手達門檻 1.5 → 結構未轉弱。"""
+    completed = _mbars([
+        (8, 10, 6, 9),     # 陽
+        (9, 12, 5, 8),     # 陰（lows 5<6 不單調升 → highs 單調但 lows 不單調 → 轉折）
+        (8, 15, 7, 11),    # 陽
+    ])
+    inprogress = [_bar(11, 13, 10, 11.5, date='2026-04-01')]
+    wcompleted = [
+        _bar(9, 10, 8, 9.5, date='2026-03-01'),
+        _bar(9.5, 11, 9, 10.5, date='2026-03-08'),
+        _bar(10.5, 12, 10, 11.5, date='2026-03-15'),
+    ]
+    winprogress = [_bar(11.5, 13, 11, 12, date='2026-03-22')]
+    r = compute_monthly_structure(
+        completed + inprogress, wcompleted + winprogress,
+        price=11.5, ma60=10, ma5=11.5, ma20=10.5,
+    )
+    assert r['monthly_structure'] == '轉折'
+    assert r['monthly_close_strict_up_3'] is False
+    assert r['monthly_bull_count_6'] < 4
+    assert r['monthly_inprogress_strong_up'] is False
+    assert r['price_vs_ma60'] == '在上'
+    assert r['ma_alignment'] is True
+    assert r['weekly_momentum'] == '升'
+    assert r['structure_flag'] == '結構未轉弱'
