@@ -1095,6 +1095,8 @@ def _structure_block(enriched_data: dict, price_f) -> str:
         enriched_data.get('weekly_bars', []),
         price_f,
         enriched_data.get('ma60'),
+        enriched_data.get('ma5'),
+        enriched_data.get('ma20'),
     )
     flag = ms['structure_flag']
     if flag == '資料不足':

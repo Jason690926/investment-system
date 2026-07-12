@@ -477,3 +477,40 @@ def test_compute_monthly_structure_ma_alignment_promotes_inflection_to_not_weak(
     assert r['ma_alignment'] is True
     assert r['weekly_momentum'] == '升'
     assert r['structure_flag'] == '結構未轉弱'
+
+
+# ---------- _structure_block 呼叫端 ma5/ma20 wiring（2026-07-12, plan §三十九）----------
+def test_structure_block_ma_alignment_promotes_inflection_to_not_weak():
+    """_structure_block 呼叫端正確傳遞 ma5/ma20 → 均線排列可影響最終結構旗標文字。"""
+    completed = _mbars([
+        (8, 10, 6, 9),
+        (9, 12, 5, 8),
+        (8, 15, 7, 11),
+    ])
+    inprogress = [_bar(11, 13, 10, 11.5, date='2026-04-01')]
+    wcompleted = [
+        _bar(9, 10, 8, 9.5, date='2026-03-01'),
+        _bar(9.5, 11, 9, 10.5, date='2026-03-08'),
+        _bar(10.5, 12, 10, 11.5, date='2026-03-15'),
+    ]
+    winprogress = [_bar(11.5, 13, 11, 12, date='2026-03-22')]
+    enriched = {
+        'monthly_bars': completed + inprogress,
+        'weekly_bars': wcompleted + winprogress,
+        'ma60': 10, 'ma5': 11.5, 'ma20': 10.5,
+    }
+    block = _structure_block(enriched, 11.5)
+    assert '結構未轉弱' in block
+
+
+def test_structure_block_without_ma_fields_falls_back_to_old_behavior():
+    """enriched_data 沒有 ma5/ma20 key（呼叫端尚未升級的舊資料）→ .get 回 None，行為與升級前一致。"""
+    completed = _mbars([
+        (200, 234, 157, 220),
+        (300, 421, 213, 400),
+        (429, 471, 372, 408),
+    ])
+    inprogress = [_bar(412, 448, 402, 439, date='2026-05-01')]
+    enriched = {'monthly_bars': completed + inprogress, 'weekly_bars': [], 'ma60': 300}
+    block = _structure_block(enriched, 439)
+    assert '結構未轉弱' in block
