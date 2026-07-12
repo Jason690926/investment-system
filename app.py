@@ -367,9 +367,7 @@ def _strip_internal(d):
 
 
 def _upsert_quote_cache(db, symbol, today_tw, data, now_utc=None):
-    """寫/覆寫 QuoteCache 一筆。失敗（含並發 IntegrityError）吃掉並 rollback。
-    回傳 None＝成功；回傳字串＝失敗訊息（2026-07-12 臨時診斷用，查完根因後可移除）。
-    """
+    """寫/覆寫 QuoteCache 一筆。失敗（含並發 IntegrityError）吃掉並 rollback。"""
     from datetime import datetime as _dt
     from modules.models import QuoteCache as _QC
     stamp = now_utc if now_utc is not None else _dt.utcnow()
@@ -391,14 +389,12 @@ def _upsert_quote_cache(db, symbol, today_tw, data, now_utc=None):
                 cached_at=stamp,
             ))
         db.commit()
-        return None
     except Exception as e:
         print(f"[quote] upsert QuoteCache 失敗 {symbol}: {e}")
         try:
             db.rollback()
         except Exception:
             pass
-        return f'{type(e).__name__}: {e}'
 
 
 def _try_market_data_cache(db, symbol, today_tw):
@@ -474,9 +470,7 @@ def _resolve_quote(db, symbol, today_tw, now_utc, get_yahoo_quote=None):
         if data is not None:
             data['_cached_at_utc'] = now_utc
             _quote_cache[key] = data
-            _err = _upsert_quote_cache(db, symbol, today_tw, data, now_utc=now_utc)
-            if _err:
-                data['debug_cache_error'] = _err  # 2026-07-12 臨時診斷，查完可移除
+            _upsert_quote_cache(db, symbol, today_tw, data, now_utc=now_utc)
             return _strip_internal(data)
 
     # ② 記憶體：post-close 時需檢查 staleness
@@ -525,9 +519,7 @@ def _resolve_quote(db, symbol, today_tw, now_utc, get_yahoo_quote=None):
         data.setdefault('spark_bars', [])
     data['_cached_at_utc'] = now_utc
     _quote_cache[key] = data
-    _err = _upsert_quote_cache(db, symbol, today_tw, data, now_utc=now_utc)
-    if _err:
-        data['debug_cache_error'] = _err  # 2026-07-12 臨時診斷，查完可移除
+    _upsert_quote_cache(db, symbol, today_tw, data, now_utc=now_utc)
     return _strip_internal(data)
 
 
