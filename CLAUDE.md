@@ -6,7 +6,40 @@
 - **架構決策**：討論完方案後，先更新 `plan.md`，再開始寫程式
 - `plan.md` 只在需要查架構細節時才讀（節省 token）
 
-## 當前進度（2026-07-12 — §三十九 趨勢判斷加權證據評分 + 全系統健檢 + Supabase pause 事故排除）
+## 當前進度（2026-07-13 — §四十 7/13 報表 cross-check 三修法已 merge+push origin/main）
+
+**所在週次：週8（AI 偏空校正 + 報表品質）**
+
+**狀態：HEAD = `97263fc`（本地 = origin/main 同步）；§四十 5 commit（4 實作 + 1 編號更正）rebase 於 §三十九 之上；pytest 427/427 全綠；Render auto-deploy 已觸發**
+
+### 🆕 §四十（2026-07-13）：7/13 報表 cross-check 三修法
+
+**緣起**：用戶 7/13 報告（12 檔）審視發現 1 資料層 bug + 2 邏輯矛盾：
+1. **7/10 假 K 棒污染全 12 檔**：Yahoo 休市/停牌日回「O=H=L=C=前收、Volume=null」佔位棒 → PDF 印 "None"、假棒餵 AI、5 日均量失真（晶心科 264 → 修後真實 356.5）
+2. **「分批佈空」在空停零距離觸發**：晶心科現價 210.5＝空停 210.5（且一字漲停鎖死）仍標 🔴 分批佈空；采鈺距空停僅 1.31%。§三十四 Bug-3 只護區底，區頂無防護
+3. **強勢突破股目標價雙源**：`_dual_pnf`（prompt 注入，AI 前）vs `_breakout_overrides`（post-process，AI 後）→ 大聯大 120 vs 133、微星 159 vs 196.2 同報告兩個目標
+
+| commit | 內容 |
+|--------|------|
+| `6caec67` feat(data) | F1 `_drop_degenerate_bars`：(Volume null/0) 且 O=H=L=C → drop；掛 `_yahoo_ohlcv` 全週期；真一字漲停量>0 不受影響（7 case）|
+| `e11b00d` feat(action) | F2 `_decide_action` short 區內雙 gate：距空停<2%（invalidation 缺則 zone 頂）或 `_limit_up_locked_today`（新純函式）→ 🟡 等反轉佈空；前端零改（emoji 前綴判 class）（11 case）|
+| `6e779cf` feat(pnf) | F3 `_dual_pnf` 加 `breakout` 參數：成立時 long 句用 `_breakout_overrides` target 同源；兩 call site pre-prompt 傳 `_breakout_pre`（5 case）|
+| `f8005e2` fix(pnf) | F3 補強：post-process 兩寫入點 override target 統一 `_quantize_price` → 內文/框架/DB pill 三處同值（dry-run 抓到 198 vs 197.70 殘留）（1 case）|
+| `97263fc` docs | §四十 編號更正（遠端 §三十九 已被 7/12 趨勢評分使用，rebase 後改號）|
+
+**Dry-run 驗證（live Yahoo，零 AI token）**：晶心科 7/10 假棒消失 + 一字漲停+價=空停 → 🟡 等反轉佈空；采鈺（1.31%）→ 🟡 等反轉佈空；微星 breakout 注入句=框架=pill=198 三處同值。
+
+**驗收（燒 ~$0.6 重跑後）**：K 表無 "None" 列；貼空停/漲停日 short 股 pill = 🟡 等反轉佈空；大聯大/微星類第四節 P&F 句 = 第五節目標 = pill 同值。
+
+**已審視未修（7/13 報告其餘發現，優化級）**：header pill 空停（stop_loss×1.03）vs 第五節空停兩個數字；「距峰值回落」用月收盤峰值致合晶顯示 -54.1% 負回落；空標「—」與內文 relaxed 目標並存（框架可帶「需先跌破 Y」句）；NEWS 週一晚空新聞走全推斷分支。
+
+**回滾**：F1/F2/F3 各自獨立 revert；F2/F3 皆 optional 參數 default 向後相容；零 migration。
+
+plan：`plan.md §四十`
+
+---
+
+## 過往進度（2026-07-12 — §三十九 趨勢判斷加權證據評分 + 全系統健檢 + Supabase pause 事故排除）
 
 **所在週次：週8（AI 偏空校正 + 報表品質）**
 
