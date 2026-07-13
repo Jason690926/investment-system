@@ -355,7 +355,7 @@ def _quantize_price(x):
     return round(float(x), 1) if x < 100 else round(float(x))
 
 
-def _dual_pnf(enriched_data: dict, price_f):
+def _dual_pnf(enriched_data: dict, price_f, breakout: bool = False):
     """同時算多方（突破箱頂向上）與空方（跌破箱底向下）等幅量度目標。
     優先週K（lookback=12），無有效箱則退日K（lookback=20）。
     回傳 (pnf_long, pnf_short, block_text)。
@@ -364,6 +364,12 @@ def _dual_pnf(enriched_data: dict, price_f):
     - 量化（_quantize_price）後同步寫進 block，pill 與內文 source-of-truth 統一
     - placeholder 注入「完整成品句」（含 P&F概念目標：...元（等幅量度）整句），
       AI verbatim 引用即可，避免「[數值]元」格式指令導致 AI 巢狀代入 block label
+
+    F3 §三十九（2026-07-13）：
+    - breakout=True（_strong_breakout_state 成立）時 long 目標改用
+      _breakout_overrides 同源值 — 消除「第四節 P&F 句（prompt 注入，AI 前）
+      vs 第五節框架/pill（post-process，AI 後）」雙目標價矛盾
+      （大聯大 120 vs 133、微星 159 vs 196.2 案例）
     """
     wk = enriched_data.get('weekly_bars', [])
     dk = enriched_data.get('daily_bars', [])
@@ -374,14 +380,24 @@ def _dual_pnf(enriched_data: dict, price_f):
     pnf_long  = _quantize_price(pnf_long)
     pnf_short = _quantize_price(pnf_short)
 
+    from modules.candlestick import calc_swing_levels as _csl
+    try:
+        _sl_l = _csl(dk, 'long', price_f) if dk else None
+    except (TypeError, ValueError):
+        _sl_l = None
+
+    # F3 §三十九：強勢突破 → long 句用 _breakout_overrides target（與框架/pill 同源）
+    if breakout and _sl_l:
+        _ov = _breakout_overrides(_sl_l, dk, price_f)
+        if _ov and _ov.get('target') is not None:
+            pnf_long = _quantize_price(_ov['target'])
+
     # Bug-I §三十六：偵測 long/short 論點是否已失效（避免「🔴 出場」+ P&F「需先突破」矛盾）
     # long invalidated  ：cur < swing_low  × 0.985（跌穿支撐 1.5% 以上 — 明確破位）
     # short invalidated ：cur > swing_high × 1.015（站回壓力 1.5% 以上）
-    from modules.candlestick import calc_swing_levels as _csl
     long_inv_price = None
     short_inv_price = None
     try:
-        _sl_l = _csl(dk, 'long', price_f) if dk else None
         if _sl_l and _sl_l.get('invalidation') is not None:
             inv_l = float(_sl_l['invalidation'])
             if float(price_f) < inv_l * 0.985:
@@ -1229,7 +1245,10 @@ def analyze_stock_three_masters(
         _price_f = float(price) if price != '--' else None
     except (TypeError, ValueError):
         _price_f = None
-    _pnf_long, _pnf_short, pnf_block = _dual_pnf(enriched_data, _price_f)
+    # F3 §三十九：pre-prompt 先算強勢突破（純函式，與 post-process 判定 deterministic 一致）
+    _breakout_pre = _strong_breakout_state(enriched_data, _price_f)
+    _pnf_long, _pnf_short, pnf_block = _dual_pnf(enriched_data, _price_f,
+                                                  breakout=_breakout_pre)
     _rs_block = _market_rs_block(enriched_data.get('daily_bars', []))
     _rs_section = f"\n\n{_rs_block}" if _rs_block else ""
     _oversold_block = _oversold_warning_block(enriched_data.get('daily_bars', []))
@@ -1619,7 +1638,10 @@ def analyze_market_only(
         _price_f = float(price) if price != '--' else None
     except (TypeError, ValueError):
         _price_f = None
-    _pnf_long, _pnf_short, pnf_block = _dual_pnf(enriched_data, _price_f)
+    # F3 §三十九：pre-prompt 先算強勢突破（原優化2 inline 計算改共用變數）
+    _breakout_pre = _strong_breakout_state(enriched_data, _price_f)
+    _pnf_long, _pnf_short, pnf_block = _dual_pnf(enriched_data, _price_f,
+                                                  breakout=_breakout_pre)
     _rs_block = _market_rs_block(enriched_data.get('daily_bars', []))
     _rs_section = f"\n\n{_rs_block}" if _rs_block else ""
     _oversold_block = _oversold_warning_block(enriched_data.get('daily_bars', []))
@@ -1629,7 +1651,7 @@ def analyze_market_only(
     # 優化2：強勢突破狀態（程式計算）→ 併入結構區塊，控 long 操作框架分支
     _breakout_line = (
         '【強勢突破狀態】成立（現價已放量站上前高）→ long 操作框架啟用「強勢追進」分支'
-        if _strong_breakout_state(enriched_data, _price_f)
+        if _breakout_pre
         else '【強勢突破狀態】未成立 → long 操作框架用標準「回測進場」分支'
     )
     _structure_block_text = (
