@@ -16,6 +16,22 @@ def _patch_missing_close(df):
     return df.dropna(subset=['Close'])
 
 
+def _drop_degenerate_bars(df):
+    """F1 §三十九（2026-07-13）：剔除 Yahoo 休市/停牌佔位假棒。
+
+    Yahoo 對休市/停牌日偶回「O=H=L=C=前收、Volume=null/0」佔位棒
+    （2026-07-10 案例：12 檔全中）。該棒非真實交易，會讓 PDF K 表印出
+    "None"、被標「縮量」特徵餵 AI、拉低 5 日均量使放量判定失真 → 整列剔除。
+    真一字漲停同樣 O=H=L=C 但量 > 0，不受影響。"""
+    if df is None or len(df) == 0:
+        return df
+    vol_missing = df['Volume'].isna() | (df['Volume'] == 0)
+    flat = ((df['Open'] == df['High'])
+            & (df['High'] == df['Low'])
+            & (df['Low'] == df['Close']))
+    return df[~(vol_missing & flat)]
+
+
 def _chart_json_to_df(d: dict, interval: str) -> pd.DataFrame:
     """把 Yahoo v8 chart result dict 轉成 OHLCV DataFrame。
 
@@ -134,7 +150,7 @@ def _yahoo_ohlcv(symbol: str, interval: str, range_: str) -> pd.DataFrame | None
             timeout=15
         )
         d = r.json()['chart']['result'][0]
-        return _patch_missing_close(_chart_json_to_df(d, interval))
+        return _drop_degenerate_bars(_patch_missing_close(_chart_json_to_df(d, interval)))
     except Exception as e:
         print(f"[data_enricher] 抓取失敗 {symbol} {interval}: {e}")
         return None
