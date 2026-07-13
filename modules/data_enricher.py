@@ -17,7 +17,7 @@ def _patch_missing_close(df):
 
 
 def _drop_degenerate_bars(df):
-    """F1 §三十九（2026-07-13）：剔除 Yahoo 休市/停牌佔位假棒。
+    """F1 §四十（2026-07-13）：剔除 Yahoo 休市/停牌佔位假棒。
 
     Yahoo 對休市/停牌日偶回「O=H=L=C=前收、Volume=null/0」佔位棒
     （2026-07-10 案例：12 檔全中）。該棒非真實交易，會讓 PDF K 表印出

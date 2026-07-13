@@ -1,4 +1,4 @@
-"""F1 §三十九（2026-07-13）— 剔除 Yahoo 休市/停牌佔位假棒。
+"""F1 §四十（2026-07-13）— 剔除 Yahoo 休市/停牌佔位假棒。
 
 根因：Yahoo 對休市/停牌日偶回「O=H=L=C=前收、Volume=null/0」佔位棒
 （2026-07-10 案例：12 檔全中）。假棒讓 PDF K 表印出 "None"、被標
@@ -7,7 +7,7 @@
 修法：`_drop_degenerate_bars` — (Volume isna 或 ==0) 且 O==H==L==C → 整列 drop。
 真一字漲停 O=H=L=C 但量 > 0，不受影響。
 
-plan §三十九 / F1
+plan §四十 / F1
 """
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))

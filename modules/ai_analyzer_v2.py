@@ -365,7 +365,7 @@ def _dual_pnf(enriched_data: dict, price_f, breakout: bool = False):
     - placeholder 注入「完整成品句」（含 P&F概念目標：...元（等幅量度）整句），
       AI verbatim 引用即可，避免「[數值]元」格式指令導致 AI 巢狀代入 block label
 
-    F3 §三十九（2026-07-13）：
+    F3 §四十（2026-07-13）：
     - breakout=True（_strong_breakout_state 成立）時 long 目標改用
       _breakout_overrides 同源值 — 消除「第四節 P&F 句（prompt 注入，AI 前）
       vs 第五節框架/pill（post-process，AI 後）」雙目標價矛盾
@@ -386,7 +386,7 @@ def _dual_pnf(enriched_data: dict, price_f, breakout: bool = False):
     except (TypeError, ValueError):
         _sl_l = None
 
-    # F3 §三十九：強勢突破 → long 句用 _breakout_overrides target（與框架/pill 同源）
+    # F3 §四十：強勢突破 → long 句用 _breakout_overrides target（與框架/pill 同源）
     if breakout and _sl_l:
         _ov = _breakout_overrides(_sl_l, dk, price_f)
         if _ov and _ov.get('target') is not None:
@@ -837,7 +837,7 @@ def _strong_pullback_state(price, entry_zone, threshold=0.25):
 
 
 def _limit_up_locked_today(daily_bars: list) -> bool:
-    """F2 §三十九：今日是否一字/鎖死漲停（漲幅 ≥9% 且 close ≥ high×0.99）。
+    """F2 §四十：今日是否一字/鎖死漲停（漲幅 ≥9% 且 close ≥ high×0.99）。
 
     偵測內核與 _strong_breakout_state 條件 C 一致（不含其「近 3 日 ≥2 根」
     附加條件 — 這裡問的是「今天能不能空」，單日鎖死即不可空：券源實務
@@ -873,7 +873,7 @@ def _decide_action(status: str, direction: str, structure_flag: str,
     - cost_stop_loss: HOLD 個人成本停損（可選，優先於 swing invalidation）
     - pl_pct: HOLD 個人 P/L 百分比（可選；< -20% 即抑制「加碼」改「觀望持有」，
               避免家人讀者深虧仍重壓 — Bug-1 §三十四）
-    - limit_up_today: 今日一字漲停鎖死（F2 §三十九；True 時 short 在區內
+    - limit_up_today: 今日一字漲停鎖死（F2 §四十；True 時 short 在區內
               不標「分批佈空」改「等反轉佈空」— 漲停鎖死日實務不可空）
 
     回傳 pill 字串格式：'<emoji> <動作字> [💪]'，例如 '🟢 追進 💪' / '🟡 等回測'。
@@ -975,7 +975,7 @@ def _decide_action(status: str, direction: str, structure_flag: str,
                     # 邊界 case 標「分批佈空」但 5/27 即跌至 66.8 已驗證為下行
                     zlo_buf = zlo * 1.005
                     if zlo_buf <= price_f <= zhi:
-                        # F2 §三十九：空停零距離防護 — 距空停 <2% 或今日一字
+                        # F2 §四十：空停零距離防護 — 距空停 <2% 或今日一字
                         # 漲停鎖死 → 等反轉佈空（晶心科 7/13 現價=空停 210.5
                         # 且一字漲停仍標分批佈空、采鈺距空停 1.31% 案例）
                         stop_ref = invalidation if invalidation is not None else zhi
@@ -1245,7 +1245,7 @@ def analyze_stock_three_masters(
         _price_f = float(price) if price != '--' else None
     except (TypeError, ValueError):
         _price_f = None
-    # F3 §三十九：pre-prompt 先算強勢突破（純函式，與 post-process 判定 deterministic 一致）
+    # F3 §四十：pre-prompt 先算強勢突破（純函式，與 post-process 判定 deterministic 一致）
     _breakout_pre = _strong_breakout_state(enriched_data, _price_f)
     _pnf_long, _pnf_short, pnf_block = _dual_pnf(enriched_data, _price_f,
                                                   breakout=_breakout_pre)
@@ -1485,7 +1485,7 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
                 _sl, enriched_data.get('daily_bars', []), _price_f
             )
             if _ov:
-                # F3 §三十九：override target 統一 quantize — 內文（_dual_pnf 注入句）
+                # F3 §四十：override target 統一 quantize — 內文（_dual_pnf 注入句）
                 # / 第五節框架 / DB target_pnf pill 三處同值
                 _ov = {**_ov, 'target': _quantize_price(_ov['target'])}
                 _sl = {**_sl, **_ov}
@@ -1509,7 +1509,7 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
             breakout=_breakout,
             price=_price_f,
             cost_stop_loss=None,
-            # F2 §三十九：一字漲停鎖死日 short 不標「分批佈空」
+            # F2 §四十：一字漲停鎖死日 short 不標「分批佈空」
             limit_up_today=_limit_up_locked_today(enriched_data.get('daily_bars', [])),
         )
         _vol_thr = None
@@ -1641,7 +1641,7 @@ def analyze_market_only(
         _price_f = float(price) if price != '--' else None
     except (TypeError, ValueError):
         _price_f = None
-    # F3 §三十九：pre-prompt 先算強勢突破（原優化2 inline 計算改共用變數）
+    # F3 §四十：pre-prompt 先算強勢突破（原優化2 inline 計算改共用變數）
     _breakout_pre = _strong_breakout_state(enriched_data, _price_f)
     _pnf_long, _pnf_short, pnf_block = _dual_pnf(enriched_data, _price_f,
                                                   breakout=_breakout_pre)
@@ -1927,7 +1927,7 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
                 _sl, enriched_data.get('daily_bars', []), _price_f
             )
             if _ov:
-                # F3 §三十九：override target 統一 quantize — 內文（_dual_pnf 注入句）
+                # F3 §四十：override target 統一 quantize — 內文（_dual_pnf 注入句）
                 # / 第五節框架 / DB target_pnf pill 三處同值
                 _ov = {**_ov, 'target': _quantize_price(_ov['target'])}
                 _sl = {**_sl, **_ov}
@@ -1951,7 +1951,7 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
             breakout=_breakout,
             price=_price_f,
             cost_stop_loss=None,
-            # F2 §三十九：一字漲停鎖死日 short 不標「分批佈空」
+            # F2 §四十：一字漲停鎖死日 short 不標「分批佈空」
             limit_up_today=_limit_up_locked_today(enriched_data.get('daily_bars', [])),
         )
         _vol_thr = None

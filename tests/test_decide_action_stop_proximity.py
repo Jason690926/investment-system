@@ -1,4 +1,4 @@
-"""F2 §三十九（2026-07-13）— 空停零距離防護 + 一字漲停抑制佈空。
+"""F2 §四十（2026-07-13）— 空停零距離防護 + 一字漲停抑制佈空。
 
 根因：short entry_zone=(mid, swing_high)、invalidation=swing_high →
 價在區頂 = 停損零距離。晶心科 7/13 現價 210.5＝空停 210.5（且一字漲停鎖死）
@@ -11,7 +11,7 @@
   (b) limit_up_today=True（今日一字漲停鎖死）→ 🟡 等反轉佈空
 - 新純函式 `_limit_up_locked_today`（漲幅≥9% + close≥high×0.99）
 
-plan §三十九 / F2
+plan §四十 / F2
 """
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))

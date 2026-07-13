@@ -1,4 +1,4 @@
-"""F3 §三十九（2026-07-13）— 強勢突破股目標價雙源同步。
+"""F3 §四十（2026-07-13）— 強勢突破股目標價雙源同步。
 
 根因：`_dual_pnf`（prompt 注入，AI 呼叫**前**）用標準 calc_pnf_target；
 `_breakout_overrides`（post-process，AI 呼叫**後**）用 60 日低重算等幅量度
@@ -9,7 +9,7 @@
 `_breakout_overrides` target；兩 call site pre-prompt 先算 `_strong_breakout_state`
 傳入（純函式，與 post-process 判定 deterministic 一致）。
 
-plan §三十九 / F3
+plan §四十 / F3
 """
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
