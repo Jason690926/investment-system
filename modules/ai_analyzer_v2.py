@@ -820,11 +820,31 @@ def _strong_pullback_state(price, entry_zone, threshold=0.25):
     return {'symptom': symptom, 'width_pct': round(width_ratio * 100)}
 
 
+def _limit_up_locked_today(daily_bars: list) -> bool:
+    """F2 §三十九：今日是否一字/鎖死漲停（漲幅 ≥9% 且 close ≥ high×0.99）。
+
+    偵測內核與 _strong_breakout_state 條件 C 一致（不含其「近 3 日 ≥2 根」
+    附加條件 — 這裡問的是「今天能不能空」，單日鎖死即不可空：券源實務
+    借不到 + 隔日漲停慣性風險高。晶心科 7/13 一字漲停仍被標分批佈空案例。"""
+    if not daily_bars or len(daily_bars) < 2:
+        return False
+    try:
+        today_close = float(daily_bars[-1]['close'])
+        today_high = float(daily_bars[-1]['high'])
+        yest_close = float(daily_bars[-2]['close'])
+        return (yest_close > 0
+                and (today_close - yest_close) / yest_close >= 0.09
+                and today_close >= today_high * 0.99)
+    except (KeyError, TypeError, ValueError):
+        return False
+
+
 def _decide_action(status: str, direction: str, structure_flag: str,
                    swing_levels: dict | None, breakout: bool,
                    price,
                    cost_stop_loss=None,
-                   pl_pct=None) -> str:
+                   pl_pct=None,
+                   limit_up_today: bool = False) -> str:
     """建議動作決定樹（2026-05-25, plan §三十一; Bug-1+3 §三十四 2026-05-28）。
 
     根據 6 個輸入決定建議動作 pill 字串：
@@ -837,6 +857,8 @@ def _decide_action(status: str, direction: str, structure_flag: str,
     - cost_stop_loss: HOLD 個人成本停損（可選，優先於 swing invalidation）
     - pl_pct: HOLD 個人 P/L 百分比（可選；< -20% 即抑制「加碼」改「觀望持有」，
               避免家人讀者深虧仍重壓 — Bug-1 §三十四）
+    - limit_up_today: 今日一字漲停鎖死（F2 §三十九；True 時 short 在區內
+              不標「分批佈空」改「等反轉佈空」— 漲停鎖死日實務不可空）
 
     回傳 pill 字串格式：'<emoji> <動作字> [💪]'，例如 '🟢 追進 💪' / '🟡 等回測'。
     """
@@ -937,6 +959,16 @@ def _decide_action(status: str, direction: str, structure_flag: str,
                     # 邊界 case 標「分批佈空」但 5/27 即跌至 66.8 已驗證為下行
                     zlo_buf = zlo * 1.005
                     if zlo_buf <= price_f <= zhi:
+                        # F2 §三十九：空停零距離防護 — 距空停 <2% 或今日一字
+                        # 漲停鎖死 → 等反轉佈空（晶心科 7/13 現價=空停 210.5
+                        # 且一字漲停仍標分批佈空、采鈺距空停 1.31% 案例）
+                        stop_ref = invalidation if invalidation is not None else zhi
+                        try:
+                            near_stop = price_f >= float(stop_ref) * 0.98
+                        except (TypeError, ValueError):
+                            near_stop = False
+                        if limit_up_today or near_stop:
+                            return '🟡 等反轉佈空'
                         return '🔴 分批佈空'
                     if price_f < zlo_buf:
                         return '🟡 等反彈佈空'
@@ -1455,6 +1487,8 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
             breakout=_breakout,
             price=_price_f,
             cost_stop_loss=None,
+            # F2 §三十九：一字漲停鎖死日 short 不標「分批佈空」
+            limit_up_today=_limit_up_locked_today(enriched_data.get('daily_bars', [])),
         )
         _vol_thr = None
         try:
@@ -1889,6 +1923,8 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
             breakout=_breakout,
             price=_price_f,
             cost_stop_loss=None,
+            # F2 §三十九：一字漲停鎖死日 short 不標「分批佈空」
+            limit_up_today=_limit_up_locked_today(enriched_data.get('daily_bars', [])),
         )
         _vol_thr = None
         try:
