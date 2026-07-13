@@ -123,3 +123,14 @@ def test_call_sites_pass_breakout_to_dual_pnf():
     assert src.count('_dual_pnf(enriched_data, _price_f,') == 2, \
         'analyze_stock_three_masters / analyze_market_only 兩 call site 都應傳 breakout'
     assert src.count('breakout=_breakout_pre') == 2
+
+
+# ============================================================
+# F3-T6：post-process 兩寫入點 override target 有 quantize
+#（內文 198 / 框架 197.70 / pill 196.2 三處 rounding 打架的收斂點）
+# ============================================================
+def test_post_process_quantizes_override_target():
+    import modules.ai_analyzer_v2 as mod
+    src = inspect.getsource(mod)
+    assert src.count("_ov = {**_ov, 'target': _quantize_price(_ov['target'])}") == 2, \
+        '兩 post-process 寫入點都應 quantize override target（與 _dual_pnf 注入句同值）'

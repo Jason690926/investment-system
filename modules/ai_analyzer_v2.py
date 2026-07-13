@@ -1485,6 +1485,9 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
                 _sl, enriched_data.get('daily_bars', []), _price_f
             )
             if _ov:
+                # F3 §三十九：override target 統一 quantize — 內文（_dual_pnf 注入句）
+                # / 第五節框架 / DB target_pnf pill 三處同值
+                _ov = {**_ov, 'target': _quantize_price(_ov['target'])}
                 _sl = {**_sl, **_ov}
                 if result.get('direction') == 'long':
                     result['target_pnf'] = _ov['target']
@@ -1924,6 +1927,9 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
                 _sl, enriched_data.get('daily_bars', []), _price_f
             )
             if _ov:
+                # F3 §三十九：override target 統一 quantize — 內文（_dual_pnf 注入句）
+                # / 第五節框架 / DB target_pnf pill 三處同值
+                _ov = {**_ov, 'target': _quantize_price(_ov['target'])}
                 _sl = {**_sl, **_ov}
                 if result.get('direction') == 'long':
                     result['target_pnf'] = _ov['target']
