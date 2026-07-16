@@ -6,13 +6,55 @@
 - **架構決策**：討論完方案後，先更新 `plan.md`，再開始寫程式
 - `plan.md` 只在需要查架構細節時才讀（節省 token）
 
-## 當前進度（2026-07-13 — §四十 7/13 報表 cross-check 三修法已 merge+push origin/main）
+## 當前進度（2026-07-16 — §四十 驗收通過 ✅ + §四十一 7/16 cross-check 調查完成、方案已定、未動工）
 
 **所在週次：週8（AI 偏空校正 + 報表品質）**
 
-**狀態：HEAD = `97263fc`（本地 = origin/main 同步）；§四十 5 commit（4 實作 + 1 編號更正）rebase 於 §三十九 之上；pytest 427/427 全綠；Render auto-deploy 已觸發**
+**狀態：HEAD = `97263fc`（本地 = origin/main 同步，本次零程式修改）；pytest 427/427 基線不變**
 
-### 🆕 §四十（2026-07-13）：7/13 報表 cross-check 三修法
+### ✅ §四十 驗收結果（7/16 報告 cross-check，3 hold + 9 watch = 12 檔）
+
+用戶 7/16 17:52 重跑報告（PDF 在 `Desktop\新增資料夾\`，文字已 dump 至 `_pdf_716_dump.txt`）：
+- **F1 假棒剔除 ✅**：全 12 檔日/週/月 K 表乾淨，無 "None" 列、無退化佔位棒（7/10 休市日正確消失）
+- **F2 空停零距離 ✅（間接）**：今日無貼停/漲停案例；采鈺距空停 5.5% 正常標 🟡 等反彈佈空
+- **F3 突破目標同源 ✅（間接）**：今日無強勢突破成立股，無雙目標並存
+
+### 🚧 §四十一（2026-07-16）：short 渲染層一致性三修法 — 調查完成、方案已定、**下次開工實作**
+
+**緣起（7/16 報告新發現 3 個 short 側問題，根因全部已在程式碼確認）：**
+
+1. **§5 空標與 pill/§4 目標雙源**：§5 操作框架用 `calc_swing_levels` 的 target（日K lookback=20、tick 進位）；pill 與 §4 用 `_dual_pnf` 的 `target_pnf`（週K lookback=12 優先 + `_quantize_price`）。2026-05-22 Bug B 只把 pill 對齊 target_pnf（`app.py` `_tgt = result.get('target_pnf')` 有註解），§5 從未對齊。實例：**瑞耘 pill/§4=71.0 vs §5=71.30**；**晶心科 §5 空標 232.00 高於現價 228**（§4 明寫「論點已失效…P&F 不適用」、pill 因 app.py:179 read-time guard 正確隱藏，§5 是分析時烘焙進 html_content 缺同道 guard）
+2. **pill=🔴 論點作廢 但 §5 仍給完整空進區**：晶心科價 228 站回空停 210.5 上方 8.3%，§5 照印「空進 204.19~210.50」。long 側 §三十八 有誠實第五節，short 無鏡像
+3. **空停雙數字（7 檔 short 全中）**：pill 空停 = `_resolve_swing_anchors` 的 `range_high × 1.03`（§二十四 B1c）；§5 空停/§3 失效回補/`_decide_action` 作廢 gate 全用 raw `range_high`。晶心科 217/210.5、矽力 664/645、創惟 113/109.5…
+
+**已定修法（3 fix，零 migration、零新 prompt）：**
+
+| Fix | 修法 |
+|-----|------|
+| **F1 §5 目標同源+guard** | 兩 call site（`ai_analyzer_v2.py` ~1522/~1964 的 §三十一 post-process 區）在 `_render_operation_framework` 前把 `_sl['target']` 覆寫為 `result['target_pnf']`（breakout 路徑 §四十 F3 已同值，覆寫冪等）；framework 加 guard：short 空標須<price、long 目標須>price 否則「—」（鏡像 app.py:179，防盤中跑分析 stale） |
+| **F2 空停統一失效價** | `_resolve_swing_anchors`（ai_analyzer_v2.py:459）砍 ×1.03 → `stop_loss_anchor = range_high`（20日高 fallback 同步砍）；**pill 空進改顯示區間 `entry_low ~ entry_high`**（原單值 range_high 會與新空停同值；區下緣才是可操作價）；dashboard.js:235 short strip 空進同步改 `entry_low-entry_high`（鏡像 long 格式） |
+| **F3 論點作廢誠實 §5** | `_render_operation_framework`（ai_analyzer_v2.py:1117 short 分支）：pill 含「論點作廢」→ 誠實版（砍空進區/空標，保留「失效價 X — 已站回其上」+ 等新結構），鏡像 §三十八 pattern |
+
+**⚠️ F2 兩個設計點下次開工先跟用戶確認再動手**（本次未及討論定案）：(a) 砍 ×1.03 統一為 raw 失效價（理由：raw 是多數方，×1.03 只活在 pill/strip 顯示層）；(b) pill 空進從單值改區間顯示。
+
+**受影響檔案**：`modules/ai_analyzer_v2.py`（framework + anchors + 兩 call site）、`app.py`（pill ~148-181）、`static/js/dashboard.js`（~235）
+**受影響測試（需配對改）**：`test_swing_anchors.py`（:67 空停>空進 → ==）、`test_report_bugfixes.py`（:51 fallback 103→100）、`test_print_report.py`（:273 fixture stop 234 + :300-312 順序斷言）、`test_objective_action_decouple.py`（F2 區段複查）；新增 framework guard/誠實化/anchor 測試
+
+**7/16 報告其餘發現（優化級，未列入 §四十一）：**
+- AI 敘事 vs 程式錨點不同步：華星光 §1/§3 說等回測 454、§5 空進區卻是 471.5~489；矽力 §3 同節兩個壓力區（554~599.5 vs 599.5~645）；撼訊 §1 寫「放量 250 張」但程式特徵=均量（違反鐵律個案）
+- **short 版強漲回測誠實揭露缺失**（結構性，建議 §四十二 做）：矽力/瑞軒/瑞耘/華星光 空進區距現價 25~30%，「等反彈佈空」不可操作 — §三十八 的鏡像（當時 gate 明定僅 long）
+- 沿用未修（7/13 已列）：距峰值回落用月收盤峰值+正負號亂（合晶 -35%、晶心科 +25.1%、東捷 +12.7%）；relaxed 目標與 §5「—」並存（大聯大 124/微星 159/采鈺 433）；微星「需先突破 144」但現價 145 已在其上（gate 句過期）
+- cosmetic：合晶（⚪ 觀望）§5「進場區：— 元（觸發須量 ≥196,074 張）」「停損：— 元 — 跌破即論點作廢」空值殘句；§4 DIRECTION=long vs badge 觀望並陳（§三十七 F3 設計結果但讀來矛盾）
+
+**下次開工流程**：確認 F2 兩設計點 → 寫 plan.md §四十一（草稿內容同上表）→ TDD（先測試後實作）→ pytest 全綠 → commit/push。
+
+---
+
+## 過往進度（2026-07-13 — §四十 7/13 報表 cross-check 三修法已 merge+push origin/main）
+
+**狀態：HEAD = `97263fc`；§四十 5 commit（4 實作 + 1 編號更正）rebase 於 §三十九 之上；pytest 427/427 全綠**
+
+### §四十（2026-07-13）：7/13 報表 cross-check 三修法
 
 **緣起**：用戶 7/13 報告（12 檔）審視發現 1 資料層 bug + 2 邏輯矛盾：
 1. **7/10 假 K 棒污染全 12 檔**：Yahoo 休市/停牌日回「O=H=L=C=前收、Volume=null」佔位棒 → PDF 印 "None"、假棒餵 AI、5 日均量失真（晶心科 264 → 修後真實 356.5）
@@ -192,7 +234,7 @@ spec/plan：`docs/superpowers/{specs,plans}/2026-06-09-strong-pullback-honest-di
 - 18 commit 純加性 / helper 新增 / 既有函式 optional 參數 / 1 nullable migration → 任一 commit `git revert` 可獨立回滾（§三十五 `8f0e973` 因 signature 改三元組需配對 test）
 
 ### 未追蹤檔案（cross-check 暫存，不需 commit）
-`_crosscheck_fetch.py` / `_pdf_526_dump.txt` / `_pdf_528_dump.txt` / `_pdf_528_v2_dump.txt` / `_report_extract.txt`
+`_crosscheck_fetch.py` / `_pdf_526_dump.txt` / `_pdf_528_dump.txt` / `_pdf_528_v2_dump.txt` / `_report_extract.txt` / `_pdf_716_dump.txt`
 
 ---
 
