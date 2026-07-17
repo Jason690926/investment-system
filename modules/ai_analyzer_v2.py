@@ -355,6 +355,60 @@ def _quantize_price(x):
     return round(float(x), 1) if x < 100 else round(float(x))
 
 
+def _relaxed_target_info(dk, wk, price_f, dir_):
+    """§四十三 R4：relaxed 目標資訊（週K lookback=12 優先、日K=20 備援，
+    quantize 後回傳）— §4 relaxed 句與 §5 目標 note 的單一 source of truth。
+    回傳 (target_q, gate_q, status) 或 None。"""
+    for bars, lb in [(wk, 12), (dk, 20)]:
+        r = calc_pnf_target_relaxed(bars, lookback=lb,
+                                     current_price=price_f, direction=dir_)
+        if r:
+            t, g, status = r
+            return _quantize_price(t), _quantize_price(g), status
+    return None
+
+
+def _gate_passed(dir_: str, price_f, gate) -> bool:
+    """§四十三 R3：現價是否已越過 relaxed gate（long 站上 / short 跌破）。"""
+    try:
+        p, g = float(price_f), float(gate)
+    except (TypeError, ValueError):
+        return False
+    return p >= g if dir_ == 'long' else p <= g
+
+
+def _relaxed_sentence_from_info(dir_: str, info, price_f) -> str:
+    """§4 relaxed 成品句（§四十三 R3：pending 但現價已過 gate → 收穩措辭，
+    修微星「需先突破 144」現價 145 已在其上的過期 gate 句）。"""
+    t_q, g_q, status = info
+    gate_verb = '突破' if dir_ == 'long' else '跌破'
+    if status == 'reached':
+        # Filter B 失敗：cur 已遠超 gate → 先前等幅量度已達成
+        return (f'P&F概念目標：先前等幅量度 {t_q} 元已達成（{gate_verb}點 {g_q} 元），'
+                f'等新箱形成才能估算下一目標')
+    if _gate_passed(dir_, price_f, g_q):
+        pos_verb = '站上' if dir_ == 'long' else '跌破'
+        return (f'P&F理論目標：{t_q}元 — 已{pos_verb} {g_q} 元，'
+                f'需收穩確認觸發（等幅量度）')
+    # status == 'pending' 且 gate 未過 → 維持既有「需先突破/跌破」句
+    return f'P&F理論目標：{t_q}元 — 需先{gate_verb} {g_q} 元觸發（等幅量度）'
+
+
+def _relaxed_target_note(dir_: str, info, price_f):
+    """§四十三 R4：§5 目標列 note（與 §4 relaxed 句同源）。
+    reached / 無 info → None（§5 維持「—」）。"""
+    if not info:
+        return None
+    t_q, g_q, status = info
+    if status == 'reached':
+        return None
+    gate_verb = '突破' if dir_ == 'long' else '跌破'
+    if _gate_passed(dir_, price_f, g_q):
+        pos_verb = '站上' if dir_ == 'long' else '跌破'
+        return f'已{pos_verb} {g_q} 元，收穩確認後估 {t_q} 元'
+    return f'需先{gate_verb} {g_q} 元後估 {t_q} 元'
+
+
 def _dual_pnf(enriched_data: dict, price_f, breakout: bool = False):
     """同時算多方（突破箱頂向上）與空方（跌破箱底向下）等幅量度目標。
     優先週K（lookback=12），無有效箱則退日K（lookback=20）。
@@ -414,22 +468,12 @@ def _dual_pnf(enriched_data: dict, price_f, breakout: bool = False):
         pass
 
     # Opt-1 §三十四 + Bug-D §三十五：strict 失敗時用 relaxed 揭露「理論目標 + 觸發 gate + 狀態」
-    # status='pending' → 「需先突破/跌破 Y」；status='reached' → 「先前已達成，等新箱形成」
+    # §四十三 R3/R4：句子生成抽共用純函式（_relaxed_sentence_from_info），
+    # 與 §5 目標 note（_relaxed_target_note）同源
     def _relaxed_sentence(dir_: str, fallback: str) -> str:
-        for bars, lb in [(wk, 12), (dk, 20)]:
-            r = calc_pnf_target_relaxed(bars, lookback=lb,
-                                         current_price=price_f, direction=dir_)
-            if r:
-                t, g, status = r
-                t_q = _quantize_price(t)
-                g_q = _quantize_price(g)
-                gate_verb = '突破' if dir_ == 'long' else '跌破'
-                if status == 'reached':
-                    # Filter B 失敗：cur 已遠超 gate → 先前等幅量度已達成
-                    return (f'P&F概念目標：先前等幅量度 {t_q} 元已達成（{gate_verb}點 {g_q} 元），'
-                            f'等新箱形成才能估算下一目標')
-                # status == 'pending'：Filter A 失敗 → 維持「需先突破/跌破」句
-                return f'P&F理論目標：{t_q}元 — 需先{gate_verb} {g_q} 元觸發（等幅量度）'
+        info = _relaxed_target_info(dk, wk, price_f, dir_)
+        if info:
+            return _relaxed_sentence_from_info(dir_, info, price_f)
         return fallback
 
     # Bug-I §三十六：論點失效時優先用失效句，覆蓋 strict / relaxed 既有邏輯
@@ -1035,7 +1079,8 @@ def adjust_pill_for_deep_loss(action_pill, pl_pct, threshold_pct: float = -20.0)
 
 def _render_operation_framework(action_pill: str, direction: str,
                                  swing_levels: dict | None, breakout: bool,
-                                 vol_threshold_zhang=None, price=None) -> str:
+                                 vol_threshold_zhang=None, price=None,
+                                 target_note=None) -> str:
     """第五節「操作框架」結構化渲染（2026-05-25, plan §三十一）。
 
     回傳 HTML 段落（呼叫端注入 [[OPERATION_FRAMEWORK]] placeholder）。
@@ -1119,12 +1164,24 @@ def _render_operation_framework(action_pill: str, direction: str,
             )
         vol_str = (f"（觸發須量 ≥ {int(vol_threshold_zhang):,} 張）"
                    if vol_threshold_zhang else "")
+        # R5 §四十三：值缺時砍量能/作廢後綴（合晶「— 元（觸發須量…）」殘句）
+        ez_txt = _fmt_zone(ez)
+        entry_row = (f'進場區：{ez_txt} 元{vol_str}' if ez_txt != '—'
+                     else '進場區：—（無有效箱體，等新箱形成）')
+        inv_txt = _fmt(inv)
+        stop_row = (f'停損：{inv_txt} 元 — 跌破即論點作廢' if inv_txt != '—'
+                    else '停損：—（無有效箱體）')
+        # R4 §四十三：target 缺但 relaxed 有值 → 與 §4 同源 gate 句
+        tg_txt = _fmt(tg)
+        target_row = (f'目標：{target_note}（等幅量度）'
+                      if tg_txt == '—' and target_note
+                      else f'目標：{tg_txt} 元')
         return (
             _divider()
             + _row(f'建議動作：{action_pill}')
-            + _row(f'進場區：{_fmt_zone(ez)} 元{vol_str}')
-            + _row(f'停損：{_fmt(inv)} 元 — 跌破即論點作廢')
-            + _row(f'目標：{_fmt(tg)} 元')
+            + _row(entry_row)
+            + _row(stop_row)
+            + _row(target_row)
             + _divider()
         )
 
@@ -1140,12 +1197,23 @@ def _render_operation_framework(action_pill: str, direction: str,
                 + _row('等新結構形成後再評估（原空進區 / 空標已不適用）')
                 + _divider()
             )
+        # R5 §四十三：值缺時砍後綴（鏡像 long）；R4：空標缺時帶 relaxed note
+        ez_txt = _fmt_zone(ez)
+        entry_row = (f'空進：{ez_txt} 元（回測壓力佈空）' if ez_txt != '—'
+                     else '空進：—（無有效箱體）')
+        inv_txt = _fmt(inv)
+        stop_row = (f'空停：{inv_txt} 元 — 站回突破即論點作廢' if inv_txt != '—'
+                    else '空停：—（無有效箱體）')
+        tg_txt = _fmt(tg)
+        target_row = (f'空標：{target_note}（P&amp;F 下行）'
+                      if tg_txt == '—' and target_note
+                      else f'空標：{tg_txt} 元（P&amp;F 下行目標）')
         return (
             _divider()
             + _row(f'建議動作：{action_pill}')
-            + _row(f'空進：{_fmt_zone(ez)} 元（回測壓力佈空）')
-            + _row(f'空停：{_fmt(inv)} 元 — 站回突破即論點作廢')
-            + _row(f'空標：{_fmt(tg)} 元（P&amp;F 下行目標）')
+            + _row(entry_row)
+            + _row(stop_row)
+            + _row(target_row)
             + _divider()
         )
 
@@ -1586,6 +1654,15 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
         # （_dual_pnf 週K優先 + quantize；breakout 路徑 §四十 F3 已同值，覆寫冪等）
         if _sl:
             _sl = {**_sl, 'target': result.get('target_pnf')}
+        # R4 §四十三：target 缺時算 relaxed note（與 §4 relaxed 句同源），
+        # §5 目標列改顯示「需先突破 Y 元後估 X 元」取代「—」
+        _target_note = None
+        if _sl and _sl.get('target') is None and result['direction'] in ('long', 'short'):
+            _tinfo = _relaxed_target_info(
+                enriched_data.get('daily_bars', []),
+                enriched_data.get('weekly_bars', []),
+                _price_f, result['direction'])
+            _target_note = _relaxed_target_note(result['direction'], _tinfo, _price_f)
         _op = _render_operation_framework(
             action_pill=_action,
             direction=result['direction'],
@@ -1593,6 +1670,7 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
             breakout=_breakout,
             vol_threshold_zhang=_vol_thr,
             price=_price_f,
+            target_note=_target_note,
         )
         result['action_pill'] = _action
         _html = result.get('html', '') or ''
@@ -2029,6 +2107,15 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
         # （_dual_pnf 週K優先 + quantize；breakout 路徑 §四十 F3 已同值，覆寫冪等）
         if _sl:
             _sl = {**_sl, 'target': result.get('target_pnf')}
+        # R4 §四十三：target 缺時算 relaxed note（與 §4 relaxed 句同源），
+        # §5 目標列改顯示「需先突破 Y 元後估 X 元」取代「—」
+        _target_note = None
+        if _sl and _sl.get('target') is None and result['direction'] in ('long', 'short'):
+            _tinfo = _relaxed_target_info(
+                enriched_data.get('daily_bars', []),
+                enriched_data.get('weekly_bars', []),
+                _price_f, result['direction'])
+            _target_note = _relaxed_target_note(result['direction'], _tinfo, _price_f)
         _op = _render_operation_framework(
             action_pill=_action,
             direction=result['direction'],
@@ -2036,6 +2123,7 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
             breakout=_breakout,
             vol_threshold_zhang=_vol_thr,
             price=_price_f,
+            target_note=_target_note,
         )
         result['action_pill'] = _action
         _html2 = result.get('html', '') or ''
