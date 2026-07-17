@@ -1330,10 +1330,8 @@ def analyze_stock_three_masters(
         _vol_breakout = '—'
         _vol_spring   = '—'
 
-    news_text = (
-        '\n'.join([f"- {n['title']}" for n in (news_list or [])[:5]])
-        or '暫無相關新聞'
-    )
+    # §四十二：個股新聞注入塊（含鐵律/無新聞禁令），取代裸標題列表
+    news_text = _stock_news_block(news_list)
 
     # 第五節「波段操作框架」改程式渲染（plan §三十一）→ AI 輸出 placeholder，post-process 替換
     action_section = """### 五、波段操作框架（2週-1個月+）
@@ -1474,7 +1472,6 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
 
 {daily_text}
 
-【近期相關新聞】
 {news_text}
 
 ---
@@ -1750,10 +1747,8 @@ def analyze_market_only(
         _vol_breakout = '—'
         _vol_spring   = '—'
 
-    news_text = (
-        '\n'.join([f"- {n['title']}" for n in (news_list or [])[:5]])
-        or '暫無相關新聞'
-    )
+    # §四十二：個股新聞注入塊（含鐵律/無新聞禁令），取代裸標題列表
+    news_text = _stock_news_block(news_list)
 
     detected_patterns = detect_from_bars(enriched_data.get('daily_bars', []))
     _header = "【Rule-based K線型態偵測結果（最新一根）】\n"
@@ -1924,7 +1919,6 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
 
 {pattern_block}
 
-【近期相關新聞】
 {news_text}"""
 
     raw = _generate(
