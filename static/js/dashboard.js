@@ -179,8 +179,8 @@ function buildCard(s) {
     <div class="card-row1">
       <div class="card-ident">
         <span class="badge ${badgeCls}">${badgeText}</span>
-        <div class="card-name">${s.name}</div>
-        <div class="card-symbol">${s.symbol}</div>
+        <div class="card-name">${escHtml(s.name)}</div>
+        <div class="card-symbol">${escHtml(s.symbol)}</div>
       </div>
       <div class="card-price-block">
         <div class="card-price card-price-val">—</div>
@@ -215,6 +215,13 @@ function formatLastDate(iso) {
   const dd = parseInt(parts[2], 10);
   if (!Number.isFinite(mm) || !Number.isFinite(dd)) return iso;
   return `${mm}/${dd}`;
+}
+
+/* ── §四十四 S3：用戶輸入（股票名稱/代號）escape 防 Stored XSS ─── */
+function escHtml(v) {
+  return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
 }
 
 /* ── plan §三十三：錨點 strip — 方向 long/short/neutral 動態切換 label ─── */

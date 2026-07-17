@@ -57,12 +57,32 @@ def login():
     return oauth.google.authorize_redirect(redirect_uri)
 
 
+def _email_allowed(email, allowed_env: str) -> bool:
+    """§四十四 S2：ALLOWED_EMAILS allowlist（逗號分隔、不分大小寫）。
+    未設定（空/空白）→ 開放（向後相容，避免鎖死既有用戶）；
+    設定後所有登入（含既有帳號）都須在清單內。"""
+    allowed = (allowed_env or '').strip()
+    if not allowed:
+        return True
+    allow_set = {e.strip().lower() for e in allowed.split(',') if e.strip()}
+    return (email or '').lower() in allow_set
+
+
 @auth_bp.route('/auth/callback')
 def callback():
     token = oauth.google.authorize_access_token()
     user_info = token.get('userinfo')
     if not user_info:
         return '登入失敗', 400
+
+    # §四十四 S2：OAuth allowlist（7/12 健檢 🔴 #2 — 原任何 Google 帳號
+    # 可自動建帳號消耗 AI 額度）。ALLOWED_EMAILS 未設定 → 維持開放 + 警告。
+    _allow_env = os.getenv('ALLOWED_EMAILS', '')
+    if not _allow_env.strip():
+        print('[auth] 警告：ALLOWED_EMAILS 未設定，OAuth 註冊完全開放')
+    elif not _email_allowed(user_info.get('email', ''), _allow_env):
+        print(f"[auth] 拒絕未授權登入: {user_info.get('email', '(無 email)')}")
+        return '此帳號未獲授權使用本系統，請聯絡管理員', 403
 
     db = SessionLocal()
     try:

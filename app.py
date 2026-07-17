@@ -243,14 +243,19 @@ def _render_one_block(s, a, q, idx, mode, personal_html=None):
     # 變數名稱與 f-string template 對齊
     personal_html = personal_html_block
 
+    # §四十四 S3：自訂股票名稱/代號為用戶輸入 → escape 防 Stored XSS
+    import html as _html_mod
+    _esc_name = _html_mod.escape(str(s.name or ''))
+    _esc_symbol = _html_mod.escape(str(s.symbol or ''))
+
     # 組裝
     return f"""
 <div class="stock-block">
   <div class="stock-block-header">
     <div class="stock-ident">
       <div class="stock-name-row">
-        <span class="stock-name">{s.name}</span>
-        <span class="stock-symbol">{s.symbol}</span>
+        <span class="stock-name">{_esc_name}</span>
+        <span class="stock-symbol">{_esc_symbol}</span>
       </div>
       <div class="stock-price-row">
         <span class="price-num">{price_str}</span>
@@ -281,16 +286,8 @@ def _render_stock_blocks(stocks, analyses, quotes, mode, personals=None):
 
 
 # ── 偵錯（找完問題後移除）───────────────────────���────────
-@app.route('/debug-oauth')
-def debug_oauth():
-    from modules.auth import oauth
-    redirect_uri = url_for('auth.callback', _external=True)
-    auth_url = oauth.google.create_authorization_url(redirect_uri)
-    return f"""
-    <p>Redirect URI Flask產生: <code>{redirect_uri}</code></p>
-    <p>Client ID: <code>{os.getenv('GOOGLE_CLIENT_ID','')[:30]}...</code></p>
-    <p>Secret末尾: <code>...{os.getenv('GOOGLE_CLIENT_SECRET','')[-6:]}</code></p>
-    """
+# §四十四 S1（2026-07-17）：/debug-oauth 偵錯端點已刪除 — 未認證即洩漏
+# redirect URI / Client ID 前 30 碼 / Secret 末 6 碼（7/12 健檢 🔴 #1）
 
 # ── 頁面路由 ───────────────────────────────────────��──────
 
