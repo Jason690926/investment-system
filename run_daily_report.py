@@ -22,7 +22,7 @@ from modules.database import SessionLocal, init_db
 from modules.models import User, Stock, StockAnalysis, PatternHistory, DailyMarketSummary
 from modules.data_enricher import get_full_stock_data
 from modules.ai_analyzer_v2 import analyze_market_only, analyze_daily_news
-from modules.data_fetcher import get_tw_news_rss, get_global_markets
+from modules.data_fetcher import get_tw_news_rss, get_global_markets, get_stock_news_rss
 
 TW = timezone(timedelta(hours=8))
 
@@ -117,8 +117,11 @@ def cache_market_analysis(db, symbol: str, name: str) -> bool:
     # 優化1：批次分析跨用戶共用 — 只要有任一用戶持有此股就加「六、持倉部位建議」
     # （第六節為 user-agnostic 結構建議，不含個人成本/損益）
     is_holding = db.query(Stock).filter_by(symbol=symbol, status='holding').count() > 0
+    # §四十二：個股近 24h 新聞（fail-open）
+    stock_news = get_stock_news_rss(name, symbol)
     result = analyze_market_only(name=name, symbol=symbol,
-                                 enriched_data=enriched, is_holding=is_holding)
+                                 enriched_data=enriched, news_list=stock_news,
+                                 is_holding=is_holding)
     existing = db.query(StockAnalysis).filter_by(
         symbol=symbol, analysis_date=today, analysis_type='daily'
     ).first()

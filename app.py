@@ -729,9 +729,14 @@ def api_analyze_stock(stock_id):
         # 優化1 2026-05-22：持股時報表加「六、持倉部位建議」（user-agnostic）
         _is_holding = bool(stock.status == 'holding' and stock.trades)
 
+        # §四十二：個股近 24h 新聞（fail-open：失敗回 [] 走無新聞分支）
+        from modules.data_fetcher import get_stock_news_rss
+        _stock_news = get_stock_news_rss(stock.name, stock.symbol)
+
         result = analyze_market_only(
             name=stock.name, symbol=stock.symbol,
-            enriched_data=enriched, news_list=[], is_holding=_is_holding,
+            enriched_data=enriched, news_list=_stock_news,
+            is_holding=_is_holding,
         )
 
         # B 組 2026-05-20：DB 寫入 anchor 優先（程式鎖定），AI tag 當 fallback
