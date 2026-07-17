@@ -2190,3 +2190,36 @@ prompt 的「相關新聞」欄一直空轉。
 4 commit 各自獨立 revert；`news_list=[]` 改回即回現狀。零 migration、零 DB 寫入。
 spec：`docs/superpowers/specs/2026-07-17-stock-news-corroboration-design.md`
 plan：`docs/superpowers/plans/2026-07-17-stock-news-corroboration.md`
+
+---
+
+## §四十三 7/16 報告優化級六修法（2026-07-17）
+
+### 範圍（用戶拍板：優化級全做；§4 DIRECTION vs badge 並陳為 §三十七 設計結果，不動）
+
+| Fix | 問題（7/16 實證） | 修法 |
+|-----|------------------|------|
+| **R1 short 強跌反彈觀望** | 矽力/瑞軒/瑞耘/華星光 空進區距現價 25~30%，「等反彈佈空」不可操作 | `_decide_action` short 價在區下方分支加雙 gate：區間過寬（`_strong_pullback_state` 復用，>25%）或 區距過遠（`(zlo−price)/price > 25%`）→ 新 pill `🟡 強跌反彈觀望`；`_render_operation_framework` short 誠實版（砍空進/空標、留失效價+等新結構）；dashboard.js short strip 誠實化 — 全鏡像 §三十八 |
+| **R2 距峰值回落** | 用「已收盤月收盤峰值」→ 現價可高於峰值出現 -35%；`+25.1%` 正負號語意混亂 | peak 改「全月K（含進行中）盤中高點 max」→ 回落恆 ≥0；`_structure_block` 顯示去 `+` 號，語意=回落幅度 |
+| **R3 過期 gate 句** | 微星「需先突破 144」但現價 145 已在其上 | `_relaxed_sentence` pending 分支加現價檢查：已過 gate → 「已站上/跌破 Y 元，需收穩確認觸發」 |
+| **R4 relaxed 與 §5「—」並存** | 大聯大 124/微星 159/采鈺 433：§4 有理論目標、§5 顯示「—」 | 抽 `_relaxed_target_info` 共用純函式（週K優先+quantize，與 §4 同源）；post-process 在 target_pnf=None 時算 `target_note` 傳入 framework，§5 目標列顯示「需先突破 Y 元後估 X 元」（同句同源）；reached 狀態維持「—」 |
+| **R5 空值殘句** | 合晶 ⚪ 觀望「進場區：— 元（觸發須量 ≥196,074 張）」「停損：— 元 — 跌破即論點作廢」 | framework long/short 分支：值為 None 時砍量能/作廢後綴，顯示「—（無有效箱體）」 |
+| **R6 敘事錨點同步** | 華星光 §1/§3 等回測 454 vs §5 空進 471.5~489；矽力同節雙壓力區 | `_dual_swing_block` 尾端加錨點一致性鐵律（單點注入，兩函式共用）；純 prompt 約束，需重跑驗證 |
+
+### 回滾
+R1-R6 各自獨立 revert；R4 為 optional 參數 default None 向後相容；零 migration。
+
+---
+
+## §四十四 健檢 🔴 安全三項（2026-07-17）
+
+| Fix | 問題（7/12 健檢） | 修法 |
+|-----|------------------|------|
+| **S1 刪 /debug-oauth** | 未認證即洩漏 redirect URI + Client ID 前 30 碼 + Secret 末 6 碼 | 整個 route 刪除（註解自承「找完問題後移除」） |
+| **S2 OAuth allowlist** | 任何 Google 帳號可自動建帳號消耗 AI 額度 | `auth.py` callback 加 `ALLOWED_EMAILS` env 檢查（逗號分隔、case-insensitive、抽 `_email_allowed` 純函式可測）；**未設定 → 維持開放**（向後相容防鎖死）+ log warning；設定後所有登入（含既有帳號）都須在清單內 |
+| **S3 Stored XSS** | 股票名稱/symbol 經 `_render_one_block` f-string 與 dashboard.js innerHTML 未 escape | 後端 `html.escape(s.name/s.symbol)`；前端加 `escHtml` helper 套 buildCard 名稱/代號 |
+
+**S2 deploy 待辦（用戶）**：Render 環境變數設 `ALLOWED_EMAILS=<家人 email 逗號清單>`；未設定前行為不變。
+
+### 回滾
+S1-S3 各自獨立 revert；S2 env 未設定即等同 revert；零 migration。
