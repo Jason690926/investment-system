@@ -1191,8 +1191,9 @@ def _structure_block(enriched_data: dict, price_f) -> str:
             '違反此鐵律 → 程式 post-process 會強制覆寫 DIRECTION=neutral 並 log warning。'
         ),
     }.get(flag, '')
+    # §四十三 R2：回落恆 ≥ 0（峰值=全月K盤中高），去 + 號 — 語意=回落幅度
     dd = ms['drawdown_from_peak']
-    dd_txt = f'{dd:+.1f}%' if dd is not None else '—'
+    dd_txt = f'{dd:.1f}%' if dd is not None else '—'
     hold = '是' if ms['weekly_hold_support'] else '否'
     return (
         "【月線結構客觀事實】（程式計算，禁止 AI 推翻）\n"

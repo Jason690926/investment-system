@@ -319,9 +319,15 @@ def compute_monthly_structure(monthly_bars: list, weekly_bars: list,
         result['monthly_structure']       = _hl_trend(completed[-3:])
         result['consecutive_bear_months'] = _consecutive_bear(completed)
         closes = [float(b['close']) for b in completed]
-        peak = max(closes) if closes else 0
+        # §四十三 R2：峰值改「全月K（含進行中）盤中高點 max」— 舊法用已收盤
+        # 收盤峰，強漲股現價高於峰值出現負回落（合晶 7/16 -35%）；改法後
+        # 現價恆 ≤ 峰值，回落恆 ≥ 0（顯示端同步去 + 號，語意=回落幅度）
+        highs = [float(b.get('high') if b.get('high') is not None else b['close'])
+                 for b in monthly_bars]
+        peak = max(highs) if highs else 0
         if peak > 0 and price is not None:
-            result['drawdown_from_peak'] = round((peak - float(price)) / peak * 100, 1)
+            result['drawdown_from_peak'] = round(
+                max(0.0, (peak - float(price)) / peak * 100), 1)
         # 強勢上漲否決指標
         if len(completed) >= 3:
             c3 = closes[-3:]
