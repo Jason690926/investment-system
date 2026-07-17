@@ -1033,6 +1033,17 @@ def _decide_action(status: str, direction: str, structure_flag: str,
                             return '🟡 等反轉佈空'
                         return '🔴 分批佈空'
                     if price_f < zlo_buf:
+                        # R1 §四十三：強跌後空進區過遠（下緣距現價 >25%）或
+                        # 區間過寬（>25%，門檻同 §三十八；_strong_pullback_state
+                        # 有 price<elo → None 的 long 專用 guard 故此處 inline 算）
+                        # → 「等反彈佈空」不可操作，誠實觀望（矽力/瑞軒/瑞耘/
+                        # 華星光 7/16 空進區距現價 25~30% 案例，long 鏡像）
+                        far = (price_f > 0
+                               and (zlo - price_f) / price_f > 0.25)
+                        wide = (price_f > 0
+                                and (zhi - zlo) / price_f > 0.25)
+                        if far or wide:
+                            return '🟡 強跌反彈觀望'
                         return '🟡 等反彈佈空'
                 except (TypeError, ValueError, IndexError):
                     pass
@@ -1195,6 +1206,16 @@ def _render_operation_framework(action_pill: str, direction: str,
                 + _row(f'建議動作：{action_pill}')
                 + _row(f'失效價：{_fmt(inv)} 元 — 價已站回其上，空方論點作廢')
                 + _row('等新結構形成後再評估（原空進區 / 空標已不適用）')
+                + _divider()
+            )
+        # R1 §四十三：強跌反彈觀望 → 誠實第五節（鏡像 §三十八 long 強漲回測）
+        if '強跌反彈觀望' in (action_pill or ''):
+            return (
+                _divider()
+                + _row(f'建議動作：{action_pill}')
+                + _row('強跌後反彈，原空進區距現價過遠 / 區間過寬（不可操作）')
+                + _row(f'失效價：{_fmt(inv)} 元 — 站回其上即論點作廢')
+                + _row('等新空方結構形成後再估空進區 / 空標')
                 + _divider()
             )
         # R5 §四十三：值缺時砍後綴（鏡像 long）；R4：空標缺時帶 relaxed note

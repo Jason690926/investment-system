@@ -233,10 +233,15 @@ function renderAnchorStrip(s) {
   if (dir === '空' && !noEntryData) {
     // short: 空進(entry_low-entry_high 區間，§四十一 F2 鏡像 long 格式) |
     // 空停(stop_loss = raw range_high) | 空標(target_pnf)
-    const shortEntry = (s.entry_low != null && s.entry_high != null)
-      ? `${s.entry_low}-${s.entry_high}`
-      : fmt(s.entry_high != null ? s.entry_high : s.entry_low);
-    html = `空進 ${shortEntry} <span class="anchor-sep">|</span> 空停 ${fmt(s.stop_loss)} <span class="anchor-sep">|</span> 空標 ${fmt(s.target_pnf)}`;
+    // §四十三 R1：強跌反彈觀望 → 誠實 strip（鏡像 §三十八 #2 long）
+    if (pill.includes('強跌反彈觀望')) {
+      html = `失效 ${fmt(s.stop_loss)} <span class="anchor-sep">·</span> 空區過遠待新箱`;
+    } else {
+      const shortEntry = (s.entry_low != null && s.entry_high != null)
+        ? `${s.entry_low}-${s.entry_high}`
+        : fmt(s.entry_high != null ? s.entry_high : s.entry_low);
+      html = `空進 ${shortEntry} <span class="anchor-sep">|</span> 空停 ${fmt(s.stop_loss)} <span class="anchor-sep">|</span> 空標 ${fmt(s.target_pnf)}`;
+    }
   } else if (dir === '多' && !noEntryData) {
     // §三十八 #2：強漲回測觀望 → 誠實 strip（失效 X · 症狀待新箱）
     if (pill.includes('強漲回測觀望')) {
