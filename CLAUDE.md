@@ -6,11 +6,29 @@
 - **架構決策**：討論完方案後，先更新 `plan.md`，再開始寫程式
 - `plan.md` 只在需要查架構細節時才讀（節省 token）
 
-## 當前進度（2026-07-16 — §四十 驗收通過 ✅ + §四十一 7/16 cross-check 調查完成、方案已定、未動工）
+## 當前進度（2026-07-17 — §四十一 三修法已實作完成、pytest 439/439 全綠、待 push + 用戶重跑驗收）
 
 **所在週次：週8（AI 偏空校正 + 報表品質）**
 
-**狀態：HEAD = `97263fc`（本地 = origin/main 同步，本次零程式修改）；pytest 427/427 基線不變**
+**狀態：§四十一 2 commit（feat + docs）已完成於本地；pytest 439/439 全綠（427 baseline + 12 新）**
+
+### ✅ §四十一（2026-07-17）：short 渲染層一致性三修法 — 已實作
+
+**F2 兩設計點用戶已拍板**：(a) 空停統一 raw range_high（不 round，避免 banker's rounding 新偏差）；(b) pill 空進改區間 `entry_low~entry_high`。
+
+| Fix | 實作 |
+|-----|------|
+| **F1 §5 目標同源+guard** | 兩 call site 在 render 前 `_sl = {**_sl, 'target': result.get('target_pnf')}`；framework guard：short 空標須<price、long 目標須>price 否則「—」 |
+| **F2 空停統一** | `_resolve_swing_anchors` 空停 = `float(range_high)`（20日高 fallback 同步）；app.py 空進 pill 顯示區間（entry 缺 fallback 單值）；dashboard.js short strip `entry_low-entry_high` |
+| **F3 論點作廢誠實 §5** | framework short 分支：pill 含「論點作廢」→ 砍空進區/空標，保留「失效價 X 元 — 價已站回其上」+ 等新結構 |
+
+**測試**：新增 `tests/test_short_render_consistency.py`（12 case）；配對改 `test_swing_anchors.py`（空停==壓力 + raw 不 round）、`test_report_bugfixes.py`（fallback 103→100）、`test_print_report.py`（fixture stop 227 + 順序斷言）。`test_objective_action_decouple.py` 複查無需改。
+
+**驗收（燒 ~$0.6 重跑後）**：short 股全報告單一空停數字（pill=§5=§3=gate）；pill 空進區間 = §5 空進區；站回空停上方股 §5 無空進區/空標只剩失效價；瑞耘類 §5 目標 = pill = §4 同值。
+
+**回滾**：3 fix 各自獨立、零 migration。plan：`plan.md §四十一`。
+
+**待辦（沿用 7/16 未列入項）**：short 版強漲回測誠實揭露（§四十二 候選）；AI 敘事 vs 程式錨點不同步；距峰值回落正負號；relaxed 目標與 §5「—」並存；健檢 🔴 安全項（/debug-oauth、OAuth allowlist、XSS）。
 
 ### ✅ §四十 驗收結果（7/16 報告 cross-check，3 hold + 9 watch = 12 檔）
 

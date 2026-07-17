@@ -2089,3 +2089,63 @@ plan：`docs/superpowers/plans/2026-07-12-trend-evidence-score.md`
 ### 回滾
 3 fix 各自獨立 revert：F1 純資料層 filter；F2 `_decide_action` 加 optional 參數
 （default False 向後相容）；F3 `_dual_pnf` 加 optional 參數（default False = 原行為）。
+
+---
+
+## §四十一 short 渲染層一致性三修法：§5 目標同源 + 空停統一 + 論點作廢誠實化（2026-07-17）
+
+### 緣起（7/16 報告 cross-check，根因全部已在程式碼確認）
+1. **§5 空標與 pill/§4 目標雙源**：§5 操作框架用 `calc_swing_levels` 的 target
+   （日K lookback=20、tick 進位）；pill 與 §4 用 `_dual_pnf` 的 `target_pnf`
+   （週K lookback=12 優先 + `_quantize_price`）。2026-05-22 Bug B 只把 pill 對齊
+   target_pnf，§5 從未對齊。實例：瑞耘 pill/§4=71.0 vs §5=71.30；晶心科 §5 空標
+   232.00 高於現價 228（§4 明寫論點失效、pill 有 read-time guard 正確隱藏，
+   §5 是分析時烘焙進 html_content 缺同道 guard）。
+2. **pill=🔴 論點作廢 但 §5 仍給完整空進區**：晶心科價 228 站回空停 210.5 上方
+   8.3%，§5 照印「空進 204.19~210.50」。long 側 §三十八 有誠實第五節，short 無鏡像。
+3. **空停雙數字（7 檔 short 全中）**：pill 空停 = `_resolve_swing_anchors` 的
+   `range_high × 1.03`（§二十四 B1c）；§5 空停/§3 失效回補/`_decide_action` 作廢
+   gate 全用 raw `range_high`。晶心科 217/210.5、矽力 664/645、創惟 113/109.5…
+
+### 用戶已拍板（2026-07-17）
+- F2(a) 空停統一為 **raw range_high**（raw 是多數方，×1.03 只活在 pill 顯示層）
+- F2(b) pill 空進改顯示**區間 entry_low~entry_high**（原單值 range_high 會與新空停
+  同值；區下緣才是可操作價；鏡像 long strip 格式）
+
+### 修法（3 fix，零 migration、零新 prompt）
+
+| Fix | 修法 |
+|-----|------|
+| **F1 §5 目標同源+guard** | 兩 call site（`ai_analyzer_v2.py` §三十一 post-process 區）在 `_render_operation_framework` 前把 `_sl['target']` 覆寫為 `result['target_pnf']`（breakout 路徑 §四十 F3 已同值，覆寫冪等）；framework 加 guard：short 空標須 < price、long 目標須 > price，否則顯示「—」（鏡像 app.py pill read-time guard，防盤中跑分析 stale） |
+| **F2 空停統一失效價** | `_resolve_swing_anchors` 砍 ×1.03 → `stop_loss_anchor = float(range_high)`（不再 round，避免 banker's rounding 產生 210.5→210 新偏差；顯示層 `_format_price` 統一格式）；20日高 fallback 同步砍 ×1.03。app.py short pill 空進改顯示 `entry_low~entry_high` 區間（entry 缺則 fallback 原單值 resistance）；dashboard.js short strip 空進同步改 `entry_low-entry_high` |
+| **F3 論點作廢誠實 §5** | `_render_operation_framework` short 分支：pill 含「論點作廢」→ 誠實版（砍空進區/空標，保留「失效價 X 元 — 價已站回其上，空方論點作廢」+「等新結構形成後再評估」），鏡像 §三十八 long 誠實第五節 pattern |
+
+### 設計決策
+1. **F1 覆寫在 call site 而非 framework 內**：framework 是純函式不該知道
+   target_pnf 來源；call site 一行覆寫，breakout 路徑冪等。
+2. **F2 不 round**：原 `round(rh*1.03, 0)` 的 0dp 規則若沿用在 raw 值上，
+   210.5 會被 banker's rounding 成 210，反而製造新偏差；raw float 交給
+   顯示層（`_format_price` / `.2f`）統一。
+3. **F3 判據用 pill 字串**（含「論點作廢」）而非重算 gate：pill 由
+   `_decide_action` 同源產出，字串判斷零重複邏輯（同 §三十八「強漲回測觀望」手法）。
+
+### 受影響檔案
+`modules/ai_analyzer_v2.py`（framework + anchors + 兩 call site）、
+`app.py`（short pill 空進區間）、`static/js/dashboard.js`（short strip）
+
+### 受影響測試（配對改）
+- `test_swing_anchors.py`：空停 >空進 → ==（raw 同值）；rounding test 改斷言 raw
+- `test_report_bugfixes.py`：fallback 103.0 → 100.0
+- `test_print_report.py`：fixture stop 234 → 227 + 順序斷言改（空進下緣 < 空停）
+- `test_objective_action_decouple.py`：F2 區段複查（斷言不含空進單值，應不需改）
+- 新增：framework guard / 論點作廢誠實化 / anchor raw 化 / app.py 空進區間 測試
+
+### 驗收（燒 ~$0.6 重跑後）
+- short 股全報告單一空停數字（pill = §5 = §3 = 作廢 gate）
+- pill 空進顯示區間，與 §5 空進區同值
+- 站回空停上方的 short 股（pill 論點作廢）§5 不再給空進區/空標
+- 瑞耘類 §5 目標 = pill = §4 同值
+
+### 回滾
+3 fix 各自獨立 revert：F1 call site 一行 + framework guard；F2 anchors 函式 +
+顯示層兩處；F3 framework 新分支。零 DB 變動。
