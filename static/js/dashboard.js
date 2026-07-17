@@ -231,8 +231,12 @@ function renderAnchorStrip(s) {
   let html = '';
   let extraCls = '';
   if (dir === '空' && !noEntryData) {
-    // short: 空進(entry_high) | 空停(stop_loss) | 空標(target_pnf)
-    html = `空進 ${fmt(s.entry_high)} <span class="anchor-sep">|</span> 空停 ${fmt(s.stop_loss)} <span class="anchor-sep">|</span> 空標 ${fmt(s.target_pnf)}`;
+    // short: 空進(entry_low-entry_high 區間，§四十一 F2 鏡像 long 格式) |
+    // 空停(stop_loss = raw range_high) | 空標(target_pnf)
+    const shortEntry = (s.entry_low != null && s.entry_high != null)
+      ? `${s.entry_low}-${s.entry_high}`
+      : fmt(s.entry_high != null ? s.entry_high : s.entry_low);
+    html = `空進 ${shortEntry} <span class="anchor-sep">|</span> 空停 ${fmt(s.stop_loss)} <span class="anchor-sep">|</span> 空標 ${fmt(s.target_pnf)}`;
   } else if (dir === '多' && !noEntryData) {
     // §三十八 #2：強漲回測觀望 → 誠實 strip（失效 X · 症狀待新箱）
     if (pill.includes('強漲回測觀望')) {

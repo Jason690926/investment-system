@@ -45,7 +45,7 @@ class TestResolveSwingAnchors:
 
     def test_short_anchors_have_correct_semantic(self):
         """short：support=range_low（下方目標）、resistance=range_high（回測壓力）、
-        stop_loss=range_high × 1.03（前高失效）。"""
+        stop_loss=range_high（raw 失效價，§四十一 F2 砍 ×1.03）。"""
         # 構造明確的 swing high/low：起伏夾雜
         bars = _make_bars([
             (100, 95), (102, 96), (105, 98), (108, 100),  # 上行段
@@ -64,9 +64,10 @@ class TestResolveSwingAnchors:
         assert result['resistance_anchor'] is not None, '應有 swing_high'
         assert result['stop_loss_anchor']  is not None, 'short 必有 stop_loss'
 
-        # 核心語意：空停（前高 ×1.03）必須 > 空進（回測壓力）
-        assert result['stop_loss_anchor'] > result['resistance_anchor'], (
-            f'空停 {result["stop_loss_anchor"]} 必須 > 空進 {result["resistance_anchor"]}'
+        # 核心語意（§四十一 F2）：空停 = raw range_high = 回測壓力（同值，
+        # 與 §5 空停 / §3 失效回補 / 作廢 gate 統一）
+        assert result['stop_loss_anchor'] == result['resistance_anchor'], (
+            f'空停 {result["stop_loss_anchor"]} 應 == range_high {result["resistance_anchor"]}'
         )
         # 空進（壓力）必須 > 空標（支撐 = 下方目標）
         assert result['resistance_anchor'] > result['support_anchor'], (
@@ -96,9 +97,9 @@ class TestResolveSwingAnchors:
             f'資料不足應全 None，實際：{result}'
         )
 
-    def test_stop_loss_rounding(self):
-        """stop_loss 數值依股價區間 round：< 100 → 1dp、≥ 100 → 0dp。"""
-        # 高價股測試（≥ 100）
+    def test_stop_loss_raw_not_rounded(self):
+        """§四十一 F2：stop_loss = raw range_high，不做 round（round 會讓 210.5
+        被 banker's rounding 成 210 製造新偏差；格式交顯示層統一）。"""
         bars_hi = _make_bars([
             (200, 190), (210, 195), (220, 200),
             (215, 205), (210, 200), (205, 195),
@@ -108,8 +109,7 @@ class TestResolveSwingAnchors:
         ])
         result = _resolve_swing_anchors({'daily_bars': bars_hi}, 200.0, 'short')
         if result['stop_loss_anchor'] is not None:
-            # ≥ 100 應為整數
-            assert result['stop_loss_anchor'] == round(result['stop_loss_anchor'], 0)
+            assert result['stop_loss_anchor'] == float(result['resistance_anchor'])
 
 
 # ────────────────────────────────────────

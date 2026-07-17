@@ -45,10 +45,11 @@ def _flat_bars(n=30, h=100, l=95):
 
 
 def test_short_stop_loss_fallback_when_no_swing():
-    """short：日K 充足(≥20)但算不出 swing → 空停 fallback 近20日高×1.03。"""
+    """short：日K 充足(≥20)但算不出 swing → 空停 fallback 近20日高
+    （§四十一 F2：raw，砍 ×1.03）。"""
     r = _resolve_swing_anchors({'daily_bars': _flat_bars(30)}, 97.0, 'short')
     assert r['stop_loss_anchor'] is not None, 'short 充足資料應 fallback 出空停'
-    assert r['stop_loss_anchor'] == 103.0  # max high 100 × 1.03
+    assert r['stop_loss_anchor'] == 100.0  # raw max high
 
 
 def test_short_no_fallback_when_data_insufficient():

@@ -167,7 +167,14 @@ def _render_one_block(s, a, q, idx, mode, personal_html=None):
             dir_badge = '空'
             pills.append(f'<span class="pill pill-ink"><span class="lbl">方向 </span>{dir_badge}</span>')
             # 順序：空進（最先看到的進場價）/ 空停 / 空標
-            if a.resistance_price is not None:
+            # §四十一 F2：空進改顯示區間 entry_low~entry_high（空停統一 raw
+            # range_high 後，原單值 = 新空停會兩 pill 同數字；區下緣才是可操作價）。
+            # 舊資料 entry 缺任一邊 → fallback 原單值 resistance。
+            _elo = getattr(a, 'entry_low', None)
+            _ehi = getattr(a, 'entry_high', None)
+            if _elo is not None and _ehi is not None:
+                pills.append(f'<span class="pill pill-bull"><span class="lbl">空進 </span>{_format_price(_elo)}~{_format_price(_ehi)}</span>')
+            elif a.resistance_price is not None:
                 pills.append(f'<span class="pill pill-bull"><span class="lbl">空進 </span>{_format_price(a.resistance_price)}</span>')
             stop = getattr(a, 'stop_loss', None)
             if stop is not None:

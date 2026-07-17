@@ -270,7 +270,7 @@ def _make_short_analysis(**overrides):
         support_price=Decimal('208'),     # 中性語意 = 箱底（§三十七後 short 標頭不再顯示）
         resistance_price=Decimal('227'),  # 中性語意 = 箱頂 = 空進
         target_price=Decimal('190'),      # P&F 下行目標 = 空標（§三十七 P1-1）
-        stop_loss=Decimal('234'),         # range_high × 1.03 = 空停
+        stop_loss=Decimal('227'),         # §四十一 F2：raw range_high = 空停
         entry_low=Decimal('222'),         # §三十七：short 放空區（entry 存在 → 不被當 neutral）
         entry_high=Decimal('227'),
         analysis_date=date(2026, 5, 19),
@@ -297,19 +297,19 @@ def test_short_stock_pill_shows_short_labels():
 
 def test_short_stock_pill_price_order_correct():
     """B 組（核心驗證）：short pill 顯示順序與價位邏輯通 —
-    空進（壓力 227） < 空停（前高×1.03 234）；空標（P&F 下行 190）最低。
-    §三十七 P1-1：空標改 target_price（恆在價下），避免錯位誤導。"""
+    §四十一 F2：空進顯示區間（下緣 222 開頭）< 空停（raw range_high 227）；
+    空標（P&F 下行 190）最低。"""
     a = _make_short_analysis()
     html = _render_one_block(_make_stock(symbol='6533'), a,
                              _make_quote(close=Decimal('215')), idx=1, mode='holding')
-    # 從 HTML 中按出現順序取出 pill 文字
+    # 從 HTML 中按出現順序取出 pill 文字（空進為區間，取第一個數字 = 區下緣）
     import re
     pill_matches = re.findall(r'(?:空進|空停|空標)\s</span>([0-9.]+)', html)
     assert len(pill_matches) == 3, f'應有 3 個 short pill，實際 {len(pill_matches)}：{html[:500]}'
     空進_val, 空停_val, 空標_val = [float(v) for v in pill_matches]
-    # 核心斷言：空進 < 空停（停損在進場上方），空標最低
-    assert 空進_val < 空停_val, f'空進 {空進_val} 應 < 空停 {空停_val}（停損在進場上方）'
-    assert 空標_val < 空進_val, f'空標 {空標_val} 應 < 空進 {空進_val}（目標在最下方）'
+    # 核心斷言：空進區下緣 < 空停（失效價在進場區上緣），空標最低
+    assert 空進_val < 空停_val, f'空進下緣 {空進_val} 應 < 空停 {空停_val}'
+    assert 空標_val < 空進_val, f'空標 {空標_val} 應 < 空進下緣 {空進_val}（目標在最下方）'
 
 
 def test_long_stock_pill_uses_box_labels():

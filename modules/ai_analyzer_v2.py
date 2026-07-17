@@ -463,7 +463,8 @@ def _resolve_swing_anchors(enriched_data: dict, price_f, direction: str) -> dict
       - support_anchor    : long=range_low（真支撐），short=range_low（下方=空方目標）
       - resistance_anchor : long=range_high（真壓力），short=range_high（回測壓力=空進）
       - target_anchor     : swing.target（long P&F 上行 / short P&F 下行）
-      - stop_loss_anchor  : short=range_high × 1.03（前高之上 3% 失效）；long/neutral=None
+      - stop_loss_anchor  : short=range_high（raw 失效價，§四十一 F2 砍 ×1.03，
+                            與 §5 空停 / §3 失效回補 / 作廢 gate 同值）；long/neutral=None
 
     語意設計：support/resistance/target 三欄永遠中性（箱底/箱頂/measured target），
     stop_loss 新欄位（B1c 路徑，零語意污染）。pill render 對 short 翻牌
@@ -481,14 +482,15 @@ def _resolve_swing_anchors(enriched_data: dict, price_f, direction: str) -> dict
     if direction == 'short':
         rh = sl.get('range_high') if sl else None
         if rh:
-            # 空停 = 前高 × 1.03（3% buffer above 失效點）
-            out['stop_loss_anchor'] = round(float(rh) * 1.03, 1 if rh < 100 else 0)
+            # §四十一 F2：空停 = raw range_high（砍 ×1.03，不 round —
+            # round 會讓 210.5 被 banker's rounding 成 210 製造新偏差；
+            # 顯示層 _format_price 統一格式）
+            out['stop_loss_anchor'] = float(rh)
         elif len(dk) >= 20:
-            # Bug4 fallback：swing 算不出但日K 充足 → 用近 20 日最高 × 1.03 補空停
+            # Bug4 fallback：swing 算不出但日K 充足 → 用近 20 日最高補空停
             highs = [float(b['high']) for b in dk[-20:] if b.get('high') is not None]
             if highs:
-                rhf = max(highs)
-                out['stop_loss_anchor'] = round(rhf * 1.03, 1 if rhf < 100 else 0)
+                out['stop_loss_anchor'] = float(max(highs))
     return out
 
 
@@ -1050,6 +1052,18 @@ def _render_operation_framework(action_pill: str, direction: str,
     tg = sl.get('target')
     inv = sl.get('invalidation')
 
+    # F1 §四十一 guard：目標須在方向正確一側（short 空標<price、long 目標>price），
+    # 否則顯示「—」— 鏡像 app.py pill read-time guard，防盤中跑分析後 stale
+    # 目標烘焙進 html_content（晶心科 7/16 空標 232 > 現價 228 實例）。
+    if price is not None and tg is not None:
+        try:
+            _p, _t = float(price), float(tg)
+            if (direction == 'short' and _t >= _p) or \
+               (direction == 'long' and _t <= _p):
+                tg = None
+        except (TypeError, ValueError):
+            pass
+
     def _fmt(v):
         if v is None:
             return '—'
@@ -1115,6 +1129,17 @@ def _render_operation_framework(action_pill: str, direction: str,
         )
 
     if direction == 'short':
+        # F3 §四十一：論點作廢 → 誠實第五節（砍空進區/空標，保留客觀失效價），
+        # 鏡像 §三十八 long「強漲回測觀望」誠實化 pattern（晶心科 7/16 站回
+        # 空停上方 8.3% 仍印完整空進區的實例）。
+        if '論點作廢' in (action_pill or ''):
+            return (
+                _divider()
+                + _row(f'建議動作：{action_pill}')
+                + _row(f'失效價：{_fmt(inv)} 元 — 價已站回其上，空方論點作廢')
+                + _row('等新結構形成後再評估（原空進區 / 空標已不適用）')
+                + _divider()
+            )
         return (
             _divider()
             + _row(f'建議動作：{action_pill}')
@@ -1519,6 +1544,10 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
                 _vol_thr = int(float(_v5) * 1.5)
         except (TypeError, ValueError):
             pass
+        # F1 §四十一：§5 目標與 pill/§4 同源 — 覆寫為 target_pnf
+        # （_dual_pnf 週K優先 + quantize；breakout 路徑 §四十 F3 已同值，覆寫冪等）
+        if _sl:
+            _sl = {**_sl, 'target': result.get('target_pnf')}
         _op = _render_operation_framework(
             action_pill=_action,
             direction=result['direction'],
@@ -1961,6 +1990,10 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
                 _vol_thr = int(float(_v5) * 1.5)
         except (TypeError, ValueError):
             pass
+        # F1 §四十一：§5 目標與 pill/§4 同源 — 覆寫為 target_pnf
+        # （_dual_pnf 週K優先 + quantize；breakout 路徑 §四十 F3 已同值，覆寫冪等）
+        if _sl:
+            _sl = {**_sl, 'target': result.get('target_pnf')}
         _op = _render_operation_framework(
             action_pill=_action,
             direction=result['direction'],
