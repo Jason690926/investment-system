@@ -6,11 +6,25 @@
 - **架構決策**：討論完方案後，先更新 `plan.md`，再開始寫程式
 - `plan.md` 只在需要查架構細節時才讀（節省 token）
 
-## 當前進度（2026-07-17 — §四十一 三修法已實作完成、pytest 439/439 全綠、待 push + 用戶重跑驗收）
+## 當前進度（2026-07-17 — §四十一 已 push + §四十二 個股新聞佐證已實作、pytest 453/453 全綠、待用戶重跑驗收）
 
 **所在週次：週8（AI 偏空校正 + 報表品質）**
 
-**狀態：§四十一 2 commit（feat + docs）已完成於本地；pytest 439/439 全綠（427 baseline + 12 新）**
+**狀態：§四十一（2 commit，已 push）+ §四十二（4 feat + 3 docs commit，subagent-driven TDD）；pytest 453/453 全綠（439 §四十一 baseline + 14 新）**
+
+### ✅ §四十二（2026-07-17）：個股當日新聞佐證量價異動 — 已實作
+
+**定位**：新聞只是「當日量價異動的歸因佐證」，不是趨勢引擎輸入 — 結構旗標/評分/DIRECTION/錨點完全不動。五設計點（角色=只餵 prompt 零 migration / 24h 時窗 / fail-open 不快取 / 三鐵律 / 無新聞主動訊號化）用戶逐題拍板。
+
+| commit | 內容 |
+|--------|------|
+| `68564f5` | `get_stock_news_rss` + `_filter_stock_news`（Google News 搜尋 RSS、標題含股名過濾、24h cutoff、fail-open）（8 case） |
+| `53ccf58` | `_stock_news_block` 注入塊（三鐵律 + 無新聞禁令）（6 case） |
+| `dbc3e6e` | 兩 analyze 函式 prompt 換 block（大盤/產業 news_text 未動） |
+| `b3a8b8d` | 兩 call site 接線（app.py 一鍵分析 + run_daily_report 手動批次）；台積電真連線 smoke 5 筆含 pub_label ✅ |
+
+**驗收（燒 ~$0.6，與 §四十一 一起驗）**：有新聞股敘事引用+標時間、無新聞股不腦補題材、撼訊型矛盾寫「新聞面與量價數據不一致」；Render log 觀察 `[stock_news]` 失敗率。
+spec/plan：`docs/superpowers/{specs,plans}/2026-07-17-stock-news-corroboration*`
 
 ### ✅ §四十一（2026-07-17）：short 渲染層一致性三修法 — 已實作
 

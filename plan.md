@@ -2149,3 +2149,44 @@ plan：`docs/superpowers/plans/2026-07-12-trend-evidence-score.md`
 ### 回滾
 3 fix 各自獨立 revert：F1 call site 一行 + framework guard；F2 anchors 函式 +
 顯示層兩處；F3 framework 新分支。零 DB 變動。
+
+---
+
+## §四十二 個股當日新聞佐證量價異動（2026-07-17）
+
+### 緣起
+7/16 報告發現 AI 敘事 vs 程式量價脫鉤（撼訊：AI 寫「放量 250 張」但程式特徵=均量）；
+且「今日漲停/急漲的性質」缺消息面佐證 — 無消息拉抬（主力行為）vs 利多見報上漲
+（大眾行為）在威科夫框架下是不同品質訊號。生產路徑 `app.py` 原寫死 `news_list=[]`，
+prompt 的「相關新聞」欄一直空轉。
+
+**定位（用戶拍板）**：新聞是「當日量價異動的歸因佐證」，不是趨勢引擎輸入 —
+結構旗標 / §三十九評分 / DIRECTION gate / 程式錨點完全不受新聞影響。
+
+### 用戶拍板五設計點
+| # | 設計點 | 決定 |
+|---|--------|------|
+| 1 | 角色範圍 | 只餵 AI 當佐證（prompt 注入，報表不加新聞區塊，零 migration） |
+| 2 | 時窗 | 24h（涵蓋昨盤後重訊 + 今日盤中；每則附台灣時間 pub_label） |
+| 3 | 限流 | 誠實降級不快取（timeout 5s、失敗回 [] 走無新聞分支；靠逐股天然間隔） |
+| 4 | 鐵律 | 三條全上（禁推翻結構閘 / 矛盾時程式為準 / 禁引新聞數字） |
+| 5 | 無新聞日 | 主動訊號化（禁止臆測消息面，只能歸因「無公開新聞佐證，屬資金面/技術面行為」） |
+
+### 實作（4 feat commit，TDD，pytest 439→453 全綠）
+| commit | 內容 |
+|--------|------|
+| `68564f5` feat | `data_fetcher._filter_stock_news`（純過濾：標題含股名 + 24h cutoff + naive datetime 防 crash）+ `get_stock_news_rss`（Google News 搜尋 RSS，fail-open）（8 case） |
+| `53ccf58` feat | `ai_analyzer_v2._stock_news_block` 注入塊純函式（三鐵律 / 無新聞禁令 / legacy 格式相容）（6 case） |
+| `dbc3e6e` feat | 兩 analyze 函式 news_text 換 block + prompt 模板砍舊「【近期相關新聞】」標題（大盤/產業 news_text 未動） |
+| `b3a8b8d` feat | 兩 call site 接線：`app.py` 一鍵分析 + `run_daily_report.py` 手動批次；真連線 smoke（台積電 5 筆含 pub_label）通過 |
+
+### 驗收（燒 ~$0.6 重跑後）
+1. 有新聞股：敘事引用新聞歸因當日異動（含發布時間），數字全用程式注入值
+2. 無新聞小型股：不出現「市場傳聞」「消息面利多」等腦補字眼
+3. 撼訊型矛盾：AI 寫「新聞面與量價數據不一致」而非順著新聞編
+4. Render log 觀察 `[stock_news]` 失敗率（大量失敗 → 評估升級 TTL 快取）
+
+### 回滾
+4 commit 各自獨立 revert；`news_list=[]` 改回即回現狀。零 migration、零 DB 寫入。
+spec：`docs/superpowers/specs/2026-07-17-stock-news-corroboration-design.md`
+plan：`docs/superpowers/plans/2026-07-17-stock-news-corroboration.md`
