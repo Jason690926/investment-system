@@ -425,6 +425,25 @@ def _dual_pnf(enriched_data: dict, price_f, breakout: bool = False):
       vs 第五節框架/pill（post-process，AI 後）」雙目標價矛盾
       （大聯大 120 vs 133、微星 159 vs 196.2 案例）
     """
+    # §四十五：句子計算抽 _pnf_sentences（post-process 方向矯正同源復用）
+    pnf_long, pnf_short, long_sentence, short_sentence = _pnf_sentences(
+        enriched_data, price_f, breakout)
+    block = (
+        f"【P&F等幅量度·多方（程式計算成品句，verbatim 引用）】{long_sentence}\n"
+        f"【P&F等幅量度·空方（程式計算成品句，verbatim 引用）】{short_sentence}\n"
+        f"依你判定的 DIRECTION 取對應整句：long→多方句、short→空方句、"
+        f"neutral→「P&F概念目標：—（無方向，待結構確認）」。"
+    )
+    return pnf_long, pnf_short, block
+
+
+def _pnf_sentences(enriched_data: dict, price_f, breakout: bool = False):
+    """§四十五：P&F 多方/空方成品句計算（純函式，deterministic）。
+
+    自 _dual_pnf 抽出 — prompt 注入（AI 前）與 post-process 方向矯正
+    （AI 後）共用，保證同源。回傳 (pnf_long, pnf_short,
+    long_sentence, short_sentence)。
+    """
     wk = enriched_data.get('weekly_bars', [])
     dk = enriched_data.get('daily_bars', [])
     pnf_long  = (calc_pnf_target(wk, lookback=12, current_price=price_f, direction='long')
@@ -491,13 +510,33 @@ def _dual_pnf(enriched_data: dict, price_f, breakout: bool = False):
         short_sentence = (f'P&F概念目標：{pnf_short}元（等幅量度）'
                           if pnf_short is not None
                           else _relaxed_sentence('short', 'P&F概念目標：—（無有效箱體可估算）'))
-    block = (
-        f"【P&F等幅量度·多方（程式計算成品句，verbatim 引用）】{long_sentence}\n"
-        f"【P&F等幅量度·空方（程式計算成品句，verbatim 引用）】{short_sentence}\n"
-        f"依你判定的 DIRECTION 取對應整句：long→多方句、short→空方句、"
-        f"neutral→「P&F概念目標：—（無方向，待結構確認）」。"
-    )
-    return pnf_long, pnf_short, block
+    return pnf_long, pnf_short, long_sentence, short_sentence
+
+
+# §四十五：P&F 目標句（概念/理論兩前綴，AI 可能加空白）到行尾/標籤前
+_PNF_SENTENCE_RE = re.compile(r'P&F\s*(?:概念|理論)\s*目\s*標\s*：[^<\n]*')
+
+
+def _enforce_pnf_direction(html: str, direction: str,
+                            long_sentence: str, short_sentence: str):
+    """§四十五：AI 未依 DIRECTION 取對應 P&F 句 → post-process 強制替換。
+
+    7/17 實證：撼訊 DIRECTION=short 引多方失效句「論點已失效（跌穿支撐
+    121 元）」、晶心科 neutral 引 long relaxed 句。程式已知三句原文與
+    最終 direction（含 safety net 覆寫後）→ deterministic 置換。
+
+    回傳 (html, replaced)。html 無 P&F 句（AI 漏寫）→ 原樣不亂插。
+    """
+    correct = {'long': long_sentence, 'short': short_sentence}.get(
+        direction, 'P&F概念目標：—（無方向，待結構確認）')
+    if not html or not correct:
+        return html, False
+    matches = _PNF_SENTENCE_RE.findall(html)
+    if not matches:
+        return html, False
+    if all(m.strip() == correct.strip() for m in matches):
+        return html, False
+    return _PNF_SENTENCE_RE.sub(lambda _m: correct, html), True
 
 
 def _resolve_swing_anchors(enriched_data: dict, price_f, direction: str) -> dict:
@@ -1700,6 +1739,15 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
             target_note=_target_note,
         )
         result['action_pill'] = _action
+        # §四十五：P&F 句方向錯配強制矯正 — AI 未依 DIRECTION 取對應句
+        # （撼訊 short 引多方失效句、晶心科 neutral 引 long relaxed 句，7/17）
+        _pl45, _ps45, _ls45, _ss45 = _pnf_sentences(enriched_data, _price_f, _breakout)
+        _fixed45, _rep45 = _enforce_pnf_direction(
+            result.get('html', '') or '', result['direction'], _ls45, _ss45)
+        if _rep45:
+            print(f"[ai_analyzer_v2] §四十五 P&F 句方向矯正: {symbol} "
+                  f"direction={result['direction']}")
+            result['html'] = _fixed45
         _html = result.get('html', '') or ''
         if '[[OPERATION_FRAMEWORK]]' in _html:
             result['html'] = _html.replace('[[OPERATION_FRAMEWORK]]', _op)
@@ -2153,6 +2201,15 @@ MACD：DIF={macd.get('macd','--')} | DEA={macd.get('signal','--')} | 柱狀={mac
             target_note=_target_note,
         )
         result['action_pill'] = _action
+        # §四十五：P&F 句方向錯配強制矯正 — AI 未依 DIRECTION 取對應句
+        # （撼訊 short 引多方失效句、晶心科 neutral 引 long relaxed 句，7/17）
+        _pl45, _ps45, _ls45, _ss45 = _pnf_sentences(enriched_data, _price_f, _breakout)
+        _fixed45, _rep45 = _enforce_pnf_direction(
+            result.get('html', '') or '', result['direction'], _ls45, _ss45)
+        if _rep45:
+            print(f"[ai_analyzer_v2] §四十五 P&F 句方向矯正: {symbol} "
+                  f"direction={result['direction']}")
+            result['html'] = _fixed45
         _html2 = result.get('html', '') or ''
         if '[[OPERATION_FRAMEWORK]]' in _html2:
             result['html'] = _html2.replace('[[OPERATION_FRAMEWORK]]', _op)
