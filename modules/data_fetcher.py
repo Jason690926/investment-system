@@ -301,6 +301,93 @@ def get_tw_news_rss(n: int = 15) -> list:
         return []
 
 
+def _filter_stock_news(items: list, name: str, cutoff, n: int = 5) -> list:
+    """§四十二 個股新聞純過濾邏輯（可測試）。
+
+    items: [{'title', 'source', 'pub_dt'(aware datetime | None)}]
+    規則：
+      - 標題必須含股名（Google News 搜尋模糊匹配不可信，標題含股名才算相關）
+      - pub_dt < cutoff → 剔除；pub_dt=None（解析失敗）→ 保留（沿用
+        get_tw_news_rss 寬容邏輯）；naive datetime 比較 TypeError → 保留
+      - 最多 n 則
+    回傳: [{'title', 'source', 'pub_label'}]，pub_label = 台灣時間
+    'MM/DD HH:MM'（供 AI 分辨盤前/盤後消息；無 pub_dt → ''）
+    """
+    from datetime import timezone, timedelta
+    TW = timezone(timedelta(hours=8))
+    out = []
+    for it in items:
+        if len(out) >= n:
+            break
+        title = it.get('title') or ''
+        if not title or name not in title:
+            continue
+        pub_dt = it.get('pub_dt')
+        if pub_dt is not None:
+            try:
+                if pub_dt < cutoff:
+                    continue
+            except TypeError:
+                pass  # naive datetime 無法與 aware cutoff 比較 → 保留
+        label = ''
+        if pub_dt is not None:
+            try:
+                label = pub_dt.astimezone(TW).strftime('%m/%d %H:%M')
+            except Exception:
+                label = ''
+        out.append({'title': title, 'source': it.get('source') or '',
+                    'pub_label': label})
+    return out
+
+
+def get_stock_news_rss(name: str, symbol: str = '', n: int = 5,
+                       hours: int = 24) -> list:
+    """§四十二：個股近 24h 新聞（Google News 搜尋 RSS，query=股名）。
+
+    時窗 24h（涵蓋昨盤後重訊公告 + 今日盤中新聞 — 今日漲幅的催化劑常在
+    昨盤後發布）。失敗模式：timeout 5s、任何 exception → 回 []（誠實降級，
+    caller 走「暫無相關新聞」分支；絕不阻塞分析、不 retry）。
+    限流：靠一鍵分析逐股天然間隔（每股間隔 AI 呼叫 20-60s），不加快取。
+    symbol 僅供 log 標識，不參與查詢。
+    """
+    import urllib.request
+    import urllib.parse
+    import xml.etree.ElementTree as ET
+    from email.utils import parsedate_to_datetime
+    from datetime import datetime, timezone, timedelta
+
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+    query = urllib.parse.quote(name)
+    url = (f'https://news.google.com/rss/search?q={query}'
+           f'&hl=zh-TW&gl=TW&ceid=TW:zh-TW')
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=5) as r:
+            xml_data = r.read()
+        root = ET.fromstring(xml_data)
+        items = []
+        for item in root.findall('.//item'):
+            title_el  = item.find('title')
+            source_el = item.find('source')
+            pub_el    = item.find('pubDate')
+            pub_dt = None
+            if pub_el is not None and pub_el.text:
+                try:
+                    pub_dt = parsedate_to_datetime(pub_el.text)
+                except Exception:
+                    pub_dt = None
+            items.append({
+                'title':  title_el.text  if title_el  is not None else '',
+                'source': source_el.text if source_el is not None else '',
+                'pub_dt': pub_dt,
+            })
+        return _filter_stock_news(items, name, cutoff, n)
+    except Exception as e:
+        print(f'[stock_news] {symbol or name} 抓取失敗（誠實降級，'
+              f'走無新聞分支）: {e}')
+        return []
+
+
 def get_financial_news():
     url = "https://newsapi.org/v2/everything"
     params = {
