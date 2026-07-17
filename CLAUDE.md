@@ -6,7 +6,13 @@
 - **架構決策**：討論完方案後，先更新 `plan.md`，再開始寫程式
 - `plan.md` 只在需要查架構細節時才讀（節省 token）
 
-## 當前進度（2026-07-17 — §四十一~§四十四 全部完成、pytest 487/487 全綠、7/16 報告發現全數清零、待用戶重跑驗收）
+## 當前進度（2026-07-17 — §四十一~§四十五 完成；7/17 20:35 報告已 cross-check：§四十一~§四十三 驗收全過、§四十五 修新抓到的 P&F 句方向錯配；pytest 496/496）
+
+### ✅ 7/17 報告 cross-check 結果
+- §四十一 F1/F2、§四十二 禁令、§四十三 R1~R5、§四十 F1 全部實證通過（詳見對話 2026-07-17）
+- 🔴 新 bug：AI 未依 DIRECTION 取 P&F 對應句（撼訊 short 引多方失效句、晶心科 neutral 引 long relaxed 句）→ **§四十五 已修**：`_pnf_sentences` 抽出（_dual_pnf 薄 wrapper 化）+ `_enforce_pnf_direction` post-process 用最終 direction 強制替換（連帶堵住 safety net 改向後內文殘留原方向句的舊縫隙）；pytest 496/496；下次重跑驗收
+- 🟡 觀察 1：強跌反彈觀望股 pill 仍顯示空進區間 vs §5 已誠實砍（§三十八 long 同構，優化級未修）
+- 🟡 觀察 2：7/17 大跌日市場 RSS 竟回空（NEWS「無即時資料」、INDUSTRY fallback DB 快取）→ 疑 Render IP 對 Google News 受限，**待用戶查 Render log `[stock_news]`/`[news_rss]`**；確認限流則啟動 spec 預留的 TTL 快取升級
 
 **所在週次：週8（AI 偏空校正 + 報表品質）**
 
