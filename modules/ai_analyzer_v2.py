@@ -1208,6 +1208,46 @@ def _structure_block(enriched_data: dict, price_f) -> str:
     )
 
 
+def _stock_news_block(news_list: list) -> str:
+    """§四十二：個股新聞注入塊（純函式，兩 analyze 函式共用）。
+
+    定位：新聞僅是「當日量價異動的歸因佐證」，不是趨勢引擎輸入 —
+    結構旗標 / DIRECTION / 程式錨點全部不受新聞影響（鐵律 1）。
+    無新聞 = 主動訊號（無消息拉抬屬主力/資金行為，威科夫框架下
+    與利多見報上漲是不同品質的訊號），非缺值。
+    向後相容：news_list 舊格式（僅 title/source，無 pub_label）可用。
+    """
+    items = news_list or []
+    if not items:
+        return (
+            "【個股相關新聞（近 24h，程式抓取）】暫無相關新聞（近 24h）。\n"
+            "⚠️ 無新聞禁令：禁止臆測消息面（不得寫「市場傳聞」「消息面利多」"
+            "等無依據字眼）；當日量價異動只能歸因為「無公開新聞佐證，"
+            "屬資金面/技術面行為」。"
+        )
+    lines = []
+    for n in items[:5]:
+        title = n.get('title', '')
+        src   = n.get('source', '')
+        lbl   = n.get('pub_label', '')
+        prefix = f"{lbl} " if lbl else ""
+        suffix = f"（{src}）" if src else ""
+        lines.append(f"- {prefix}{title}{suffix}")
+    return (
+        "【個股相關新聞（近 24h，程式抓取）】\n"
+        + '\n'.join(lines) + "\n"
+        "⚠️ 新聞鐵律：\n"
+        "(1) 新聞僅供歸因當日量價異動與敘事佐證，禁止作為推翻結構旗標、"
+        "DIRECTION 判定、程式錨點（進場/停損/目標）的依據 — "
+        "結構閘禁令優先於任何新聞內容。\n"
+        "(2) 標題未經核實（可能為舊聞/內容農場）；若與程式注入的量價特徵"
+        "矛盾（如新聞喊爆量但程式特徵=均量），以程式數據為準，可寫"
+        "「新聞面與量價數據不一致」。\n"
+        "(3) 禁止引用新聞中的價位/漲跌幅/目標價數字 — "
+        "所有數字一律用程式注入值。"
+    )
+
+
 # ── 個股三宗師分析 ────────────────────────────────────────────
 
 def analyze_stock_three_masters(

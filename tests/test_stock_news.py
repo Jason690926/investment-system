@@ -78,3 +78,51 @@ class TestGetStockNewsFailOpen:
 
         monkeypatch.setattr(urllib.request, 'urlopen', _boom)
         assert get_stock_news_rss('晶心科', '6533') == []
+
+
+# ── Task 2：_stock_news_block prompt 注入塊 ──────────────────────
+from modules.ai_analyzer_v2 import _stock_news_block
+
+
+class TestStockNewsBlock:
+    def test_empty_list_gives_no_news_ban(self):
+        """無新聞 → 主動訊號化：暫無字樣 + 禁止臆測消息面禁令。"""
+        block = _stock_news_block([])
+        assert '暫無相關新聞（近 24h）' in block
+        assert '禁止臆測消息面' in block
+        assert '市場傳聞' in block, '禁令應列舉禁用字眼'
+        assert '資金面' in block, '應給唯一合法歸因寫法'
+
+    def test_none_input_same_as_empty(self):
+        """None 輸入（legacy caller 未傳）→ 同無新聞分支，不 crash。"""
+        assert _stock_news_block(None) == _stock_news_block([])
+
+    def test_news_lines_with_label_and_source(self):
+        """有新聞 → 每則一行 '- MM/DD HH:MM 標題（來源）'。"""
+        block = _stock_news_block([
+            {'title': '晶心科接單暢旺', 'source': '工商時報',
+             'pub_label': '07/16 18:30'},
+        ])
+        assert '- 07/16 18:30 晶心科接單暢旺（工商時報）' in block
+
+    def test_three_iron_rules_present(self):
+        """有新聞 → 三條鐵律齊全（推翻禁令 / 矛盾程式為準 / 禁引數字）。"""
+        block = _stock_news_block([{'title': '晶心科 A', 'source': '',
+                                    'pub_label': ''}])
+        assert '禁止作為推翻結構旗標' in block
+        assert '以程式數據為準' in block
+        assert '新聞面與量價數據不一致' in block
+        assert '禁止引用新聞中的價位' in block
+
+    def test_max_5_items(self):
+        """超過 5 則只列前 5。"""
+        news = [{'title': f'晶心科 {i}', 'source': '', 'pub_label': ''}
+                for i in range(7)]
+        block = _stock_news_block(news)
+        assert block.count('- ') == 5
+
+    def test_legacy_format_without_pub_label(self):
+        """legacy 格式（無 pub_label/source key，parallel 路徑舊資料）→ 不 crash、無多餘空白。"""
+        block = _stock_news_block([{'title': '晶心科 B'}])
+        assert '- 晶心科 B' in block
+        assert '- 晶心科 B（' not in block, 'source 缺時不應有空括號'
