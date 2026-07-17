@@ -14,6 +14,20 @@
 - 🟡 觀察 1：強跌反彈觀望股 pill 仍顯示空進區間 vs §5 已誠實砍（§三十八 long 同構，優化級未修）
 - 🟡 觀察 2：7/17 大跌日市場 RSS 竟回空（NEWS「無即時資料」、INDUSTRY fallback DB 快取）→ 疑 Render IP 對 Google News 受限，**待用戶查 Render log `[stock_news]`/`[news_rss]`**；確認限流則啟動 spec 預留的 TTL 快取升級
 
+### 📌 下次開工接手點（2026-07-17 收工）
+
+**今日成果總覽**：§四十一（short 渲染一致性三修法）→ §四十二（個股新聞佐證，subagent-driven）→ §四十三（7/16 優化級六修法 R1~R6）→ §四十四（安全三項）→ 7/17 20:35 報告 cross-check → §四十五（P&F 句方向錯配矯正）。pytest 427 → **496/496**；全部已 push origin/main（HEAD 見 git log）；零 migration。
+
+**待用戶（優先序）**：
+1. **Render 環境變數設 `ALLOWED_EMAILS=<自己+家人 email 逗號清單>`**（§四十四 S2；未設定前開放註冊，log 有警告）
+2. **查 Render log** `[stock_news]` / `[news_rss]` 失敗訊息 — 7/17 大跌日 RSS 回空很可疑；確認限流 → 下次開工做 TTL 快取升級
+3. 下次重跑報告（~$0.6）順驗 §四十五：撼訊 §4 應為空方句、晶心科應為「—（無方向，待結構確認）」；§四十二 有新聞日行為（今日因 RSS 空未驗到）
+
+**下次開工候選**：
+- RSS 限流對策（視 log 結果：TTL 快取 / UA 調整）
+- 優化級遺留：強跌反彈/強漲回測觀望股 pill 仍顯示空進/進場區間 vs §5 已誠實砍（兩側同構）
+- 健檢 🟡 中優先池（CSRF、api_clear_today_cache 名不符實、requirements 清理、舊系統 2500 行脫鉤檔案）
+
 **所在週次：週8（AI 偏空校正 + 報表品質）**
 
 **狀態：§四十一（short 渲染一致性）+ §四十二（個股新聞佐證）+ §四十三（7/16 優化級六修法）+ §四十四（安全三項）全部 push origin/main；pytest 487/487 全綠（427 → 487，+60）**
