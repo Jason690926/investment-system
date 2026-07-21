@@ -6,29 +6,57 @@
 - **架構決策**：討論完方案後，先更新 `plan.md`，再開始寫程式
 - `plan.md` 只在需要查架構細節時才讀（節省 token）
 
-## 當前進度（2026-07-17 — §四十一~§四十五 完成；7/17 20:35 報告已 cross-check：§四十一~§四十三 驗收全過、§四十五 修新抓到的 P&F 句方向錯配；pytest 496/496）
+## 當前進度（2026-07-21 — 7/21 19:33 報告 cross-check：§四十五 驗收通過、§四十一~§四十三 零退化；新發現四項 → §四十六 已修；pytest 511/511，已 push origin/main HEAD `dc84c6b`）
+
+### ✅ 7/21 報告 cross-check 結果（12 檔：3 hold + 9 watch；dump `_pdf_721_dump.txt`）
+- **§四十五 驗收通過**：撼訊 §4 = 空方句 56.7 元（原引多方失效句）；晶心科今日轉 short，§4/§5「需先跌破 213 後估 176」同源方向正確；全部 short 股 P&F 句零錯配。neutral 句（「—（無方向，待結構確認）」）本次無 neutral 股，仍未實證
+- **§四十一~§四十三 零退化**：R2 回落 % 全正常、R4 gate 同源句正確（大聯大）、R1/§三十八 觀望 gate 正確觸發 + §5 誠實砍、空停單一數字、§四十二 無新聞日零腦補
+- 🔴 觀望股 pill 殘留區間 **12 檔中 5 檔中招**（矽力 600~645/華星光/瑞軒/瑞耘/合晶 箱頂 194.5）→ **§四十六 A 已修**
+- 🟡 矽力同報告三個壓力敘述打架（§1 稱 554「錨點失效線」但錨點失效=645）→ **§四十六 B 已修（prompt）**
+- 🟡 瑞耘特徵引用錯誤（表「低位」寫成「極高位」）→ **§四十六 B 已修（prompt）**
+- 🟡 東捷「空標：— 元（P&F 下行目標）」殘句 → **§四十六 C 已修**
+- 🟡 合晶引遠古目標 41.9（價 130）→ **§四十六 D 已修**
+- 🔴 **RSS 又回空**（7/21 大漲 4.2% 日；連 7/17 大跌日兩次重大行情日皆空）→ 限流假說增強，**列下次開工首項**
+
+### ✅ §四十六（2026-07-21）：7/21 cross-check 四修法（commit `ec629b1` + docs `dc84c6b`）
+
+| Fix | 內容 |
+|-----|------|
+| A pill 誠實化 | `app.py _render_one_block`：強跌反彈觀望（short）/強漲回測觀望（long）pill 砍殘留空進/箱頂區間 → 「失效 X」+「待新箱」note（鏡像 dashboard strip §三十八 #2/§四十三 R1 既有行為；long 失效 fallback support_price；neutral 不受影響） |
+| B prompt 鐵律 ×2 | `_dual_swing_block` R6 追加「失效」字眼專屬鐵律（失效/回補/論點作廢價只能指鎖定錨點值，箱底翻壓力等禁冠「失效」）；兩 analyze prompt K 線區加特徵逐字鐵律（照抄表格【特徵】標籤，表外 K 棒禁憑印象補）— **純 prompt 需重跑實證** |
+| C 空值殘句 | `_render_operation_framework` target「—」且無 relaxed note →「空標/目標：—（無有效箱體，等新箱形成）」（short+long 同構） |
+| D reached 遠古 guard | `_relaxed_sentence_from_info` reached 且偏離 >1.5×（long: price>t×1.5 / short: price<t÷1.5）→ 不引數字通用句；近期已達成（矽力 461.5 vs 515 等 4 檔）保留數字 |
+
+**測試**：pytest 496 → **511/511**（新增 `tests/test_crosscheck_0721.py` 15 case 全用 7/21 真實數值；配對改 `test_relaxed_gate_and_framework.py` 2 處 + `test_short_render_consistency.py` 2 處）。零 migration；四 fix 各自獨立 revert。plan：`plan.md §四十六`。
+
+**明定不修（同構觀察）**：「論點作廢」pill 未納入誠實化（本次未中招、dashboard 亦未處理）；撼訊「週K 06-01 射擊之星」表外型態引用（無法驗證，特徵鐵律或間接改善）。
+
+### 📌 下次開工接手點（2026-07-21 收工）
+
+**待用戶（優先序）**：
+1. **查 Render log `[stock_news]`/`[news_rss]`** — 連兩次重大行情日 RSS 空，幾乎確定限流
+2. **Render 環境變數設 `ALLOWED_EMAILS=<自己+家人 email 逗號清單>`**（§四十四 S2，仍未設）
+3. **零 token 驗 §四十六 A**：deploy 完成後 hard refresh print-report → 矽力/華星光/瑞軒/瑞耘/合晶 5 檔 pill 應變「失效 X · 待新箱」（pill 是讀取時渲染，不用重跑分析）
+4. 下次重跑報告（~$0.6）驗 §四十六 B/C/D + §四十五 neutral 句
+
+**下次開工（優先序）**：
+1. **RSS 限流對策**（TTL 快取 / UA 調整，視 log 錯誤型態）— 已列首項
+2. 健檢 🟡 中優先池（CSRF、api_clear_today_cache 名不符實、requirements 清理、舊系統 2500 行脫鉤檔案）
+3. 觀望股「論點作廢」pill 誠實化同構（若下次報告中招再修）
+
+**所在週次：週8（AI 偏空校正 + 報表品質）**
+
+---
+
+## 過往進度（2026-07-17 — §四十一~§四十五 完成；7/17 20:35 報告 cross-check）
 
 ### ✅ 7/17 報告 cross-check 結果
 - §四十一 F1/F2、§四十二 禁令、§四十三 R1~R5、§四十 F1 全部實證通過（詳見對話 2026-07-17）
-- 🔴 新 bug：AI 未依 DIRECTION 取 P&F 對應句（撼訊 short 引多方失效句、晶心科 neutral 引 long relaxed 句）→ **§四十五 已修**：`_pnf_sentences` 抽出（_dual_pnf 薄 wrapper 化）+ `_enforce_pnf_direction` post-process 用最終 direction 強制替換（連帶堵住 safety net 改向後內文殘留原方向句的舊縫隙）；pytest 496/496；下次重跑驗收
-- 🟡 觀察 1：強跌反彈觀望股 pill 仍顯示空進區間 vs §5 已誠實砍（§三十八 long 同構，優化級未修）
-- 🟡 觀察 2：7/17 大跌日市場 RSS 竟回空（NEWS「無即時資料」、INDUSTRY fallback DB 快取）→ 疑 Render IP 對 Google News 受限，**待用戶查 Render log `[stock_news]`/`[news_rss]`**；確認限流則啟動 spec 預留的 TTL 快取升級
+- 🔴 新 bug：AI 未依 DIRECTION 取 P&F 對應句（撼訊 short 引多方失效句、晶心科 neutral 引 long relaxed 句）→ **§四十五 已修**：`_pnf_sentences` 抽出（_dual_pnf 薄 wrapper 化）+ `_enforce_pnf_direction` post-process 用最終 direction 強制替換（連帶堵住 safety net 改向後內文殘留原方向句的舊縫隙）；pytest 496/496；**7/21 已驗收通過**
+- 🟡 觀察 1：強跌反彈觀望股 pill 仍顯示空進區間 vs §5 已誠實砍 → **§四十六 A 已修**
+- 🟡 觀察 2：7/17 大跌日市場 RSS 回空 → 7/21 再現，列下次開工首項
 
-### 📌 下次開工接手點（2026-07-17 收工）
-
-**今日成果總覽**：§四十一（short 渲染一致性三修法）→ §四十二（個股新聞佐證，subagent-driven）→ §四十三（7/16 優化級六修法 R1~R6）→ §四十四（安全三項）→ 7/17 20:35 報告 cross-check → §四十五（P&F 句方向錯配矯正）。pytest 427 → **496/496**；全部已 push origin/main（HEAD 見 git log）；零 migration。
-
-**待用戶（優先序）**：
-1. **Render 環境變數設 `ALLOWED_EMAILS=<自己+家人 email 逗號清單>`**（§四十四 S2；未設定前開放註冊，log 有警告）
-2. **查 Render log** `[stock_news]` / `[news_rss]` 失敗訊息 — 7/17 大跌日 RSS 回空很可疑；確認限流 → 下次開工做 TTL 快取升級
-3. 下次重跑報告（~$0.6）順驗 §四十五：撼訊 §4 應為空方句、晶心科應為「—（無方向，待結構確認）」；§四十二 有新聞日行為（今日因 RSS 空未驗到）
-
-**下次開工候選**：
-- RSS 限流對策（視 log 結果：TTL 快取 / UA 調整）
-- 優化級遺留：強跌反彈/強漲回測觀望股 pill 仍顯示空進/進場區間 vs §5 已誠實砍（兩側同構）
-- 健檢 🟡 中優先池（CSRF、api_clear_today_cache 名不符實、requirements 清理、舊系統 2500 行脫鉤檔案）
-
-**所在週次：週8（AI 偏空校正 + 報表品質）**
+**今日成果總覽**：§四十一（short 渲染一致性三修法）→ §四十二（個股新聞佐證，subagent-driven）→ §四十三（7/16 優化級六修法 R1~R6）→ §四十四（安全三項）→ 7/17 20:35 報告 cross-check → §四十五（P&F 句方向錯配矯正）。pytest 427 → **496/496**；零 migration。
 
 **狀態：§四十一（short 渲染一致性）+ §四十二（個股新聞佐證）+ §四十三（7/16 優化級六修法）+ §四十四（安全三項）全部 push origin/main；pytest 487/487 全綠（427 → 487，+60）**
 
