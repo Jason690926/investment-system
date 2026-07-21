@@ -33,7 +33,9 @@ class TestF1TargetGuard:
         html = _render_operation_framework(
             action_pill='🟡 等反彈佈空', direction='short',
             swing_levels=self._sl_short, breakout=False, price=228.0)
-        assert '空標：— 元' in html, f'空標高於現價應顯示 —，實際：\n{html}'
+        # §四十六 Fix C 配對改：「— 元」殘句砍除，改乾淨誠實句
+        assert '空標：—（無有效箱體，等新箱形成）' in html, \
+            f'空標高於現價應顯示 —，實際：\n{html}'
         assert '232.00' not in html
 
     def test_short_target_below_price_shown(self):
@@ -52,7 +54,8 @@ class TestF1TargetGuard:
         html = _render_operation_framework(
             action_pill='🟢 進場區可佈', direction='long',
             swing_levels=sl, breakout=False, price=99.0)
-        assert '目標：— 元' in html
+        # §四十六 Fix C 配對改：「— 元」殘句砍除，改乾淨誠實句
+        assert '目標：—（無有效箱體，等新箱形成）' in html
         assert '98.00 元' not in html
 
     def test_long_target_above_price_shown(self):

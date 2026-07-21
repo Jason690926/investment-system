@@ -163,42 +163,63 @@ def _render_one_block(s, a, q, idx, mode, personal_html=None):
                 and getattr(a, 'entry_low', None) is None
                 and getattr(a, 'entry_high', None) is None):
             _dir = 'neutral'
+        _ap = getattr(a, 'action_pill', '') or ''
         if _dir == 'short':
             dir_badge = '空'
             pills.append(f'<span class="pill pill-ink"><span class="lbl">方向 </span>{dir_badge}</span>')
-            # 順序：空進（最先看到的進場價）/ 空停 / 空標
-            # §四十一 F2：空進改顯示區間 entry_low~entry_high（空停統一 raw
-            # range_high 後，原單值 = 新空停會兩 pill 同數字；區下緣才是可操作價）。
-            # 舊資料 entry 缺任一邊 → fallback 原單值 resistance。
-            _elo = getattr(a, 'entry_low', None)
-            _ehi = getattr(a, 'entry_high', None)
-            if _elo is not None and _ehi is not None:
-                pills.append(f'<span class="pill pill-bull"><span class="lbl">空進 </span>{_format_price(_elo)}~{_format_price(_ehi)}</span>')
-            elif a.resistance_price is not None:
-                pills.append(f'<span class="pill pill-bull"><span class="lbl">空進 </span>{_format_price(a.resistance_price)}</span>')
-            stop = getattr(a, 'stop_loss', None)
-            if stop is not None:
-                pills.append(f'<span class="pill pill-amber"><span class="lbl">空停 </span>{_format_price(stop)}</span>')
-            # §三十七 P1-1：空標改用 target_price（P&F 下行目標，與第四/五節同源），
-            # 取代 support_price（range_low）— 跳空跌破箱底時 range_low 滯留於現價
-            # 上方，當「下行目標」語義反向。guard：須在現價下方才顯示（誠實 > 錯誤）。
-            _price_now = float(q.close) if (q and q.close is not None) else None
-            if (a.target_price is not None and _price_now is not None
-                    and float(a.target_price) < _price_now):
-                pills.append(f'<span class="pill pill-support"><span class="lbl">空標 </span>{_format_price(a.target_price)}</span>')
+            if '強跌反彈觀望' in _ap:
+                # §四十六 Fix A：誠實 pill（鏡像 dashboard strip §四十三 R1）—
+                # 原空進區距現價過遠/過寬不可操作（§5 已誠實砍），pill 只留
+                # 客觀失效價 + 待新箱 note（矽力/華星光/瑞軒/瑞耘 7/21 案例）
+                _stop = getattr(a, 'stop_loss', None)
+                if _stop is not None:
+                    pills.append(f'<span class="pill pill-amber"><span class="lbl">失效 </span>{_format_price(_stop)}</span>')
+                pills.append('<span class="pill pill-amber-outline">原空區過遠 · 待新箱</span>')
+            else:
+                # 順序：空進（最先看到的進場價）/ 空停 / 空標
+                # §四十一 F2：空進改顯示區間 entry_low~entry_high（空停統一 raw
+                # range_high 後，原單值 = 新空停會兩 pill 同數字；區下緣才是可操作價）。
+                # 舊資料 entry 缺任一邊 → fallback 原單值 resistance。
+                _elo = getattr(a, 'entry_low', None)
+                _ehi = getattr(a, 'entry_high', None)
+                if _elo is not None and _ehi is not None:
+                    pills.append(f'<span class="pill pill-bull"><span class="lbl">空進 </span>{_format_price(_elo)}~{_format_price(_ehi)}</span>')
+                elif a.resistance_price is not None:
+                    pills.append(f'<span class="pill pill-bull"><span class="lbl">空進 </span>{_format_price(a.resistance_price)}</span>')
+                stop = getattr(a, 'stop_loss', None)
+                if stop is not None:
+                    pills.append(f'<span class="pill pill-amber"><span class="lbl">空停 </span>{_format_price(stop)}</span>')
+                # §三十七 P1-1：空標改用 target_price（P&F 下行目標，與第四/五節同源），
+                # 取代 support_price（range_low）— 跳空跌破箱底時 range_low 滯留於現價
+                # 上方，當「下行目標」語義反向。guard：須在現價下方才顯示（誠實 > 錯誤）。
+                _price_now = float(q.close) if (q and q.close is not None) else None
+                if (a.target_price is not None and _price_now is not None
+                        and float(a.target_price) < _price_now):
+                    pills.append(f'<span class="pill pill-support"><span class="lbl">空標 </span>{_format_price(a.target_price)}</span>')
             if a.wyckoff_phase:
                 pills.append(f'<span class="pill pill-ink"><span class="lbl">威科夫 </span>{a.wyckoff_phase}</span>')
         else:
             dir_badge = '多' if _dir == 'long' else '觀望'
             pills.append(f'<span class="pill pill-ink"><span class="lbl">方向 </span>{dir_badge}</span>')
-            # long 用程式錨點語意「箱底/箱頂」；neutral pill 為 AI 支撐壓力故留「撐/壓」
-            sup_lbl, res_lbl = ('箱底', '箱頂') if _dir == 'long' else ('撐', '壓')
-            if a.support_price is not None:
-                pills.append(f'<span class="pill pill-support"><span class="lbl">{sup_lbl} </span>{_format_price(a.support_price)}</span>')
-            if a.resistance_price is not None:
-                pills.append(f'<span class="pill pill-bull"><span class="lbl">{res_lbl} </span>{_format_price(a.resistance_price)}</span>')
-            if a.target_price is not None:
-                pills.append(f'<span class="pill pill-amber"><span class="lbl">目標 </span>{_format_price(a.target_price)}</span>')
+            if _dir == 'long' and '強漲回測觀望' in _ap:
+                # §四十六 Fix A：誠實 pill（鏡像 dashboard strip §三十八 #2）—
+                # 原箱不可操作（§5 已誠實砍），只留失效價 + 待新箱 note
+                # （合晶 7/21 pill 箱頂 194.5 vs 內文 150.5 案例）
+                _stop = getattr(a, 'stop_loss', None)
+                if _stop is None:
+                    _stop = a.support_price
+                if _stop is not None:
+                    pills.append(f'<span class="pill pill-amber"><span class="lbl">失效 </span>{_format_price(_stop)}</span>')
+                pills.append('<span class="pill pill-amber-outline">原箱不適用 · 待新箱</span>')
+            else:
+                # long 用程式錨點語意「箱底/箱頂」；neutral pill 為 AI 支撐壓力故留「撐/壓」
+                sup_lbl, res_lbl = ('箱底', '箱頂') if _dir == 'long' else ('撐', '壓')
+                if a.support_price is not None:
+                    pills.append(f'<span class="pill pill-support"><span class="lbl">{sup_lbl} </span>{_format_price(a.support_price)}</span>')
+                if a.resistance_price is not None:
+                    pills.append(f'<span class="pill pill-bull"><span class="lbl">{res_lbl} </span>{_format_price(a.resistance_price)}</span>')
+                if a.target_price is not None:
+                    pills.append(f'<span class="pill pill-amber"><span class="lbl">目標 </span>{_format_price(a.target_price)}</span>')
             if a.wyckoff_phase:
                 pills.append(f'<span class="pill pill-ink"><span class="lbl">威科夫 </span>{a.wyckoff_phase}</span>')
     # 觀察版把風險合進 pills

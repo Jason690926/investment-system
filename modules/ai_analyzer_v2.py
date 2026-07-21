@@ -383,6 +383,16 @@ def _relaxed_sentence_from_info(dir_: str, info, price_f) -> str:
     t_q, g_q, status = info
     gate_verb = '突破' if dir_ == 'long' else '跌破'
     if status == 'reached':
+        # §四十六 Fix D：遠古已達成 guard — 現價偏離目標 >1.5×（long 遠超上方 /
+        # short 遠跌下方）時引遠古箱體數字純屬雜訊（合晶 7/21 價 130 引 41.9），
+        # 改不引數字的通用句；近期已達成（如矽力 461.5 vs 515）仍保留數字。
+        try:
+            _stale = ((dir_ == 'long' and float(price_f) > float(t_q) * 1.5)
+                      or (dir_ == 'short' and float(price_f) < float(t_q) / 1.5))
+        except (TypeError, ValueError):
+            _stale = False
+        if _stale:
+            return 'P&F概念目標：—（先前等幅量度早已達成，等新箱形成才能估算下一目標）'
         # Filter B 失敗：cur 已遠超 gate → 先前等幅量度已達成
         return (f'P&F概念目標：先前等幅量度 {t_q} 元已達成（{gate_verb}點 {g_q} 元），'
                 f'等新箱形成才能估算下一目標')
@@ -648,6 +658,11 @@ def _dual_swing_block(enriched_data: dict, price_f) -> str:
         "⚠️ 錨點一致性鐵律：內文任何小節（含第一節結論、第三節李佛摩）提及的"
         "進場/回測/壓力/支撐/停損/目標價位，必須直接引用上列鎖定錨點數值，"
         "禁止另創數字、禁止同節出現兩組不同的關鍵價位、禁止沿用舊分析的錨點。")
+    # §四十六 Fix B：矽力 7/21 §1 稱壓力 554 為「錨點失效線」但鎖定失效=645 案例
+    lines.append(
+        "⚠️ 「失效」字眼專屬鐵律：「失效價/失效線/回補價/論點作廢價」只能指上列"
+        "鎖定錨點的 失效/停損（long）或 失效/回補（short）數值，全篇僅此一個；"
+        "其他壓力/支撐位（箱底翻壓力、前低等）禁止冠以「失效」字眼。")
     return "\n".join(lines)
 
 
@@ -1228,10 +1243,14 @@ def _render_operation_framework(action_pill: str, direction: str,
         stop_row = (f'停損：{inv_txt} 元 — 跌破即論點作廢' if inv_txt != '—'
                     else '停損：—（無有效箱體）')
         # R4 §四十三：target 缺但 relaxed 有值 → 與 §4 同源 gate 句
+        # §四十六 Fix C：缺值且無 note → 砍「— 元」殘句
         tg_txt = _fmt(tg)
-        target_row = (f'目標：{target_note}（等幅量度）'
-                      if tg_txt == '—' and target_note
-                      else f'目標：{tg_txt} 元')
+        if tg_txt == '—' and target_note:
+            target_row = f'目標：{target_note}（等幅量度）'
+        elif tg_txt == '—':
+            target_row = '目標：—（無有效箱體，等新箱形成）'
+        else:
+            target_row = f'目標：{tg_txt} 元'
         return (
             _divider()
             + _row(f'建議動作：{action_pill}')
@@ -1270,10 +1289,14 @@ def _render_operation_framework(action_pill: str, direction: str,
         inv_txt = _fmt(inv)
         stop_row = (f'空停：{inv_txt} 元 — 站回突破即論點作廢' if inv_txt != '—'
                     else '空停：—（無有效箱體）')
+        # §四十六 Fix C：缺值且無 note → 砍「— 元（P&F 下行目標）」殘句（東捷 7/21）
         tg_txt = _fmt(tg)
-        target_row = (f'空標：{target_note}（P&amp;F 下行）'
-                      if tg_txt == '—' and target_note
-                      else f'空標：{tg_txt} 元（P&amp;F 下行目標）')
+        if tg_txt == '—' and target_note:
+            target_row = f'空標：{target_note}（P&amp;F 下行）'
+        elif tg_txt == '—':
+            target_row = '空標：—（無有效箱體，等新箱形成）'
+        else:
+            target_row = f'空標：{tg_txt} 元（P&amp;F 下行目標）'
         return (
             _divider()
             + _row(f'建議動作：{action_pill}')
@@ -1566,6 +1589,7 @@ DIRECTION: [long|short|neutral]
 ⚠️ 多根組合型態（早晨之星/三白兵等）標注於型態完成的那一根 K 棒；敘述時以該標注日期為準，禁止自行另指其他日期區間。
 - 週K型態（最近3根）：引用 ▶標注 的型態名稱，結合【特徵=...】量能·位置解讀含意
 - 日K型態（最近5根）：引用 ▶標注 的型態名稱，結合【特徵=...】量能·位置解讀含意
+⚠️ 特徵逐字鐵律：引用任一根 K 棒的特徵（量能/位置/跳空）時必須逐字照抄該根【特徵=...】標籤，禁止自行改寫（如表標「低位」禁寫成「極高位」）；表格未列的 K 棒禁憑印象補特徵。
 - K線序列：連續3-5根量能·位置的變化趨勢，說明多空動能是否增強或衰退
 - 週K ↔ 日K 方向是否一致確認？
 
@@ -2012,6 +2036,7 @@ K棒型態含意速查（解讀參考，須結合特徵欄量能·位置）：
 - 週K型態解讀：引用上方週K表 ▶型態 + 特徵欄量能·位置，解讀含意
 - 日K型態解讀：引用上方日K表 ▶型態 + 特徵欄量能·位置，解讀含意
 - K線序列：依特徵欄量能·位置變化，說明多空動能增強或衰退（禁靠單根顏色判斷）
+- ⚠️ 特徵逐字鐵律：引用任一根 K 棒的特徵（量能/位置/跳空）時必須逐字照抄該根【特徵=...】標籤，禁止自行改寫（如表標「低位」禁寫成「極高位」）；表格未列的 K 棒禁憑印象補特徵
 - 週K ↔ 日K 方向：一致多頭 / 一致空頭 / 訊號分歧（分歧時說明以哪個為準）
 <span class="key-point">K線核心結論（≤15字）</span>
 

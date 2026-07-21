@@ -37,8 +37,10 @@ class TestR3RelaxedGateSentence:
         assert '需先跌破' not in s
 
     def test_reached_sentence_unchanged(self):
-        """回歸：reached 句逐字不變（§三十五 Bug-D 既有行為）。"""
-        s = _relaxed_sentence_from_info('long', (52.2, 46.4, 'reached'), 133.0)
+        """回歸：reached 句逐字不變（§三十五 Bug-D 既有行為）。
+        §四十六 Fix D 配對改：price 133 vs 52.2 已屬遠古（>1.5×）會觸發新
+        guard，改用近期已達成 price（60 < 52.2×1.5=78.3）驗句式不變。"""
+        s = _relaxed_sentence_from_info('long', (52.2, 46.4, 'reached'), 60.0)
         assert s == ('P&F概念目標：先前等幅量度 52.2 元已達成（突破點 46.4 元），'
                      '等新箱形成才能估算下一目標')
 
@@ -81,13 +83,15 @@ class TestR4TargetNote:
         assert '空標：需先跌破 100 元後估 80 元' in html
 
     def test_framework_no_note_keeps_dash(self):
-        """回歸：無 note → 維持「— 元」。"""
+        """無 note → 目標仍「—」；§四十六 Fix C 配對改：砍「— 元」殘句，
+        改乾淨誠實句。"""
         sl = {'range_high': 144, 'range_low': 120,
               'entry_zone': (120, 132), 'invalidation': 120, 'target': None}
         html = _render_operation_framework(
             action_pill='🟡 等回測', direction='long', swing_levels=sl,
             breakout=False, price=130.0)
-        assert '目標：— 元' in html
+        assert '目標：— 元' not in html
+        assert '目標：—（無有效箱體，等新箱形成）' in html
 
     def test_call_sites_wire_target_note(self):
         """兩 call site 都須算 note 傳入 framework（source guard）。"""
