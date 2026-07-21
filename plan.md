@@ -2252,3 +2252,38 @@ S1-S3 各自獨立 revert；S2 env 未設定即等同 revert；零 migration。
 
 ### 回滾
 單一 commit revert；`_dual_pnf` wrapper 化為純重構無行為差異。
+
+---
+
+## §四十六 7/21 報告 cross-check 四修法（2026-07-21）
+
+### 緣起（7/21 19:33 報告 cross-check；RSS 限流對策另列下次）
+- **A（主修）觀望股 PDF pill 殘留區間**：12 檔中 5 檔中招 — 矽力/華星光/瑞軒/瑞耘
+  （🟡 強跌反彈觀望，pill 仍印「空進 600~645」等）、合晶（🟡 強漲回測觀望，pill
+  「箱底 106.5/箱頂 194.5」）。§5 已誠實砍區間、dashboard strip 已誠實化
+  （§三十八 #2 long / §四十三 R1 short），唯獨 PDF `_render_one_block` pill 未同步。
+- **B（prompt）「失效」字眼錯掛 + 特徵引用錯誤**：矽力 §1 稱壓力 554 為「錨點失效線」
+  但錨點失效=645（§5 同值）— 同報告三個壓力敘述；瑞耘敘事寫「07/06 空頭吞噬
+  （縮量·極高位）」但表格程式標籤=「縮量·低位」。
+- **C（cosmetic）§5 空值殘句**：東捷「空標：— 元（P&F 下行目標）」— R5 只砍了
+  量能/作廢後綴，target「—」+ 無 relaxed note 的殘句仍在（long「目標：— 元」同構）。
+- **D（cosmetic）reached 遠古目標雜訊**：合晶 §4「先前等幅量度 41.9 元已達成
+  （突破點 36.2 元）」— 股價 130 引 3 倍前的遠古箱體目標，語意正確但純雜訊。
+
+### 修法
+| Fix | 檔案 | 內容 |
+|-----|------|------|
+| A | `app.py _render_one_block` | pill 建構讀 `action_pill`：short 含「強跌反彈觀望」→ 砍空進/空標 pill，改「失效 <stop_loss>」+「原空區過遠 · 待新箱」note pill；long 含「強漲回測觀望」→ 砍箱底/箱頂/目標 pill，改「失效 <stop_loss??support>」+「原箱不適用 · 待新箱」。neutral 不受影響（僅 `_dir=='long'` 才觸發） |
+| B | `ai_analyzer_v2.py` | (1) `_dual_swing_block` R6 鐵律追加：「失效/回補/失效線」字眼只能指鎖定錨點失效值，其他價位（箱底翻壓力等）禁冠「失效」；(2) 兩 analyze prompt K 線區追加特徵逐字鐵律：引用某根 K 棒特徵時必須逐字照抄表格【特徵】標籤，禁自行改寫量能/位置詞 |
+| C | `_render_operation_framework` | short `空標：—` 且無 note →「空標：—（無有效箱體，等新箱形成）」；long `目標：—` 且無 note →「目標：—（無有效箱體，等新箱形成）」 |
+| D | `_relaxed_sentence_from_info` | reached 且遠古（long: price > target×1.5；short: price < target÷1.5）→「P&F概念目標：—（先前等幅量度早已達成，等新箱形成才能估算下一目標）」不引數字；同源傳導至 `_enforce_pnf_direction` |
+
+### 設計決策
+1. A 只修 PDF 層（DB/分析零改）：dashboard 已誠實，PDF pill 是唯一殘留讀取端；
+   「論點作廢」pill 未納入（本次報告未中招、dashboard 亦未處理，留同構觀察）。
+2. D 門檻 1.5×：合晶 130/41.9=3.1 觸發；矽力 short 461.5/515=0.90、瑞軒 0.78、
+   華星光 0.80、瑞耘 0.98 皆保留（近期已達成資訊仍有參考價值）。
+3. B 純 prompt（無法 post-process 敘事），需下次重跑實證。
+
+### 回滾
+四 fix 各自獨立；零 migration、零 DB 欄位、零簽名破壞。
